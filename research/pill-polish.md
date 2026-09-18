@@ -163,3 +163,15 @@ Validation: 89 unit tests passed. The running dev client confirmed composer blur
 thread retention, repeat suppression, second-press return to the 420px queue and
 unchanged draft content. The custom header stayed hidden and the native pane
 filled the 1130px viewport. Custom API request delta was zero.
+
+## Empty pill inbox button — 0.15.4
+
+The empty-state check mark is now a native HTML button labeled “Open triage
+inbox,” with an “All caught up · Open triage inbox” tooltip, hover feedback and
+a 32×40px target. It opens the queue directly and clears the previous native
+conversation’s resume intent. It retains the empty-only visibility rule.
+
+Validation: renderer syntax and diff checks passed. In the running dev client,
+the empty button was visible and keyboard-accessible; clicking it opened the
+queue with a suspended conversation target present and left the native pane
+inactive. Custom API request delta was zero.
