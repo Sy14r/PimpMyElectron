@@ -112,3 +112,21 @@ changes or custom API calls. Unit/integration coverage includes new/old boundari
 multiple messages, missing content, unknown cursors, bounded text, workspace
 scope, and view dismissal. Hands-on control/hover confirmation is still pending.
 All 83 automated tests and the live geometry/restoration smoke check pass.
+
+## Full-height inbox — 0.15.1
+
+All custom modes now hide macOS window controls. Only standard Slack restores
+them. Inbox, cached reader and native chat use the complete selected display work
+area height, respecting the menu bar and Dock, instead of the former 850px cap.
+The resting strip and pill remain compact and vertically centered.
+
+The queue's Dock/Normal Slack/Collapse text footer and shortcut legend are removed.
+Empty status notices take no space; genuine notices remain visible. The existing
+icon rail and menu-bar controller retain navigation and docking access. Keyboard
+shortcuts are unchanged.
+
+Live checks passed on both edges for full-height queue, reader and native-chat
+bounds; compact centering, original window restoration, all-Spaces flags and
+unchanged underlying conversation also passed. The rendered queue was visually
+checked: at a 1130px work-area height, its scrolling list reaches 1118px (the
+remaining 12px is bottom padding), with no footer or shortcut legend.

@@ -38,6 +38,12 @@ Unknown boundaries and missing new content are identified. Hovering neither
 opens a conversation nor marks it read. After pulling this update, run both
 `npm run dev:reload` and `npm run shell:restart` to update the native helper.
 
+**0.15.1** hides window controls in every custom triage view and makes the inbox,
+reader and native-chat layouts fill the selected display's usable height on either
+edge. The list footer and shortcut legend are removed, giving their space to the
+scrollable queue. Use the menu-bar controller for docking and the icon rail for
+collapse/normal Slack. The centered resting strip and pill keep their compact size.
+
 Before moving to another Mac, run `npm run doctor` there. It checks the installed Slack distribution, version, signature, profile ownership and build prerequisites without launching Slack or reading account data. The launcher detects Mac App Store and official direct-download distributions and selects their separate development profiles. See the setup guide for the current validation status. Build a clean source transfer with `npm run package:pilot`; the zip under `dist/` includes Start/Stop command files and excludes private state and send experiments. See [pilot setup](pilot/README.md) and [next pilot proof points](research/pilot-next.md).
 
 Quit Slack normally, then run `npm run dev`. The launcher starts official Slack in its owned development profile and automatically builds/starts the native menu controller. Existing development sign-ins persist. Press **⌘⇧Y from another app**, open or triage an item, then **⌘⇧Y** back to your work. Local triage decisions do not change Slack unread state. **Selecting an item opens Slack’s own conversation or thread pane alongside the queue immediately**, including its composer. There is no separate Reply click or custom-reader load first. **Read-only view** (or Option-click on an item) keeps the lightweight reader available. Done/Later/Pin/Undo remain above the native pane. **⌘⇧Y** collapses/reopens it while Slack keeps the draft. Opening the native view may mark the conversation read; **Done** remains local. **Open in Slack** is the ordinary-window fallback.

@@ -19,11 +19,19 @@ const result=await inspect(`(async()=>{
   const mod=window.__PME_TRIAGE__;if(!mod)throw Error('Live triage is not installed');
   const pathBefore=location.pathname;const shadow=document.querySelector('#pme-live-triage').shadowRoot;
   const w=desktop.window,id=await w.getWindowId();const call=(method,...args)=>w.callBrowserWindowMethod(id,method,...args);
+  const savedEdge=mod.status().edge;
+  async function dock(edge){
+    window.__pmeTriageAction(JSON.stringify({workspaceId:mod.status().workspace,action:'settings',patch:{edge}}));
+    for(let i=0;i<40&&mod.status().edge!==edge;i++)await new Promise(r=>setTimeout(r,100));
+    if(mod.status().edge!==edge)throw Error('Dock setting did not reach renderer');
+    await mod.transition('queue');
+  }
   await mod.transition('stock');
   const original={bounds:await call('getBounds'),min:await call('getMinimumSize'),top:await call('isAlwaysOnTop'),spaces:await call('isVisibleOnAllWorkspaces')};
   await mod.transition('queue');const queue=await call('getBounds'),allSpaces=await call('isVisibleOnAllWorkspaces');
-  shadow.getElementById('dock').click();await mod.transition('queue');const left=await call('getBounds');
-  shadow.getElementById('dock').click();await mod.transition('queue');const right=await call('getBounds');
+  let left,right;
+  try{await dock('left');left=await call('getBounds');await dock('right');right=await call('getBounds');}
+  finally{await dock(savedEdge);}
   await mod.transition('cluster');const cluster=await call('getBounds');
   await mod.transition('strip');const strip=await call('getBounds');
   const displays=await desktop.screen.getAllDisplays();
@@ -33,11 +41,14 @@ const result=await inspect(`(async()=>{
   const rows=[...shadow.querySelectorAll('.row')];if(rows[0])mod.open(rows[0].dataset.key,{reader:true});await mod.transition('reading');
   const reader=await call('getBounds');
   const readerVisible=!shadow.querySelector('.reader').hidden;
+  await mod.transition('reply');const reply=await call('getBounds');
+  const fullHeight=!!area&&[queue,left,right,reader,reply].every(b=>b.y===area.y&&b.height===area.height);
+  const footerRemoved=!shadow.querySelector('.footer,.footnote,#dock,#stock,#collapse-bottom');
   await mod.transition('stock');
   const restored={bounds:await call('getBounds'),min:await call('getMinimumSize'),top:await call('isAlwaysOnTop'),spaces:await call('isVisibleOnAllWorkspaces')};
   await mod.transition('queue');
   return {original,restored,allSpaces,widths:{queue:queue.width,cluster:cluster.width,reader:reader.width},
-    dockChanged:left.x!==right.x,compactCentered,stripHeight:strip.height,readerVisible,underlyingConversationUnchanged:location.pathname===pathBefore,
+    dockChanged:left.x!==right.x,compactCentered,fullHeight,footerRemoved,stripHeight:strip.height,readerVisible,underlyingConversationUnchanged:location.pathname===pathBefore,
     rowCount:rows.length,ui:mod.status()};
 })()`);
 assert.deepEqual(result.restored,result.original);assert.deepEqual(result.widths,{queue:420,cluster:44,reader:820});
@@ -45,9 +56,10 @@ assert.equal(result.dockChanged,true);assert.equal(result.readerVisible,true);as
 assert.equal(result.allSpaces,true);
 assert.equal(result.compactCentered,true);
 assert.ok(result.stripHeight>=88);
+assert.equal(result.fullHeight,true);assert.equal(result.footerRemoved,true);
 const output={checkedAt:new Date().toISOString(),source:'scripts/live-smoke.mjs',
   nativeGeometryRestored:true,allSpacesFlagSetAndRestored:true,widths:result.widths,leftRightDocking:result.dockChanged,compactCentered:result.compactCentered,
-  readerVisible:result.readerVisible,underlyingConversationUnchanged:result.underlyingConversationUnchanged,
+  readerVisible:result.readerVisible,expandedViewsFillWorkArea:result.fullHeight,queueFooterRemoved:result.footerRemoved,underlyingConversationUnchanged:result.underlyingConversationUnchanged,
   observedConversations:result.rowCount,ui:result.ui};
 await fs.writeFile(path.join(root,'evidence/live-prototype-checks.json'),JSON.stringify(output,null,2)+'\n');
 console.log(JSON.stringify(output,null,2));
