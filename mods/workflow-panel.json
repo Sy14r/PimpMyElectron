@@ -1,0 +1,10 @@
+{
+  "id": "workflow-panel",
+  "version": "0.1.0",
+  "description": "Independent, removable UI with a custom keyboard shortcut and a bounded host bridge.",
+  "entry": "workflow-panel.js",
+  "testedDesktopVersions": ["4.52.155"],
+  "capabilities": ["dom", "keyboard", "host:describe"],
+  "targets": ["https://app.slack.com/ssb/first (signed-out lab only)"],
+  "note": "Capabilities are descriptive; this prototype is not a sandbox for untrusted mods."
+}

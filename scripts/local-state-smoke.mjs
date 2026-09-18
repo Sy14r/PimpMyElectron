@@ -1,0 +1,22 @@
+// Exercises our local controls only; the user supplies any new Slack activity.
+import {control,inspect,until,root} from './control.mjs';
+import fs from 'node:fs/promises';import path from 'node:path';import assert from 'node:assert/strict';
+await until('window.__PME_TRIAGE__?.status().items>0');
+await inspect(`(async()=>{await __PME_TRIAGE__.command('queue');const s=document.querySelector('#pme-live-triage').shadowRoot,p=s.getElementById('workspace-picker');p.value='*';p.dispatchEvent(new Event('change'));s.querySelector('[data-filter="all"]').click();})()`);
+await until(`__PME_TRIAGE__.status().workspace==='*'`);
+const chosen=await inspect(`(()=>{const s=document.querySelector('#pme-live-triage').shadowRoot;const r=[...s.querySelectorAll('.row')].find(r=>r.dataset.key.split(':')[0]!==location.pathname.split('/')[2]&&r.querySelector('.unread')&&r.querySelector('.meta').textContent.includes('Direct message'));if(!r)return null;__PME_TRIAGE__.open(r.dataset.key,{reader:true});const id=r.dataset.key.split(':')[0];return {key:r.dataset.key,workspace:[...s.getElementById('workspace-picker').options].find(o=>o.value===id).textContent};})()`);
+assert.ok(chosen,'Need an unread DM in the background workspace');
+const file=path.join(root,'.lab/dev/local-state-check.json');await fs.writeFile(file,JSON.stringify(chosen),{mode:0o600});
+const click=id=>inspect(`document.querySelector('#pme-live-triage').shadowRoot.getElementById(${JSON.stringify(id)}).click()`);
+await click('later');await until(`document.querySelector('#pme-live-triage').shadowRoot.getElementById('reopen').hidden===false`);
+await click('undo');await until(`document.querySelector('#pme-live-triage').shadowRoot.getElementById('reopen').hidden===true`);
+await click('pin');await until(`document.querySelector('#pme-live-triage').shadowRoot.getElementById('pin').textContent==='Unpin'`);
+await click('undo');await until(`document.querySelector('#pme-live-triage').shadowRoot.getElementById('pin').textContent==='Pin'`);
+await click('done');await until(`document.querySelector('#pme-live-triage').shadowRoot.getElementById('reopen').hidden===false`);
+await control({op:'reload'});
+await until(`__PME_TRIAGE__.status().workspace==='*'&&__PME_TRIAGE__.status().items>0`);
+await inspect(`(async()=>{await __PME_TRIAGE__.transition('queue');document.querySelector('#pme-live-triage').shadowRoot.querySelector('[data-filter="done"]').click();})()`);
+const retained=await until(`(()=>{const s=document.querySelector('#pme-live-triage').shadowRoot,r=[...s.querySelectorAll('.row')].find(r=>r.dataset.key===${JSON.stringify(chosen.key)});return r?{unread:!!r.querySelector('.unread')}:null;})()`);
+assert.equal(retained.unread,true);
+await fs.writeFile(path.join(root,'evidence/local-state-checks.json'),JSON.stringify({checkedAt:new Date().toISOString(),laterUndo:true,pinUndo:true,doneSurvivesModReload:true,slackUnreadRetained:true,workspaceScopeRetained:true,newActivityReopen:'awaiting user message'},null,2)+'\n');
+console.log(JSON.stringify({workspace:chosen.workspace,doneSurvivesModReload:true,slackUnreadRetained:true,next:'Send one additional DM in this workspace to test reopening.'},null,2));

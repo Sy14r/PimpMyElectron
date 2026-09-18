@@ -1,0 +1,11 @@
+import {inspect,until,control,root} from './control.mjs';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import path from 'node:path';
+const native=method=>`(async()=>{const w=desktop.window;return w.callBrowserWindowMethod(await w.getWindowId(),${JSON.stringify(method)});})()`;
+const beforePath=await inspect('location.pathname');
+await inspect(`__PME_TRIAGE__.command('hide')`);await until(`(async()=>!await ${native('isVisible')})()`);
+await inspect(`__PME_TRIAGE__.command('queue')`);await until(native('isVisible'));
+await inspect(`__PME_TRIAGE__.command('minimize')`);await until(native('isMinimized'));
+await inspect(`__PME_TRIAGE__.command('queue')`);await until(`(async()=>!await ${native('isMinimized')})()`);
+assert.equal(await inspect('location.pathname'),beforePath);
+const result={checkedAt:new Date().toISOString(),hideShow:true,minimizeRestore:true,underlyingConversationUnchanged:true,qualification:'Waits for native animation completion before checking state'};
+await fs.writeFile(path.join(root,'evidence/native-shell-checks.json'),JSON.stringify(result,null,2)+'\n');console.log(result);
+await inspect(`__PME_TRIAGE__.command('rest')`);

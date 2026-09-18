@@ -1,0 +1,44 @@
+# Slack triage pilot for Apple Silicon Mac
+
+This is a development pilot inside the official Slack app. Signed-in live acceptance covers Mac App Store Slack 4.52.155, Electron 44, macOS arm64. Official direct-download 4.52.155 now passes launch, profile isolation, private-pipe and native-window checks; signed-in acceptance is pending. Other builds require qualification. It uses a separate development sign-in and does not modify the Slack application bundle.
+
+## Setup
+
+1. Unzip into a short local path such as `~/Projects/PimpMyElectron`. Keep the extracted folder together. Do not copy `.lab/` or any Slack profile from another machine.
+2. Have Node.js 22+ and Apple Command Line Tools installed. No `npm install` is needed. The native menu controller builds locally on first launch.
+3. Quit Slack normally, then open **Start Triage.command**. Its preflight checks the app, distribution, signature, toolchain and profile ownership before launch. It detects the App Store or official direct-download profile layout. An unrecognized or re-signed distribution blocks setup; device management restrictions still require checking on that Mac.
+4. Sign in to the workspace you want to test. Start with the test workspaces to verify the local environment, then explicitly sign in to your work workspace when ready. This bundle contains no accounts or sign-ins.
+5. Leave the launcher Terminal open while using triage. **Stop Triage.command** stops only the owned development instance and retains its sign-ins and local decisions. Quit/relaunch through this folder to keep that state.
+
+If macOS prevents opening the command file, open Terminal in this folder and run `node scripts/doctor.mjs`, followed by `node scripts/dev.mjs` after preflight passes. There is no notarized installer or login item.
+
+## Workflow
+
+- **⌘⇧Y** opens from your current desktop Space and collapses back to work. Configure edge, display, idle timeout and resting strip through the menu-bar T icon.
+- **Select an item once to open its native Slack conversation or thread beside the queue.** There is no separate Reply click or custom-history load first. Slack owns the messages, composer, drafts and Send control. Opening the native pane can mark the conversation read through Slack's normal behavior.
+- **Done**, **Later**, **Pin** and **Undo** remain above the native pane and change local records only. Done/Later save, then open the next native item; Undo restores the decision and destination. Later offers 15 minutes, 1 hour, 4 hours or 24 hours. New activity brings Done items back. A selected Attention/Unread item stays visible while open if Slack marks it read, so you can finish deciding what to do with it; this temporary hold does not persist after returning to the queue.
+- **⌘⇧Y** keeps the native draft while collapsing/reopening. **Queue** returns to the list. Escape belongs to Slack inside its editor; from triage controls it returns to the queue, then the resting strip. **E** Done, **L** Later and **P** Pin work in triage controls, never in the native composer or text inputs.
+- **Read-only view**, or **Option-click** on a queue item, opens the lightweight reader explicitly. It does not navigate native Slack or make a mark-read request. Its **Native chat** button returns to the native conversation. **R** does the same when focused on reader controls.
+- The reader's explicit **Mark read** button advances the conversation cursor only through the latest loaded message at click time, after checking account identity and the existing cursor. Local Done remains independent. Thread marking is disabled until separately verified. An uncertain result is not retried automatically; refresh activity before another attempt.
+- **Normal Slack** restores the usual client window. Use it if a conversation is missing from Slack's sidebar, a thread root isn't loaded, or native chat cannot verify the editor. Open the intended conversation/thread there and retry.
+
+The queue is a partial view, with bounded discovery and on-demand history. Check Slack Activity/Threads during the pilot to assess coverage. Cached messages and local decisions remain available during a connection loss. The panel shows last successful unread refresh age and retry progress; reconnect triggers new reads automatically. Network recovery does not replay sends or Mark read. Real Mac sleep/wake remains unverified. Open known threads from the triage queue; arbitrary navigation into other native panes is not yet integrated. Rich native composer controls, full-screen combinations and multiple monitors need further acceptance.
+
+## Recovery and updates
+
+From this folder:
+
+```sh
+node scripts/devctl.mjs status
+node scripts/shellctl.mjs stock
+node scripts/mods.mjs disable mark-read
+node scripts/mods.mjs disable native-reply
+node scripts/mods.mjs disable triage-surface
+node scripts/devctl.mjs stop
+```
+
+Disabling triage restores ordinary Slack; disabling native reply removes its layout without deleting drafts. Run `enable` in place of `disable` to restore a module. Source updates can be applied with `node scripts/devctl.mjs reload`. Quit before replacing the whole folder's source, preserve your local `.lab/`, and rerun preflight after a Slack update. Do not overwrite the Mac's local `.lab/` with another machine's data.
+
+The runtime uses private Slack interfaces. A new Slack version may require adapter updates; the installed app stays untouched. `.lab/` contains private logs, state, developer control sockets and potentially screenshots if you take them. Keep it local. Production diagnostics should report module health and counts, not message content.
+
+The bundle contains no automated send or mark-read experiments. All sending in the pilot is user-operated through Slack's native editor.

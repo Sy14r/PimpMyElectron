@@ -1,0 +1,3 @@
+import {spawnSync} from 'node:child_process';import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';
+const root=fileURLToPath(new URL('..',import.meta.url));fs.mkdirSync(path.join(root,'.lab/bin'),{recursive:true,mode:0o700});
+const result=spawnSync('/Library/Developer/CommandLineTools/usr/bin/swiftc',['-swift-version','5','-O','-sdk','/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk',path.join(root,'native/TriageController.swift'),'-o',path.join(root,'.lab/bin/SlackTriage')],{stdio:'inherit',env:{...process.env,DEVELOPER_DIR:'/Library/Developer/CommandLineTools'}});process.exitCode=result.status??1;

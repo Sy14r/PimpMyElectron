@@ -1,0 +1,14 @@
+.lab/
+node_modules/
+.DS_Store
+dist/
+
+# Keep account state, live experiment output and local credentials on this Mac.
+evidence/*
+!evidence/README.md
+.env
+.env.*
+!.env.example
+*.log
+__pycache__/
+*.py[cod]
