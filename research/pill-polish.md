@@ -175,3 +175,16 @@ Validation: renderer syntax and diff checks passed. In the running dev client,
 the empty button was visible and keyboard-accessible; clicking it opened the
 queue with a suspended conversation target present and left the native pane
 inactive. Custom API request delta was zero.
+
+## Inbox scrollbar and filter cleanup — 0.16.1
+
+The inbox list uses `scrollbar-width:none` plus a hidden WebKit scrollbar while
+retaining `overflow:auto`. This overrides always-visible system scrollbars
+without disabling wheel/trackpad or keyboard scrolling. Attention, Later and
+Done filter buttons and predicates are removed; All is the default, including
+when restoring one of the removed filters. Other saved filters remain valid.
+
+Validation: live computed styles confirmed both scrollbar overrides and a
+scrollable list. Only All, Unread, Mentions, DMs and Threads were rendered. The
+actual restoration code passed checks for all three removed filters and a
+retained Unread selection. Renderer syntax and diff checks passed.
