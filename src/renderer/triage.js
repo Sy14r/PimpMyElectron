@@ -6,6 +6,7 @@
   const abort = new AbortController();
   let settings={edge:'right',rest:'strip',display:'main',idleSeconds:60},lastInteraction=Date.now(),displayInfo=[],displaySignature='',hoverTimer,hoverIntent=null;
   let compactBounds=null,cursorCheckPending=false;
+  let pillPreview=null;
   let lastHostUpdate=0,hostDisconnected=false;
   const connected=()=>Date.now()-lastHostUpdate<7000;
   const restMode=()=>settings.rest||'strip';
@@ -170,8 +171,7 @@
         const last=item.messages.at(-1),preview=last?.text?.replace(/\s+/g,' ').trim().slice(0,260)||'No message preview cached yet.';
         const label=`${item.name} · ${kind}${workspace?' · '+workspace:''}\n${last?.author?last.author+': ':''}${preview}`;
         const button=el('button','pill-item');button.dataset.key=item.key;
-        // Native Chromium tooltips can extend beyond this narrow native window.
-        button.title=label;button.setAttribute('aria-label',label);button.setAttribute('aria-pressed',String(selection===item.key));
+        button.setAttribute('aria-label',label);button.setAttribute('aria-pressed',String(selection===item.key));
         const words=item.name.replace(/^[@#]/,'').trim().split(/[\s_-]+/),initials=words.slice(0,2).map(w=>Array.from(w)[0]||'').join('').toLocaleUpperCase();
         button.append(el('span','pill-initials',initials||'?'),el('span','pill-kind',item.kind==='thread'?'↳':item.kind==='channel'?'#':item.kind==='groupDM'?'◉':'@'));
         const hue=Array.from(item.key).reduce((n,c)=>(n*31+c.charCodeAt(0))%360,0);button.style.setProperty('--pill-hue',String(hue));buttons.append(button);
@@ -179,6 +179,7 @@
       rail.replaceChildren(buttons);rail.scrollTop=scroll;if(focused)[...rail.children].find(b=>b.dataset.key===focused)?.focus({preventScroll:true});
     }
     const heightSignature=`${mode}:${count}`;
+    if(pillPreview&&!unread.some(i=>i.key===pillPreview.key))setPillPreview(null);
     // Transitions already apply geometry; only resize here for a live count change.
     const resize=heightSignature!==pillHeightSignature&&pillHeightSignature.startsWith(mode+':');
     pillHeightSignature=heightSignature;
@@ -295,6 +296,7 @@
     if (next === 'stock') {
       if (original) {
         await call('setMinimumSize',...original.min); await call('setBounds',original.bounds); await call('setAlwaysOnTop',original.top);
+        await call('setWindowButtonVisibility',true).catch(()=>{});
         if(typeof original.spaces==='boolean')await call('setVisibleOnAllWorkspaces',original.spaces,{visibleOnFullScreen:false});
         original = null;spacesApplied=false;
       }
@@ -315,6 +317,7 @@
       await call('setVisibleOnAllWorkspaces',true,{visibleOnFullScreen:true});spacesApplied=true;
     }
     const compact=['cluster','strip'].includes(next);
+    await call('setWindowButtonVisibility',!compact).catch(()=>{});
     const height=compact?Math.min(pillHeight(next,pillItems().length),area.height):Math.min(area.height,850);
     const y=compact?area.y+Math.round((area.height-height)/2):area.y;
     const bounds={x:edge==='right'?area.x+area.width-width:area.x,y,width,height};
@@ -324,6 +327,7 @@
   function transition(next) {
     if (disposed || !['stock','hidden','strip','cluster','queue','reading','reply'].includes(next)) return Promise.resolve();
     clearTimeout(hoverTimer);hoverIntent=null;
+    setPillPreview(null);
     if(next!=='reply'){++openSequence;openingKey=null;}
     nativeQueue = nativeQueue.catch(()=>{}).then(async()=>{
       if(disposed)return;
@@ -403,7 +407,12 @@
     }
   },{capture:true,signal:abort.signal});
 
-  function reportShell(returnFocus=false,resumed=false){window.__pmeShellState?.(JSON.stringify({workspaceId:team(),mode,focused:document.hasFocus(),returnFocus,resumed,online:navigator.onLine,displays:displayInfo}));}
+  function reportShell(returnFocus=false,resumed=false){window.__pmeShellState?.(JSON.stringify({workspaceId:team(),mode,focused:document.hasFocus(),returnFocus,resumed,online:navigator.onLine,displays:displayInfo,preview:pillPreview}));}
+  function setPillPreview(button){
+    const rect=button?.getBoundingClientRect();
+    const next=mode==='cluster'&&compactBounds&&rect?{key:button.dataset.key,edge,anchor:{x:compactBounds.x+rect.x,y:compactBounds.y+rect.y,width:rect.width,height:rect.height}}:null;
+    if(JSON.stringify(next)!==JSON.stringify(pillPreview)){pillPreview=next;reportShell();}
+  }
   async function command(op){
     const next=op==='toggle'?(['reading','queue','reply'].includes(mode)?restMode():'queue'):op==='rest'?restMode():op==='hide'?'hidden':op;
     if(op==='toggle'&&resumeReply&&['stock','strip','cluster','hidden'].includes(mode)&&window.__PME_REPLY__?.status().target){await startReply(window.__PME_REPLY__.status().target);const w=desktop.window;await w.callBrowserWindowMethod(await w.getWindowId(),'focus');return {mode};}
@@ -428,7 +437,7 @@
     }
   }
   shadow.addEventListener('pointermove',()=>{lastInteraction=Date.now();if(['strip','cluster'].includes(mode))pillHover(true);},{signal:abort.signal});
-  host.addEventListener('pointerleave',()=>pillHover(false),{signal:abort.signal});
+  host.addEventListener('pointerleave',()=>{pillHover(false);setPillPreview(null);},{signal:abort.signal});
   host.addEventListener('pointerenter',()=>pillHover(true),{signal:abort.signal});
   $('edge-tab').addEventListener('pointerenter',()=>pillHover(true),{signal:abort.signal});
   $('edge-tab').addEventListener('pointerleave',()=>{if(mode==='strip')pillHover(false);},{signal:abort.signal});
@@ -442,7 +451,11 @@
       const point=await desktop.screen.getCursorScreenPoint();
       let inside=point.x>=bounds.x&&point.x<bounds.x+bounds.width&&point.y>=bounds.y&&point.y<bounds.y+bounds.height;
       if(inside){const w=desktop.window,id=await w.getWindowId();inside=await w.callBrowserWindowMethod(id,'isVisible')&&!await w.callBrowserWindowMethod(id,'isMinimized');}
-      if(!disposed&&mode===currentMode&&compactBounds===bounds)pillHover(inside);
+      if(!disposed&&mode===currentMode&&compactBounds===bounds){
+        pillHover(inside);
+        const button=inside&&mode==='cluster'?[...$('pill-items').children].find(b=>{const r=b.getBoundingClientRect(),rail=$('pill-items').getBoundingClientRect(),x=point.x-bounds.x,y=point.y-bounds.y;return x>=r.left&&x<r.right&&y>=Math.max(r.top,rail.top)&&y<Math.min(r.bottom,rail.bottom);}):null;
+        setPillPreview(button);
+      }
     }catch{/* DOM hover remains available if a future bridge omits cursor access. */}
     finally{cursorCheckPending=false;}
   },150);
@@ -490,9 +503,9 @@
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
   idle=setInterval(observe,10000);
-  window.__PME_TRIAGE__={version:'0.14.1',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
+  window.__PME_TRIAGE__={version:'0.15.0',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
     status:()=>({mode,edge,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
-    dispose:async()=>{if(disposed)return;disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);
+    dispose:async()=>{if(disposed)return;setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);
       window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});await geometry('stock').catch(()=>{});host.remove();delete window.__PME_TRIAGE__;
     }};
   observe();render();

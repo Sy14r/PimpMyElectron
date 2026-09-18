@@ -52,6 +52,13 @@ active unread conversations/threads in the selected workspace scope. Hover to
 expand, then hover a badge for its cached preview. Clicking opens native Slack
 and may mark the destination read. Done/snoozed items are omitted from the pill.
 
+## Native hover previews (0.15.0)
+
+For **0.15.0**, after `git pull --ff-only`, run `npm run dev:reload` followed by
+`npm run shell:restart`. Both processes must be updated for the new native hover
+preview. A full stop/start also works. The helper rebuilds automatically using
+Command Line Tools; existing API-adapter disable settings remain in effect.
+
 ## Prerequisites
 
 

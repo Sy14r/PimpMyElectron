@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+const {pillPreview}=await import(`./pill-preview.mjs?revision=${Date.now()}`);
 const { ActivityStore, READ_METHODS, requestMetadata, workspaceID } = await import(`./activity-store.mjs?revision=${Date.now()}`);
 const { createActivityRefresher } = await import(`./activity-refresh.mjs?revision=${Date.now()}`);
 const { createHistoryLoader } = await import(`./history-loader.mjs?revision=${Date.now()}`);
@@ -43,6 +44,15 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
   function pickEntry(workspaceId){return [...sessions.values()].filter(e=>teamFromURL(e.url)&&(!workspaceId||teamFromURL(e.url)===workspaceId)).sort((a,b)=>(uiStates.get(b.sessionId)?.activeAt||0)-(uiStates.get(a.sessionId)?.activeAt||0))[0];}
   const scopeFor=entry=>selectedWorkspaces.get(entry.sessionId)||(local.settings.workspace==='*'||knownWorkspaces.has(local.settings.workspace)?local.settings.workspace:null)||teamFromURL(entry.url);
   const inScope=(entry,workspace)=>workspace===scopeFor(entry)||scopeFor(entry)==='*'&&knownWorkspaces.has(workspace);
+  function shellPreview(){
+    for(const [sessionId,ui] of uiStates){
+      const entry=entryFor(sessionId);
+      if(!entry||!teamFromURL(entry.url)||ui.mode!=='cluster'||Date.now()-ui.previewAt>3000)continue;
+      const preview=pillPreview(lastSnapshot.workspaces.filter(w=>inScope(entry,w.id)),ui.preview);
+      if(preview)return preview;
+    }
+    return null;
+  }
   async function shellCommand(op,workspaceId){const entry=pickEntry(workspaceId)||pickEntry();if(!entry)throw Error('No connected workspace');
     if(op==='switch'&&knownWorkspaces.has(workspaceId)){selectedWorkspaces.set(entry.sessionId,workspaceId);await local.configure({workspace:workspaceId});}
     if(op==='stock'&&!await evaluate(entry,'!!window.__PME_TRIAGE__')){await evaluate(entry,`(async()=>{const w=desktop.window,id=await w.getWindowId();await w.callBrowserWindowMethod(id,'show');await w.callBrowserWindowMethod(id,'focus');})()`);return {mode:'stock'};}
@@ -50,7 +60,7 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
   }
   const shell=await createShellServer({file:path.join(runtimeDir,'shell.sock'),
     state:request=>{if(typeof request.hotKeyOK==='boolean')nativeHotkey=request.hotKeyOK;return {slackPID:slackPID||sessionInfo.slackPid||0,returnEpoch,settings:local.settings,
-      attention:lastSnapshot.workspaces.reduce((n,w)=>n+w.items.filter(i=>i.triage?.needsAction).length,0),
+      attention:lastSnapshot.workspaces.reduce((n,w)=>n+w.items.filter(i=>i.triage?.needsAction).length,0),preview:shellPreview(),
       displays:[...uiStates.values()].find(s=>s.displays?.length)?.displays||[],
       workspaces:[...knownWorkspaces.values()].map(w=>({...w,connected:true}))};},
     configure:async patch=>{await local.configure(patch);return {settings:local.settings};},command:shellCommand});
@@ -112,7 +122,7 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
       if(typeof p.payload!=='string'||p.payload.length>4000)return;
       try{const r=JSON.parse(p.payload);if(r.workspaceId!==teamFromURL(entry.url))return;
         const previous=uiStates.get(entry.sessionId)||{};
-        uiStates.set(entry.sessionId,{...previous,mode:r.mode,online:typeof r.online==='boolean'?r.online:previous.online,activeAt:r.focused?Date.now():previous.activeAt,
+        uiStates.set(entry.sessionId,{...previous,mode:r.mode,preview:r.preview||null,previewAt:Date.now(),online:typeof r.online==='boolean'?r.online:previous.online,activeAt:r.focused?Date.now():previous.activeAt,
           displays:Array.isArray(r.displays)?r.displays.filter(d=>typeof d.id==='string'&&/^\d+$/.test(d.id)&&typeof d.name==='string').slice(0,12):previous.displays});
         syncConnectivity();if(r.resumed===true)refreshes.resume();
         if(r.returnFocus===true)returnEpoch++;

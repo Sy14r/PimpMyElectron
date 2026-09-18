@@ -2,7 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 import Darwin
 
-// Menu and keyboard controller only. No Slack credentials or message rendering.
+// Local menu, keyboard and cached hover previews. No Slack credentials or API calls.
 final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let socketPath: String
     var item: NSStatusItem!
@@ -20,6 +20,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var settings: [String: Any] = [:]
     var workspaces: [[String: Any]] = []
     var displays: [[String: Any]] = []
+    var previewPanel: NSPanel?
+    var previewSignature = ""
     let queue = DispatchQueue(label: "triage.shell.socket")
     init(_ path: String) { socketPath = path }
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -80,11 +82,12 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard !polling else { return }; polling = true
         call(["op": "state", "hotKeyOK": hotKeyOK]) { [weak self] state in
             guard let self else { return }; self.polling = false
-            guard let state else { self.item.button?.title = "!"; self.item.button?.toolTip = "Triage controller disconnected — normal Slack remains available"; self.menu(connected: false); return }
+            guard let state else { self.showPreview(nil); self.item.button?.title = "!"; self.item.button?.toolTip = "Triage controller disconnected — normal Slack remains available"; self.menu(connected: false); return }
             self.slackPID = pid_t(state["slackPID"] as? Int ?? 0)
             self.settings = state["settings"] as? [String: Any] ?? [:]
             self.workspaces = state["workspaces"] as? [[String: Any]] ?? []
             self.displays = state["displays"] as? [[String: Any]] ?? []
+            self.showPreview(state["preview"] as? [String: Any])
             let combination = self.settings["shortcut"] as? String ?? "cmd-shift-y"
             if combination != self.shortcut { self.register(combination) }
             let attention = state["attention"] as? Int ?? 0
@@ -97,6 +100,57 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             self.menu(connected: true)
         }
+    }
+    func showPreview(_ value: [String: Any]?) {
+        guard let value, !trackingMenu, let anchor = value["anchor"] as? [String: Double],
+              let ax = anchor["x"], let ay = anchor["y"], let aw = anchor["width"], let ah = anchor["height"],
+              let title = value["title"] as? String,
+              let messages = value["messages"] as? [[String: String]],
+              [ax, ay, aw, ah].allSatisfy({ $0.isFinite }), aw > 0, ah > 0 else {
+            previewPanel?.orderOut(nil); previewSignature = ""; return
+        }
+        // Electron uses a top-left screen origin; AppKit uses bottom-left.
+        let top = NSScreen.screens.first?.frame.maxY ?? 0
+        let origin = NSRect(x: ax, y: top-ay-ah, width: aw, height: ah)
+        guard origin.insetBy(dx: -2, dy: -2).contains(NSEvent.mouseLocation) else {
+            previewPanel?.orderOut(nil); previewSignature = ""; return
+        }
+        let signature = String(data: (try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? ""
+        if signature == previewSignature && previewPanel?.isVisible == true { return }
+        previewSignature = signature
+        let screen = NSScreen.screens.first(where: { $0.frame.intersects(origin) }) ?? NSScreen.main
+        let area = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
+        let width = min(320.0, area.width-24), contentWidth = width-28
+        let content = NSView(); content.appearance = NSAppearance(named: .darkAqua)
+        content.wantsLayer = true; content.layer?.backgroundColor = NSColor(calibratedRed: 0.095, green: 0.09, blue: 0.115, alpha: 0.98).cgColor
+        content.layer?.cornerRadius = 12; content.layer?.masksToBounds = true
+        let stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 7
+        stack.translatesAutoresizingMaskIntoConstraints = false; content.addSubview(stack)
+        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14), stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14), stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 12), stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -12)])
+        func line(_ text: String, _ font: NSFont, _ color: NSColor, _ lines: Int) {
+            let label = NSTextField(wrappingLabelWithString: text); label.font = font; label.textColor = color
+            label.maximumNumberOfLines = lines; label.lineBreakMode = .byWordWrapping; label.cell?.truncatesLastVisibleLine = true; label.preferredMaxLayoutWidth = contentWidth
+            stack.addArrangedSubview(label); label.widthAnchor.constraint(equalToConstant: contentWidth).isActive = true
+        }
+        line(title, .systemFont(ofSize: 14, weight: .semibold), .labelColor, 2)
+        line(value["subtitle"] as? String ?? "", .systemFont(ofSize: 11), .secondaryLabelColor, 1)
+        line(value["label"] as? String ?? "Cached preview", .systemFont(ofSize: 10, weight: .medium), .secondaryLabelColor, 2)
+        for message in messages.prefix(3) {
+            if let author = message["author"], !author.isEmpty { line(author, .systemFont(ofSize: 11, weight: .semibold), .labelColor, 1) }
+            line(message["text"] ?? "", .systemFont(ofSize: 12), .labelColor, messages.count == 1 ? 7 : 3)
+        }
+        line("Preview only · click the badge to open", .systemFont(ofSize: 10), .tertiaryLabelColor, 1)
+        let height = min(stack.fittingSize.height+24, area.height-24)
+        let preferredX = value["edge"] as? String == "left" ? origin.maxX+10 : origin.minX-width-10
+        let frame = NSRect(x: max(area.minX+8, min(preferredX, area.maxX-width-8)), y: max(area.minY+8, min(origin.midY-height/2, area.maxY-height-8)), width: width, height: height)
+        if previewPanel == nil {
+            let panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            panel.isReleasedWhenClosed = false; panel.hidesOnDeactivate = false; panel.ignoresMouseEvents = true
+            panel.backgroundColor = .clear; panel.isOpaque = false; panel.hasShadow = true; panel.level = .statusBar
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+            previewPanel = panel
+        }
+        previewPanel?.contentView = content; previewPanel?.setFrame(frame, display: true); previewPanel?.orderFrontRegardless()
     }
     func register(_ value: String) {
         let code = value == "cmd-shift-y" ? UInt32(kVK_ANSI_Y) : UInt32(kVK_Space)

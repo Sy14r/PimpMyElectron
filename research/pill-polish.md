@@ -68,3 +68,47 @@ closing without any DOM events, repeated-sample coalescing, hidden/minimized
 guards, and disposal checks. All 71 existing tests passed. The live geometry
 smoke check now also requires the strip to be at least 88px tall. Visually checked
 the new empty strip; physical hover/focus confirmation is requested from the user.
+
+## Native new-message previews and window controls — 0.15.0
+
+The strip and expanded pill hide macOS traffic-light controls with the existing
+`setWindowButtonVisibility(false)` bridge call. Larger views and normal-window
+restoration show the controls again. The tested Slack build accepts the setter,
+although its generic bridge does not expose the corresponding visibility getter.
+
+Native browser `title` tooltips did not reliably appear while Slack was inactive.
+The menu-bar helper now owns a small borderless, nonactivating, mouse-transparent
+preview panel. It sits beside the badge on either screen edge, clamps to the
+display's visible area, and supports Spaces. It never activates Slack or changes
+its window bounds. The renderer's existing local cursor check identifies the
+badge, including when macOS delivers no DOM hover events.
+
+Only an item key and screen anchor travel from the renderer. The host resolves
+the preview from its cached snapshot, validates the selected workspace scope,
+and rejects read/Done/Later items or invalid coordinates. The helper receives
+bounded text over the existing private local socket. No preview text is logged
+or persisted. Leaving the badge, changing views, loss of current host state or
+disconnecting the helper dismisses the preview. The helper independently checks
+the current pointer is still over the badge before displaying anything.
+
+Content strategy:
+
+- Use messages newer than the cached channel/thread read cursor. Show up to the
+  latest three, in chronological order, with separate author labels.
+- For larger backlogs, label the preview “Showing latest 3 of N cached new
+  messages.” N describes available cached messages, not a complete server total.
+- When a cursor is known but no newer content is cached, say the new content is
+  unavailable instead of substituting an old message.
+- Without a cursor, label the latest cached message as having an unknown unread
+  boundary. Resolved mentions/formatting become plain text; attachments without
+  text are identified. Snippets and line counts are bounded.
+- Cursor advances remove read content. Hover never navigates, marks read,
+  dispatches Slack actions, or fetches additional messages.
+
+Validation: native helper compiled successfully; a dedicated two-author mock
+rendered through the actual AppKit view was visually checked, including multiline
+wrapping. A live unread DM produced a “New message” helper payload without URL
+changes or custom API calls. Unit/integration coverage includes new/old boundaries,
+multiple messages, missing content, unknown cursors, bounded text, workspace
+scope, and view dismissal. Hands-on control/hover confirmation is still pending.
+All 83 automated tests and the live geometry/restoration smoke check pass.

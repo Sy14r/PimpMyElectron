@@ -248,7 +248,7 @@ export class ActivityStore {
         name: itemName(item),
         kind: item.kind, mentionObserved:item.mentionObserved, unread: item.unread, unreadCount: item.unreadCount, mentions: item.mentions,
         countsStale: !item.countsAt || now - item.countsAt > 60000,
-        observedAt: item.observedAt, stale: now - item.observedAt > 60000, latest: item.latest,
+        observedAt: item.observedAt, stale: now - item.observedAt > 60000, latest: item.latest,lastRead:item.lastRead||null,
         source: item.source, historyObserved: item.historyObserved,
         history: item.history ? {status:item.history.status,error:item.history.error,loadedAt:item.history.loadedAt,
           hasMore:item.history.hasMore,bounded:item.history.bounded,retryAt:item.history.retryAt,action:item.history.action,
