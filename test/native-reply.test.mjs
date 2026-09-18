@@ -1,24 +1,30 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import fs from 'node:fs/promises';
 const source=await fs.readFile(new URL('../src/renderer/native-reply.js',import.meta.url),'utf8');
-function setup({thread=null,delayFirstSelection=false,openingThread=null}={}){
+function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeCallbacks=false,missingRoot=false,callbackTeam='TONE',selectionThrows=false,scrollThrows=false}={}){
   const attributes=new Map(),bodyAttributes=new Map(),listeners=new Map(),storage=new Map(),navigations=[];let focused=false,removed=false;
   let threadPending=false,threadClosed=false;
-  const native={team:'TONE',switches:0,selects:0};
+  const native={team:'TONE',switches:0,selects:0,threadNavigations:[],latestJumps:0,replyJumps:[]};
   const teamButton={getAttribute:()=> 'TTWO',click(){native.switches++;native.team='TTWO';location.pathname='/client/TTWO/COLD';}};
-  const channelRow={getAttribute:()=> 'CTWO',click(){native.selects++;if(!delayFirstSelection||native.selects>1)box.channel='CTWO';location.pathname='/client/TTWO/CTWO';}};
+  const channelRow={getAttribute:()=> 'CTWO',click(){if(selectionThrows)throw Error('native navigation failed');native.selects++;if(!delayFirstSelection||native.selects>1)box.channel='CTWO';location.pathname='/client/TTWO/CTWO';}};
   const box={channel:'CONE',thread,getAttribute(name){return name==='data-channel-id'?this.channel:name==='data-thread-ts'?this.thread:null;},querySelector:()=>editor};
-  const pane={isConnected:true,contains:n=>n===editor,setAttribute:(k,v)=>attributes.set(k,v),removeAttribute:k=>attributes.delete(k),querySelector:()=>thread||openingThread?{}:null};
+  const scroller={scrollTop:0,scrollHeight:1200};
+  const callbacks={teamId:callbackTeam,channelId:'CONE',threadTs:openingThread||thread,latest:'200.000001',
+    dispatchNavigateToThread(request){native.threadNavigations.push(request);threadPending=true;setTimeout(()=>{if(!threadClosed)box.thread=request.ts;},230);},
+    jumpToReply(ts){native.replyJumps.push(ts);}};
+  const listNode=nativeCallbacks?{__reactFiber$test:{memoizedProps:callbacks,stateNode:{props:callbacks,scrollToMostRecentMessage(){if(scrollThrows)throw Error('scroll unavailable');native.latestJumps++;}}}}:{};
+  const threadNode=nativeCallbacks?{__reactFiber$test:{memoizedProps:callbacks}}:{};
+  const pane={isConnected:true,contains:n=>n===editor,setAttribute:(k,v)=>attributes.set(k,v),removeAttribute:k=>attributes.delete(k),querySelector:s=>s==='[data-qa="threads_flexpane"]'&&(thread||openingThread)?threadNode:s==='.c-virtual_list'?listNode:s==='.c-virtual_list [data-qa="slack_kit_scrollbar"]'?scroller:null};
   const editor={isConnected:true,textContent:'untouched user draft',closest:s=>s==='.p-view_contents'?pane:box,focus:()=>{focused=true;}};
   const rootMessage={getAttribute:n=>n==='data-msg-ts'?openingThread:'CONE',querySelector:()=>({click(){threadPending=true;setTimeout(()=>{if(!threadClosed)box.thread=openingThread;},230);}})};
   const document={head:{append(){}},body:{setAttribute:(k,v)=>bodyAttributes.set(k,v),removeAttribute:k=>bodyAttributes.delete(k)},createElement:()=>({remove(){removed=true;}}),
-    querySelectorAll:s=>s==='[data-pme-native-reply-pane]'?(attributes.has('data-pme-native-reply-pane')?[pane]:[]):s==='[data-qa="message_input"][data-channel-id]'?[box]:s==='[data-qa="message_container"][data-msg-ts]'&&openingThread?[rootMessage]:s==='[data-qa="team_sidebar_item"]'?[teamButton]:s==='[data-qa="channel-sidebar-channel"]'?[channelRow]:[],
+    querySelectorAll:s=>s==='[data-pme-native-reply-pane]'?(attributes.has('data-pme-native-reply-pane')?[pane]:[]):s==='[data-qa="message_input"][data-channel-id]'?[box]:s==='[data-qa="message_container"][data-msg-ts]'&&openingThread&&!missingRoot?[rootMessage]:s==='[data-qa="team_sidebar_item"]'?[teamButton]:s==='[data-qa="channel-sidebar-channel"]'?[channelRow]:[],
     querySelector:s=>s==='[data-qa="team_sidebar_item"][data-team-active="true"]'?{getAttribute:()=>native.team}:s==='[data-qa="threads_flexpane"] button[aria-label="Close"]'&&threadPending?{click(){threadClosed=true;threadPending=false;}}:null,
     addEventListener:(name,fn)=>listeners.set(name,fn)};
   const window={dispatchEvent(){}};window.top=window;
   const location={origin:'https://app.slack.com',pathname:'/client/TONE/CONE',assign:url=>navigations.push(url)};
   vm.runInNewContext(source,{window,document,location,AbortController,CustomEvent:class{},Date,setTimeout,clearInterval(){},setInterval:()=>1,
     sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}});
-  return {api:window.__PME_REPLY__,box,pane,editor,location,native,listeners,storage,navigations,attributes,bodyAttributes,focused:()=>focused,removed:()=>removed};
+  return {api:window.__PME_REPLY__,scroller,box,pane,editor,location,native,listeners,storage,navigations,attributes,bodyAttributes,focused:()=>focused,removed:()=>removed};
 }
 test('native reply frames the verified editor, preserves its draft and removes all layout changes',async()=>{
   const env=setup();assert.equal((await env.api.open({workspaceId:'TONE',channelId:'CONE'})).ok,true);
@@ -61,4 +67,38 @@ test('opening a thread waits for its editor instead of closing its loading pane'
   const env=setup({openingThread:'100.000001'});
   const result=await env.api.open({workspaceId:'TONE',channelId:'CONE',threadTs:'100.000001'});
   assert.equal(result.ok,true);assert.equal(env.box.thread,'100.000001');assert.equal(env.api.status().ready,true);env.api.dispose();
+});
+
+
+test('native navigation opens a thread whose parent is absent from the DOM',async()=>{
+  const env=setup({openingThread:'100.000001',nativeCallbacks:true,missingRoot:true});
+  const result=await env.api.open({workspaceId:'TONE',channelId:'CONE',threadTs:'100.000001'});
+  assert.equal(result.ok,true);assert.equal(env.native.threadNavigations.length,1);assert.equal(env.api.status().threadNavigation,'native-callback');
+  assert.equal(env.native.threadNavigations[0].channelId,'CONE');assert.equal(env.native.threadNavigations[0].ts,'100.000001');
+  assert.deepEqual(env.native.replyJumps,['200.000001']);assert.equal(env.api.status().scrollMethod,'native-latest');env.api.dispose();
+});
+test('conversation open jumps once to latest, and the explicit action can jump again',async()=>{
+  const env=setup({nativeCallbacks:true});await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+  assert.equal(env.native.latestJumps,1);assert.equal(env.scroller.scrollTop,1200);
+  env.scroller.scrollTop=0;assert.equal(env.api.jumpToLatest().ok,true);assert.equal(env.native.latestJumps,2);assert.equal(env.scroller.scrollTop,1200);
+  assert.equal(env.editor.textContent,'untouched user draft');
+  env.box.channel='COTHER';assert.equal(env.api.jumpToLatest().ok,false);assert.equal(env.native.latestJumps,2);env.api.dispose();
+});
+test('scroll fallback stays in the verified pane when native callbacks are missing, stale or throw',async()=>{
+  for(const options of [{},{nativeCallbacks:true,callbackTeam:'TOTHER'},{nativeCallbacks:true,scrollThrows:true}]){
+    const env=setup(options);await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+    assert.equal(env.native.latestJumps,0);assert.equal(env.scroller.scrollTop,1200);assert.equal(env.api.status().scrollMethod,'rendered-bottom');
+    env.api.suspend();assert.equal(env.api.jumpToLatest().ok,false);env.api.dispose();
+  }
+});
+test('a native navigation exception ends loading with a recoverable error',async()=>{
+  const env=setup({selectionThrows:true});const result=await env.api.open({workspaceId:'TTWO',channelId:'CTWO'});
+  assert.equal(result.ok,false);assert.equal(env.api.status().state,'error');assert.equal(env.api.status().ready,false);env.api.dispose();
+});
+
+
+test('a thread callback belonging to another workspace is ignored in favor of the visible reply bar',async()=>{
+  const env=setup({openingThread:'100.000001',nativeCallbacks:true,callbackTeam:'TOTHER'});
+  const result=await env.api.open({workspaceId:'TONE',channelId:'CONE',threadTs:'100.000001'});
+  assert.equal(result.ok,true);assert.equal(env.native.threadNavigations.length,0);assert.equal(env.api.status().threadNavigation,'visible-reply-bar');env.api.dispose();
 });
