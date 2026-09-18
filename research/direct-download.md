@@ -38,18 +38,49 @@ reading the version from `/Applications/Slack.app`.
 - Renderer JavaScript and Shadow DOM injection/removal.
 - Native window bridge and setting/restoring the existing bounds.
 - Menu controller connection and global shortcut registration.
-- 55 unit tests, including distribution classification, legacy ownership
-  migration, return to an owned profile, and rejection of unowned/corrupt state.
+- 56 unit tests, including distribution classification, legacy ownership
+  migration, return to an owned profile, rejection of unowned/corrupt state, and
+  waiting for a newly opened native thread editor without closing its loading pane.
 - Same unit suite from a clean source checkout without local state or dependency
   installation; Start/Stop command paths work in checkout and packaged layouts.
 
-Raw evidence remains local in `evidence/direct-download-checks.json`.
+## Signed-in acceptance
+
+Both Personal Test and haxx are signed into the direct-download profile. The
+following checks passed; the restart coverage is listed explicitly below:
+
+- Workspace aggregation and all four runtime modules are active.
+- One click opens native DM and DM-thread in Personal Test, and DM and channel-thread
+  in haxx, with zero intermediate custom-history requests.
+- Rapid selection shows the final requested destination. Done/Later advance after
+  persistence; Undo restores the previous destination and decision. Test decisions
+  were restored afterward. The queue-order check reads the actual visible next
+  item, since initial discovery order can change across sessions.
+- Read-only view and Option-click remain explicit fallbacks. A simulated unread
+  refresh retains the selected item while its native pane is open.
+- Four authorized, labelled messages were sent through Slack's native controls and
+  individually verified once in their intended destinations. No send API was added.
+- A non-empty native draft survived collapse/reopen and a workspace round trip.
+- Module removal/re-enable preserved the native editor and draft. Hide/show and
+  minimize/restore passed without changing the underlying conversation.
+- Both sign-ins, local decisions, menu-controller connection and shortcut registration
+  survived stopping and restarting the direct-download app. The one-click/native
+  decision suite passed again after that restart.
+
+The checks exposed a race in thread opening: cleanup could close the newly opened
+thread pane while its editor was still mounting. Version 0.11.1 limits that cleanup
+to the previous auxiliary view. A regression test covers delayed thread editors.
+The fresh sidebar also took time to populate; routing still depends on the native
+sidebar and loaded message roots, so Retry/Normal Slack remains the fallback when
+those are unavailable.
+
+Raw evidence stays local in `evidence/direct-download-checks.json` and the component
+reports it embeds. No profiles, credentials, captures or raw reports are committed.
 
 ## Still pending
 
-The direct-download profile needs a fresh user sign-in to the test workspaces.
-Signed-in aggregation, native chat, draft preservation and cross-workspace
-behavior have passed on the App Store build, but have not yet been repeated on
-this direct-download profile. Do not describe startup/window checks as full
-workflow acceptance. The actual work laptop still needs its own doctor and live
-check, including any SSO or device-management restrictions.
+The actual work laptop needs its own doctor and live check, including any SSO or
+device-management restrictions. Arbitrarily old threads, missing-sidebar
+conversations, richer native controls, hands-on composer focus across Spaces and
+actual Mac sleep/wake still need dedicated acceptance. These checks qualify the
+observed 4.52.155 build and tested workflows, not every Slack version or feature.

@@ -63,7 +63,9 @@
         state='ready';reason='Slack’s editor · sending and drafts are handled by Slack';save();notify();editor.focus({preventScroll:true});return {ok:true};
       }
       if(inConversation()){
-        if(!auxClosed){const close=document.querySelector('[data-qa="quip_close_thread"]')||document.querySelector('[data-qa="threads_flexpane"] button[aria-label="Close"]');if(close){close.click();auxClosed=true;}}
+        // Once we click a thread, its pane can mount before its editor.
+        // Only dismiss a previous auxiliary view, never our in-flight thread.
+        if(!auxClosed&&!threadClicked){const close=document.querySelector('[data-qa="quip_close_thread"]')||document.querySelector('[data-qa="threads_flexpane"] button[aria-label="Close"]');if(close){close.click();auxClosed=true;}}
         if(!tabClicked){const tab=document.querySelector('[role="tab"][data-qa="channel"]');if(tab&&tab.getAttribute('aria-selected')!=='true'){tab.click();tabClicked=true;}}
         if(target.threadTs&&!threadClicked){
           const message=[...document.querySelectorAll('[data-qa="message_container"][data-msg-ts]')].find(n=>n.getAttribute('data-msg-ts')===target.threadTs&&n.getAttribute('data-msg-channel-id')===target.channelId);

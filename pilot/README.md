@@ -1,6 +1,6 @@
 # Slack triage pilot for Apple Silicon Mac
 
-This is a development pilot inside the official Slack app. Signed-in live acceptance covers Mac App Store Slack 4.52.155, Electron 44, macOS arm64. Official direct-download 4.52.155 now passes launch, profile isolation, private-pipe and native-window checks; signed-in acceptance is pending. Other builds require qualification. It uses a separate development sign-in and does not modify the Slack application bundle.
+This is a development pilot inside the official Slack app. Signed-in live acceptance covers Mac App Store and official direct-download Slack 4.52.155, Electron 44, macOS arm64. Direct-download tests include both test workspaces, native DM/thread delivery, drafts, local triage actions and restart persistence. Other builds require qualification. It uses a separate development sign-in and does not modify the Slack application bundle.
 
 ## Setup
 

@@ -2,7 +2,7 @@
 
 **Yes: arbitrary renderer JavaScript, custom UI, and substantial native window control work inside this installed, unmodified official Slack client.** The most promising foundation is a launcher using a private Chrome DevTools Protocol (CDP) pipe, a small runtime mod loader, and Slack-specific adapters.
 
-Research performed September 17–18, 2026, against **Slack 4.52.155 / Electron 44.0.0 / macOS arm64 / Mac App Store distribution**. Other distributions and future versions need separate checks.
+Research performed September 17–18, 2026, against **Slack 4.52.155 / Electron 44.0.0 / macOS arm64 / Mac App Store and direct-download distributions**. Other distributions and future versions need separate checks.
 
 - [Clone and run on your work Mac](SETUP.md)
 - [Full findings, capability matrix, experiments, and sources](research/slack-extensibility.md)

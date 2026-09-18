@@ -1,16 +1,18 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import fs from 'node:fs/promises';
 const source=await fs.readFile(new URL('../src/renderer/native-reply.js',import.meta.url),'utf8');
-function setup({thread=null,delayFirstSelection=false}={}){
+function setup({thread=null,delayFirstSelection=false,openingThread=null}={}){
   const attributes=new Map(),bodyAttributes=new Map(),listeners=new Map(),storage=new Map(),navigations=[];let focused=false,removed=false;
+  let threadPending=false,threadClosed=false;
   const native={team:'TONE',switches:0,selects:0};
   const teamButton={getAttribute:()=> 'TTWO',click(){native.switches++;native.team='TTWO';location.pathname='/client/TTWO/COLD';}};
   const channelRow={getAttribute:()=> 'CTWO',click(){native.selects++;if(!delayFirstSelection||native.selects>1)box.channel='CTWO';location.pathname='/client/TTWO/CTWO';}};
   const box={channel:'CONE',thread,getAttribute(name){return name==='data-channel-id'?this.channel:name==='data-thread-ts'?this.thread:null;},querySelector:()=>editor};
-  const pane={isConnected:true,contains:n=>n===editor,setAttribute:(k,v)=>attributes.set(k,v),removeAttribute:k=>attributes.delete(k),querySelector:()=>thread?{}:null};
+  const pane={isConnected:true,contains:n=>n===editor,setAttribute:(k,v)=>attributes.set(k,v),removeAttribute:k=>attributes.delete(k),querySelector:()=>thread||openingThread?{}:null};
   const editor={isConnected:true,textContent:'untouched user draft',closest:s=>s==='.p-view_contents'?pane:box,focus:()=>{focused=true;}};
+  const rootMessage={getAttribute:n=>n==='data-msg-ts'?openingThread:'CONE',querySelector:()=>({click(){threadPending=true;setTimeout(()=>{if(!threadClosed)box.thread=openingThread;},230);}})};
   const document={head:{append(){}},body:{setAttribute:(k,v)=>bodyAttributes.set(k,v),removeAttribute:k=>bodyAttributes.delete(k)},createElement:()=>({remove(){removed=true;}}),
-    querySelectorAll:s=>s==='[data-pme-native-reply-pane]'?(attributes.has('data-pme-native-reply-pane')?[pane]:[]):s==='[data-qa="message_input"][data-channel-id]'?[box]:s==='[data-qa="team_sidebar_item"]'?[teamButton]:s==='[data-qa="channel-sidebar-channel"]'?[channelRow]:[],
-    querySelector:s=>s==='[data-qa="team_sidebar_item"][data-team-active="true"]'?{getAttribute:()=>native.team}:null,
+    querySelectorAll:s=>s==='[data-pme-native-reply-pane]'?(attributes.has('data-pme-native-reply-pane')?[pane]:[]):s==='[data-qa="message_input"][data-channel-id]'?[box]:s==='[data-qa="message_container"][data-msg-ts]'&&openingThread?[rootMessage]:s==='[data-qa="team_sidebar_item"]'?[teamButton]:s==='[data-qa="channel-sidebar-channel"]'?[channelRow]:[],
+    querySelector:s=>s==='[data-qa="team_sidebar_item"][data-team-active="true"]'?{getAttribute:()=>native.team}:s==='[data-qa="threads_flexpane"] button[aria-label="Close"]'&&threadPending?{click(){threadClosed=true;threadPending=false;}}:null,
     addEventListener:(name,fn)=>listeners.set(name,fn)};
   const window={dispatchEvent(){}};window.top=window;
   const location={origin:'https://app.slack.com',pathname:'/client/TONE/CONE',assign:url=>navigations.push(url)};
@@ -53,4 +55,10 @@ test('suspending an incomplete navigation cancels further route retries',async()
   const env=setup({delayFirstSelection:true});
   const pending=env.api.open({workspaceId:'TTWO',channelId:'CTWO'});env.api.suspend();
   assert.equal((await pending).cancelled,true);assert.equal(env.native.selects,1);assert.equal(env.api.status().active,false);env.api.dispose();
+});
+
+test('opening a thread waits for its editor instead of closing its loading pane',async()=>{
+  const env=setup({openingThread:'100.000001'});
+  const result=await env.api.open({workspaceId:'TONE',channelId:'CONE',threadTs:'100.000001'});
+  assert.equal(result.ok,true);assert.equal(env.box.thread,'100.000001');assert.equal(env.api.status().ready,true);env.api.dispose();
 });

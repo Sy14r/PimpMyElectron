@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';import path from 'node:path';import assert fro
 const personal='T0C3P9VJUBA:D0C2DJ1HK63:',thread=personal+'1789733536.233259',haxx='TAAP373B6:D0C2X6JU7CH:',channelThread='TAAP373B6:CAA9C7T16:1789733569.029729';
 const shadow=`document.querySelector('#pme-live-triage').shadowRoot`;
 const click=id=>inspect(`${shadow}.getElementById(${JSON.stringify(id)}).click()`);
+const advance=action=>inspect(`(()=>{const s=${shadow},next=s.querySelector('.row.selected')?.nextElementSibling?.dataset.key;if(!next)throw Error('Need another visible item for advancement check');s.getElementById(${JSON.stringify(action)}).click();return next;})()`);
 const choose=key=>inspect(`${shadow}.querySelector('[data-key="${key}"]').click()`);
 const ready=key=>until(`__PME_REPLY__.status().ready&&__PME_REPLY__.status().target.key===${JSON.stringify(key)}&&${shadow}.getElementById('reply-placeholder').hidden`);
 const read=async()=>JSON.parse(await fs.readFile(path.join(root,'.lab/dev/triage-state.json'),'utf8')).records;
@@ -20,10 +21,10 @@ try{
   await inspect(`__PME_TRIAGE__.command('rest')`);await inspect(`__PME_TRIAGE__.command('toggle')`);await ready(personal);
   assert.equal(await inspect(`document.querySelector('[data-pme-native-reply-pane] [data-qa="texty_input"]').textContent===window.__pmeDefaultDraft`),true);
   assert.equal(await inspect(`${shadow}.getElementById('done').closest('#reply-chrome')!==null&&${shadow}.getElementById('done').getClientRects().length>0`),true);
-  needsUndo=true;await click('done');await ready(thread);assert.equal((await read())[personal].state,'done');
+  needsUndo=true;await ready(await advance('done'));assert.equal((await read())[personal].state,'done');
   await click('undo');await ready(personal);assert.deepEqual(await read(),records);needsUndo=false;
   await inspect(`${shadow}.getElementById('snooze').value='15'`);
-  needsUndo=true;await click('later');await ready(thread);assert.equal((await read())[personal].state,'later');
+  needsUndo=true;await ready(await advance('later'));assert.equal((await read())[personal].state,'later');
   await click('undo');await ready(personal);assert.deepEqual(await read(),records);needsUndo=false;
   await click('reply-back');await until(`__PME_TRIAGE__.status().mode==='reading'&&window.__pmeHistoryCount===1`);
   assert.equal(await inspect('__PME_REPLY__.status().active'),false);

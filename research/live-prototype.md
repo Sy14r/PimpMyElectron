@@ -1,6 +1,6 @@
 # Official Slack triage: development workflow
 
-Built and tested September 18, 2026 against the signed Mac App Store Slack **4.52.155**, Electron 44, macOS arm64. The messages and reader live inside official Slack. A small native menu controller provides the global shortcut and focus return. SlackAssist/Ledge was a read-only design reference.
+Built and tested September 18, 2026 against signed Mac App Store and direct-download Slack **4.52.155**, Electron 44, macOS arm64. The messages and reader live inside official Slack. A small native menu controller provides the global shortcut and focus return. SlackAssist/Ledge was a read-only design reference.
 
 ## Start and use
 
@@ -98,7 +98,7 @@ Content-free reports are under `evidence/`:
 
 - `recovery-checks.json`: a 20-second CDP offline interval caused a real read failure; cached reader content and local Pin/Undo worked, the timed restore succeeded, and both workspaces refreshed automatically without restarting Slack. Zero sends or Mark read requests occurred. Actual Mac sleep was not tested.
 
-**51 automated tests passed.** Automated tests cover transport framing/timeouts, model reconciliation and limits, thread timestamps, local persistence, workspace scoping (including ambiguous background responses), identity mismatch/token rotation, read restrictions, pagination, cooldowns, failure retention, module isolation, native draft/layout preservation, native workspace navigation, and rejecting a send after workspace/thread destination changes.
+**56 automated tests passed.** Automated tests cover transport framing/timeouts, model reconciliation and limits, thread timestamps, local persistence, workspace scoping (including ambiguous background responses), identity mismatch/token rotation, read restrictions, pagination, cooldowns, failure retention, module isolation, native draft/layout preservation, native workspace navigation, and rejecting a send after workspace/thread destination changes.
 
 The user confirmed global open/collapse, thin-strip resting and focus return. The initial Spaces attempt stayed on the original Space; the implementation now applies Electron's [all-workspaces/full-screen visibility options](https://www.electronjs.org/docs/latest/api/browser-window#winsetvisibleonallworkspacesvisible-options) during triage and restores stock behavior afterward. The user subsequently confirmed cross-Space opening, collapse and focus return after the native focus-target correction. Details are recorded in the implementation plan. Multiple monitors, full-screen combinations, popout windows, a real Slack upgrade and multi-page live histories still require dedicated acceptance. Unit tests and capability flags do not substitute for those checks.
 

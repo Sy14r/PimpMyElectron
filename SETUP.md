@@ -4,10 +4,11 @@ Repository: https://github.com/Sy14r/PimpMyElectron (private).
 
 The launcher detects **Mac App Store or official direct-download Slack** and
 selects a separate integration-test profile for that distribution. Slack normally
-lives at `/Applications/Slack.app`. Mac App Store Slack 4.52.155 has signed-in live
-acceptance; direct-download 4.52.155 has passed signature, fresh-profile isolation,
-private-pipe injection and native-window checks. Direct-download signed-in
-acceptance is still pending. Both use Electron 44 on Apple Silicon macOS.
+lives at `/Applications/Slack.app`. Both distributions of Slack 4.52.155 /
+Electron 44 have passed signed-in checks on this Apple Silicon Mac. Direct-download
+acceptance includes two workspaces, native DM/thread opening and delivery, draft
+preservation, local triage actions, module lifecycle and a full restart. See the
+[validation record](research/direct-download.md) for the exact coverage and limits.
 
 Run the preflight below before launching. A managed laptop can still restrict
 sign-in or debugging even when the distribution matches. A successful source
