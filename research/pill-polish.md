@@ -45,3 +45,26 @@ On September 18, 2026, tested inside the owned official direct-download Slack
   centered compact window bounds alongside geometry restoration and all-Spaces flags.
 
 The polish does not change observer coverage or introduce background fetching.
+
+## Inactive hover and edge shape — 0.14.1
+
+The empty strip is now 88px tall (previously 44px). Both compact views use a dark
+surface with a flat screen-facing edge and rounded desktop-facing corners, plus
+a subtle reveal fade when reduced motion is not requested. They remain centered.
+This is styling within the existing opaque Slack window; it does not add native
+transparency or a separate floating window.
+
+During a reported failed hover, a live event probe recorded no pointer events in
+the inactive Slack window. Compact views now also check the local pointer through
+Slack's desktop screen bridge every 150ms. Only compact views query the pointer;
+coordinates are neither persisted nor sent to the host or network. Hover intent
+is shared with DOM events, so repeated samples do not restart the reveal delay.
+Opening still waits 180ms and leaving waits 600ms, plus the sampling delay.
+Hover updates the idle timer, and visibility/minimization guards prevent a hidden
+window from being restored. Pending callbacks and the interval stop on disposal.
+
+An isolated execution of the actual hover code passed cursor-only opening and
+closing without any DOM events, repeated-sample coalescing, hidden/minimized
+guards, and disposal checks. All 71 existing tests passed. The live geometry
+smoke check now also requires the strip to be at least 88px tall. Visually checked
+the new empty strip; physical hover/focus confirmation is requested from the user.

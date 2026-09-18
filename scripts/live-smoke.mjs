@@ -37,13 +37,14 @@ const result=await inspect(`(async()=>{
   const restored={bounds:await call('getBounds'),min:await call('getMinimumSize'),top:await call('isAlwaysOnTop'),spaces:await call('isVisibleOnAllWorkspaces')};
   await mod.transition('queue');
   return {original,restored,allSpaces,widths:{queue:queue.width,cluster:cluster.width,reader:reader.width},
-    dockChanged:left.x!==right.x,compactCentered,readerVisible,underlyingConversationUnchanged:location.pathname===pathBefore,
+    dockChanged:left.x!==right.x,compactCentered,stripHeight:strip.height,readerVisible,underlyingConversationUnchanged:location.pathname===pathBefore,
     rowCount:rows.length,ui:mod.status()};
 })()`);
 assert.deepEqual(result.restored,result.original);assert.deepEqual(result.widths,{queue:420,cluster:44,reader:820});
 assert.equal(result.dockChanged,true);assert.equal(result.readerVisible,true);assert.equal(result.underlyingConversationUnchanged,true);
 assert.equal(result.allSpaces,true);
 assert.equal(result.compactCentered,true);
+assert.ok(result.stripHeight>=88);
 const output={checkedAt:new Date().toISOString(),source:'scripts/live-smoke.mjs',
   nativeGeometryRestored:true,allSpacesFlagSetAndRestored:true,widths:result.widths,leftRightDocking:result.dockChanged,compactCentered:result.compactCentered,
   readerVisible:result.readerVisible,underlyingConversationUnchanged:result.underlyingConversationUnchanged,
