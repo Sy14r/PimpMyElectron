@@ -25,6 +25,10 @@ const result=await inspect(`(async()=>{
   shadow.getElementById('dock').click();await mod.transition('queue');const left=await call('getBounds');
   shadow.getElementById('dock').click();await mod.transition('queue');const right=await call('getBounds');
   await mod.transition('cluster');const cluster=await call('getBounds');
+  await mod.transition('strip');const strip=await call('getBounds');
+  const displays=await desktop.screen.getAllDisplays();
+  const area=displays.find(d=>strip.x>=d.workArea.x&&strip.x<d.workArea.x+d.workArea.width)?.workArea;
+  const compactCentered=!!area&&[strip,cluster].every(b=>Math.abs(b.y+b.height/2-(area.y+area.height/2))<=0.5);
   await mod.transition('queue');
   const rows=[...shadow.querySelectorAll('.row')];if(rows[0])mod.open(rows[0].dataset.key,{reader:true});await mod.transition('reading');
   const reader=await call('getBounds');
@@ -33,14 +37,15 @@ const result=await inspect(`(async()=>{
   const restored={bounds:await call('getBounds'),min:await call('getMinimumSize'),top:await call('isAlwaysOnTop'),spaces:await call('isVisibleOnAllWorkspaces')};
   await mod.transition('queue');
   return {original,restored,allSpaces,widths:{queue:queue.width,cluster:cluster.width,reader:reader.width},
-    dockChanged:left.x!==right.x,readerVisible,underlyingConversationUnchanged:location.pathname===pathBefore,
+    dockChanged:left.x!==right.x,compactCentered,readerVisible,underlyingConversationUnchanged:location.pathname===pathBefore,
     rowCount:rows.length,ui:mod.status()};
 })()`);
 assert.deepEqual(result.restored,result.original);assert.deepEqual(result.widths,{queue:420,cluster:44,reader:820});
 assert.equal(result.dockChanged,true);assert.equal(result.readerVisible,true);assert.equal(result.underlyingConversationUnchanged,true);
 assert.equal(result.allSpaces,true);
+assert.equal(result.compactCentered,true);
 const output={checkedAt:new Date().toISOString(),source:'scripts/live-smoke.mjs',
-  nativeGeometryRestored:true,allSpacesFlagSetAndRestored:true,widths:result.widths,leftRightDocking:result.dockChanged,
+  nativeGeometryRestored:true,allSpacesFlagSetAndRestored:true,widths:result.widths,leftRightDocking:result.dockChanged,compactCentered:result.compactCentered,
   readerVisible:result.readerVisible,underlyingConversationUnchanged:result.underlyingConversationUnchanged,
   observedConversations:result.rowCount,ui:result.ui};
 await fs.writeFile(path.join(root,'evidence/live-prototype-checks.json'),JSON.stringify(output,null,2)+'\n');

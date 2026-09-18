@@ -44,7 +44,16 @@ If a Slack update breaks this optional observer, disable it with
 `npm run mods -- disable state-observer`; the existing DOM/network observation
 and native UI continue to work. No fallback API polling is enabled.
 
+## Centered unread pill (0.14.0)
+
+The **0.14.0** pill polish works with the passive observer and preserves disabled
+API adapters. After updating, the strip stays centered on either edge. Dots count
+active unread conversations/threads in the selected workspace scope. Hover to
+expand, then hover a badge for its cached preview. Clicking opens native Slack
+and may mark the destination read. Done/snoozed items are omitted from the pill.
+
 ## Prerequisites
+
 
 - Node.js 22 or newer, including npm.
 - Apple Command Line Tools (the native menu controller compiles locally).

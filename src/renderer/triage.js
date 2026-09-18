@@ -27,16 +27,20 @@
       .footer{border-top:1px solid #ffffff0c;margin-top:10px;padding-top:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}.footer button{font-size:11px;background:#ffffff05;border:1px solid #ffffff0b;padding:5px 9px}.footnote{font-size:10px;color:#718099;margin-top:9px;line-height:1.5}.empty{padding:24px 10px;color:#8796af;font-size:12px;line-height:1.6}
       .reader{flex:1;min-width:0;display:flex;flex-direction:column;background:#191f2c}.reader-header{padding:22px 23px 16px;border-bottom:1px solid #ffffff0a}.reader-header h2{font-size:18px;margin:8px 0 4px;overflow-wrap:anywhere}#coverage{font-size:11px;color:#8494ab;line-height:1.6}.reader-header button{float:right;color:#94a2b8;padding:3px 7px}.messages{flex:1;overflow:auto;padding:8px 23px}.message{padding:17px 0;border-bottom:1px solid #ffffff07}.message-head{display:flex;align-items:baseline;gap:9px}.author{font-weight:650;font-size:12px;color:#cdd4e4}.time{color:#77869d;font-size:10px}.body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.65;color:#bcc6d8;margin-top:6px}.attachment{font-size:10px;color:#9a8eb5;margin-top:7px}.read-only{padding:12px 23px;border-top:1px solid #ffffff0c;color:#829690;font-size:11px;display:flex;gap:8px;align-items:center}#notice{font-size:11px;color:#dbbca1;margin-top:9px;white-space:normal}
       .triage-controls{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.triage-controls button{float:none;background:#ab8cdd20;color:#d6c8ef;padding:6px 9px;font-size:11px}.history-controls{display:flex;gap:8px;margin-top:12px}.reader-header .history-controls button{float:none;border:1px solid #ffffff18;padding:5px 10px;font-size:11px}#history-status{font-size:11px;color:#b5a6d5;margin-top:9px}.body a{color:#b8c7fa;text-decoration:underline}.body code,.body pre{background:#ffffff0a;border-radius:4px;padding:2px 4px;font-size:12px}.body pre{padding:10px;overflow:auto;white-space:pre-wrap}.mention{color:#c3b3ef}.thread-link{font-size:11px;margin-top:8px;padding:5px 8px;background:#ab8cdd16;color:#c5b3ee}
-      #edge-tab{position:fixed;inset:0;pointer-events:auto;background:#b6a5e8;border-radius:4px;color:#21192d;padding:0;font-size:11px}#edge-tab:hover{background:#cfc0f6}
+      #edge-tab{position:fixed;inset:0;pointer-events:auto;background:#b6a5e8;border-radius:6px;color:#21192d;padding:8px 1px;font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;overflow:hidden}#edge-tab:hover{background:#cfc0f6}
+      #edge-dots{display:flex;flex-direction:column;align-items:center;gap:4px}.edge-dot{width:3px;height:3px;background:currentColor;border-radius:50%;flex:none}#edge-overflow{font-size:8px;writing-mode:vertical-rl;line-height:9px}#edge-tab.empty{background:#4c485e;padding:8px 1px}#edge-tab.empty::after{content:'';width:2px;height:16px;border-radius:2px;background:#aca2c0}
+      .shell.cluster{border-radius:12px;overflow:hidden}.shell.cluster .rail{border:0;width:44px;padding:7px 0;gap:6px;background:#201d2c}.shell.cluster #rail-unread,.shell.cluster #collapse,.shell.cluster .rail>.spacer{display:none}.shell:not(.cluster) #pill-items,.shell:not(.cluster) #pill-empty{display:none}.shell.cluster #home{flex-shrink:0;width:30px;height:27px;font-size:11px}.shell.cluster #restore{flex-shrink:0;height:25px;width:30px;margin-top:auto;font-size:12px;color:#a99bbb}
+      #pill-items{display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0;padding:2px 4px;scrollbar-width:none}#pill-items::-webkit-scrollbar{display:none}#pill-items .pill-item{position:relative;display:flex;align-items:center;justify-content:center;width:32px;height:32px;min-height:32px;padding:0;background:hsl(var(--pill-hue) 26% 25%);border:1px solid hsl(var(--pill-hue) 25% 39%);border-radius:10px;color:#f1eafc;font-size:11px;font-weight:650}#pill-items .pill-item:hover,#pill-items .pill-item:focus-visible{background:hsl(var(--pill-hue) 28% 36%);border-color:#cebbf5}#pill-items .pill-kind{position:absolute;bottom:-1px;right:-1px;font-size:8px;line-height:11px;min-width:11px;border-radius:4px;background:#11131d;color:#cebdf4}#pill-empty{font-size:14px;color:#acbda9;padding:12px 0}
+
       #workspace-picker{margin-top:8px;background:#202735;color:inherit;border:1px solid #ffffff15;border-radius:5px;padding:5px;width:100%}.activity-controls{display:flex;gap:6px;margin-top:10px}.activity-controls button{font-size:10px;color:#b5a6d5;padding:3px 5px}#activity-status{font-size:10px;color:#a3a1a9}
       .shell.reply{width:420px;right:auto}.reply-chrome{position:fixed;left:420px;right:0;top:0;height:144px;pointer-events:auto;background:#191f2c;border-bottom:1px solid #ffffff16;padding:12px 16px;color:#cdd4e4;display:flex;flex-direction:column;gap:5px}.reply-chrome strong{font-size:13px}.reply-chrome small{font-size:10px;color:#a3adc0}.reply-chrome nav{display:flex;gap:8px}.reply-chrome button{font-size:11px;padding:3px 7px;background:#ffffff0a}.reply-placeholder{position:fixed;left:420px;right:0;top:144px;bottom:0;pointer-events:auto;background:#191f2c;padding:24px;color:#a3adc0;font-size:13px}
       @media(max-width:650px){.shell.reply{width:44px}.shell.reply .queue{display:none}.reply-chrome,.reply-placeholder{left:44px}}
       @media(prefers-reduced-motion:no-preference){.row{transition:background .12s}}@media(max-width:650px){.shell.reading .queue{display:none}.reader{width:calc(100vw - 44px)}}
     </style>
-    <button id="edge-tab" hidden aria-label="Reveal triage" title="Reveal triage">•</button>
+    <button id="edge-tab" hidden aria-label="Reveal triage" title="Reveal triage"><span id="edge-dots" aria-hidden="true"></span><span id="edge-overflow" hidden aria-hidden="true"></span></button>
     <button id="opener" aria-label="Open triage"><span class="signal"></span>Triage</button>
     <section class="shell" hidden aria-label="Slack triage">
-      <nav class="rail" aria-label="Triage views"><button class="brand" id="home" aria-label="Show queue">T</button><button id="rail-unread" aria-label="Unread observed conversations">●</button><div class="spacer"></div><button id="restore" aria-label="Return to normal Slack" title="Normal Slack">↗</button><button id="collapse" aria-label="Collapse to rail" title="Collapse">›</button></nav>
+      <nav class="rail" aria-label="Triage views"><button class="brand" id="home" aria-label="Show queue">T</button><button id="rail-unread" aria-label="Unread observed conversations">●</button><div id="pill-items" aria-label="Unread conversations and threads"></div><span id="pill-empty" hidden title="No active unread items">✓</span><div class="spacer"></div><button id="restore" aria-label="Return to normal Slack" title="Normal Slack">↗</button><button id="collapse" aria-label="Collapse to rail" title="Collapse">›</button></nav>
       <section class="queue"><div class="eyebrow">Your attention, in one place</div><h1>Your attention</h1><div id="workspace"></div><select id="workspace-picker" aria-label="Workspace"></select><div class="scope"><span class="signal"></span><span id="scope">Reading what Slack has loaded</span></div><input id="search" type="search" placeholder="Filter conversations…" aria-label="Filter observed conversations" autocomplete="off">
         <div class="activity-controls"><button id="activity-refresh">Refresh activity</button><button id="activity-more" hidden>More conversations</button></div><div id="activity-status" role="status"></div><div class="filters" role="group" aria-label="Filter activity"><button data-filter="attention" aria-pressed="true">Attention</button><button data-filter="all" aria-pressed="false">All</button><button data-filter="unread" aria-pressed="false">Unread</button><button data-filter="mentions" aria-pressed="false">Mentions</button><button data-filter="dms" aria-pressed="false">DMs</button><button data-filter="threads" aria-pressed="false">Threads</button><button data-filter="later" aria-pressed="false">Later</button><button data-filter="done" aria-pressed="false">Done</button></div><div id="list" aria-label="Observed conversations"></div>
         <div class="footer"><button id="dock">Dock left</button><button id="stock">Normal Slack ↗</button><button id="collapse-bottom">Collapse</button></div><div class="footnote">⌘⇧Y toggle · ↑↓ select · Enter open · Esc back<br>E Done · L Later · P Pin · R Native chat (reader)<br>Native Slack conversations · Done and Later stay local</div><div id="notice" role="status"></div>
@@ -140,9 +144,47 @@
   function openReader(key){++openSequence;openingKey=null;selection=key;void transition('reading');requestHistory();}
   function openItem(key,{reader=false}={}){if(reader)openReader(key);else void startReply(items().find(i=>i.key===key));}
 
+  // Count actionable unread destinations, never invent an exact message total.
+  const pillItems=()=>items().filter(i=>i.unread===true&&!['done','later'].includes(i.triage?.state));
+  let pillSignature='',pillHeightSignature='';
+  function pillHeight(kind,count){return kind==='strip'?Math.max(44,16+Math.min(count,48)*7+(count>48?32:0)):Math.max(132,96+Math.min(count,12)*38);}
+  function renderPill(){
+    const unread=pillItems(),count=unread.length;
+    const label=`${count} active unread ${count===1?'conversation or thread':'conversations and threads'}`;
+    const signature=JSON.stringify([selection,snapshot.workspaces.map(w=>[w.id,w.name]),unread.map(i=>[i.key,i.name,i.kind,i.messages.at(-1)?.text,i.messages.at(-1)?.author])]);
+    $('edge-tab').setAttribute('aria-label',`${label}. Reveal triage`);$('edge-tab').title=`${label} · Hover to preview · Click to open triage`;
+    $('edge-tab').classList.toggle('empty',!count);
+    $('home').textContent=mode==='cluster'?String(count):'T';$('home').title=`${label} · Open queue`;
+    $('pill-empty').hidden=!!count||mode!=='cluster';
+    if(signature!==pillSignature){
+      pillSignature=signature;
+      const dots=document.createDocumentFragment();for(let i=0;i<Math.min(count,48);i++)dots.append(el('span','edge-dot'));
+      $('edge-dots').replaceChildren(dots);$('edge-overflow').hidden=count<=48;$('edge-overflow').textContent=count>48?`+${count-48}`:'';
+      const rail=$('pill-items'),scroll=rail.scrollTop,focused=shadow.activeElement?.classList.contains('pill-item')?shadow.activeElement.dataset.key:null;
+      const buttons=document.createDocumentFragment();
+      for(const item of unread){
+        const kind=item.kind==='thread'?'Thread':item.kind==='channel'?'Channel':item.kind==='groupDM'?'Group chat':'DM';
+        const workspace=snapshot.workspaces.find(w=>w.id===item.workspaceId)?.name||'';
+        const last=item.messages.at(-1),preview=last?.text?.replace(/\s+/g,' ').trim().slice(0,260)||'No message preview cached yet.';
+        const label=`${item.name} · ${kind}${workspace?' · '+workspace:''}\n${last?.author?last.author+': ':''}${preview}`;
+        const button=el('button','pill-item');button.dataset.key=item.key;
+        // Native Chromium tooltips can extend beyond this narrow native window.
+        button.title=label;button.setAttribute('aria-label',label);button.setAttribute('aria-pressed',String(selection===item.key));
+        const words=item.name.replace(/^[@#]/,'').trim().split(/[\s_-]+/),initials=words.slice(0,2).map(w=>Array.from(w)[0]||'').join('').toLocaleUpperCase();
+        button.append(el('span','pill-initials',initials||'?'),el('span','pill-kind',item.kind==='thread'?'↳':item.kind==='channel'?'#':item.kind==='groupDM'?'◉':'@'));
+        const hue=Array.from(item.key).reduce((n,c)=>(n*31+c.charCodeAt(0))%360,0);button.style.setProperty('--pill-hue',String(hue));buttons.append(button);
+      }
+      rail.replaceChildren(buttons);rail.scrollTop=scroll;if(focused)[...rail.children].find(b=>b.dataset.key===focused)?.focus({preventScroll:true});
+    }
+    const heightSignature=`${mode}:${count}`;
+    // Transitions already apply geometry; only resize here for a live count change.
+    const resize=heightSignature!==pillHeightSignature&&pillHeightSignature.startsWith(mode+':');
+    pillHeightSignature=heightSignature;
+    if(resize&&['strip','cluster'].includes(mode))nativeQueue=nativeQueue.catch(()=>{}).then(()=>{if(!disposed&&['strip','cluster'].includes(mode))return geometry(mode);}).catch(()=>{});
+  }
   function render() {
     if (disposed) return;
-    renderReply();
+    renderReply();renderPill();
     try{sessionStorage.setItem(viewKey,JSON.stringify({selection,filter,resumeReply}));}catch{}
     $('workspace').textContent = snapshot.workspaces.map(w => w.name).join(' · ') || 'Waiting for workspace activity…';
     $('scope').textContent = `${items().length} observed · coverage is partial`;
@@ -162,7 +204,7 @@
     picker.value=viewTeam();picker.disabled=!connected();picker.hidden=directory.length<2;
     const rows = filtered();
     const listScroll = $('list').scrollTop;
-    const focusKey = shadow.activeElement?.dataset?.key;
+    const focusKey = shadow.activeElement?.classList.contains('row')?shadow.activeElement.dataset.key:null;
     $('list').replaceChildren();
     if (!rows.length) $('list').append(el('div','empty',filter === 'all' ? 'No conversations observed yet. Browse a conversation in normal Slack to load it here.' : 'No observed conversations match this filter. This does not mean the workspace has no other activity.'));
     for (const item of rows) {
@@ -232,6 +274,7 @@
   function applyLayout() {
     $('opener').hidden = mode !== 'stock';$('edge-tab').hidden=mode!=='strip';
     shadow.querySelector('.shell').hidden = ['stock','hidden','strip'].includes(mode);
+    shadow.querySelector('.shell').classList.toggle('cluster',mode === 'cluster');
     shadow.querySelector('.shell').classList.toggle('reading',mode === 'reading');
     shadow.querySelector('.shell').classList.toggle('reply',mode === 'reply');renderReply();
     shadow.querySelector('.queue').hidden = mode === 'cluster';
@@ -267,10 +310,14 @@
     if(!spacesApplied&&typeof original.spaces==='boolean'){
       await call('setVisibleOnAllWorkspaces',true,{visibleOnFullScreen:true});spacesApplied=true;
     }
-    await call('setBounds',{x:edge==='right'?area.x+area.width-width:area.x,y:area.y,width,height:['cluster','strip'].includes(next)?180:Math.min(area.height,850)});
+    const compact=['cluster','strip'].includes(next);
+    const height=compact?Math.min(pillHeight(next,pillItems().length),area.height):Math.min(area.height,850);
+    const y=compact?area.y+Math.round((area.height-height)/2):area.y;
+    await call('setBounds',{x:edge==='right'?area.x+area.width-width:area.x,y,width,height});
   }
   function transition(next) {
     if (disposed || !['stock','hidden','strip','cluster','queue','reading','reply'].includes(next)) return Promise.resolve();
+    clearTimeout(hoverTimer);
     if(next!=='reply'){++openSequence;openingKey=null;}
     nativeQueue = nativeQueue.catch(()=>{}).then(async()=>{
       if(disposed)return;
@@ -291,7 +338,7 @@
   }
   shadow.addEventListener('click',event=>{
     event.stopPropagation();const button=event.target.closest('button');if(!button)return;
-    lastInteraction=Date.now();
+    lastInteraction=Date.now();clearTimeout(hoverTimer);
     if(button.dataset.key)openItem(button.dataset.key,{reader:event.altKey});
     else if(button.dataset.thread)openItem(button.dataset.thread);
     else if(['done','later','pin','reopen','undo'].includes(button.id))localAction(button.id);
@@ -409,7 +456,7 @@
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
   idle=setInterval(observe,10000);
-  window.__PME_TRIAGE__={version:'0.13.0',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
+  window.__PME_TRIAGE__={version:'0.14.0',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
     status:()=>({mode,edge,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
     dispose:async()=>{if(disposed)return;disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearTimeout(hoverTimer);
       window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});await geometry('stock').catch(()=>{});host.remove();delete window.__PME_TRIAGE__;
