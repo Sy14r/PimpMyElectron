@@ -70,5 +70,18 @@ test('passive runtime scopes snapshots, ignores write responses, and cleans up',
   event('Network.webSocketFrameReceived',{response:{opcode:1,payloadData:JSON.stringify({type:'message',channel:'CONE',ts:'100.000004',text:'bad-origin'})}});
   assert.equal(runtime.status().messages,4);
   await runtime.dispose();assert.equal(cdp.listenerCount('event'),0);assert.equal(runtime.status().messages,0);
-  assert.equal(cdp.commands.filter(c=>c.method==='Page.removeScriptToEvaluateOnNewDocument').length,8);
+  assert.equal(cdp.commands.filter(c=>c.method==='Page.removeScriptToEvaluateOnNewDocument').length,10);
+});
+
+test('cache snapshots hydrate authorized background workspaces and reject stale renderer attribution without API calls',async t=>{
+  const cdp=new FakeCDP(),entry={targetId:'one',sessionId:'s1',url:'https://app.slack.com/client/TONE/CONE'},sessions=new Map([['one',entry]]);
+  const runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'cache-runtime-'));const runtime=await createRuntime({cdp,sessions,root,runtimeDir});
+  t.after(async()=>{await runtime.dispose();await fs.rm(runtimeDir,{recursive:true,force:true});});await runtime.attach(entry);
+  const snapshot={rendererWorkspaceId:'TONE',workspaceId:'TTWO',knownWorkspaces:[{id:'TONE',name:'One'},{id:'TTWO',name:'Two'}],channels:[{id:'DTWO',is_im:true,has_unreads:true}],messages:[{channel:'DTWO',ts:'100.000001',text:'cached background'}]};
+  const emit=r=>cdp.emit('event',{sessionId:'s1',method:'Runtime.bindingCalled',params:{name:'__pmeClientState',payload:JSON.stringify(r)}});
+  emit(snapshot);assert.equal(runtime.status().clientStateSnapshots,1);assert.equal(runtime.status().messages,1);
+  emit({...snapshot,rendererWorkspaceId:'TTWO'});emit({...snapshot,workspaceId:'TUNKNOWN',knownWorkspaces:[]});
+  assert.equal(runtime.status().clientStateSnapshots,1);assert.equal(runtime.status().messages,1);
+  assert.equal(cdp.evaluations.some(e=>e.expression.startsWith('window.__PME_READS__?.activity(')),false);
+  assert.equal(runtime.status().customApi.requests,0);
 });

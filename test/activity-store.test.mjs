@@ -82,3 +82,30 @@ test('older discovery cannot roll back activity; thread latest-reply timestamps 
   const thread=store.snapshot().workspaces[0].items.find(i=>i.threadTs);
   assert.equal(thread.latest,'300.000001');assert.equal(thread.messages[0].ts,'100.000001');
 });
+
+test('client cache hydrates background names, messages and subscribed threads with explicit partial counts',()=>{
+  const s=new ActivityStore({now:()=>1000});
+  s.ingestClientState({workspaceId:'TTWO',channels:[{id:'DTWO',is_im:true,user:'UTWO',has_unreads:true,mentionObserved:true,last_read:'100.000001'}],users:[{id:'UTWO',name:'Peer'}],
+    messages:[{channel:'DTWO',ts:'100.000001',text:'root',reply_count:1},{channel:'DTWO',ts:'100.000002',thread_ts:'100.000001',text:'reply'}],
+    threads:[{channel:'DTWO',ts:'100.000001',last_read:'100.000001',subscribed:true,root:{ts:'100.000001',text:'root',latest_reply:'100.000002'}}]});
+  const w=s.snapshot().workspaces[0],parent=w.items.find(i=>!i.threadTs),thread=w.items.find(i=>i.threadTs);
+  assert.equal(parent.name,'Peer');assert.equal(parent.unread,true);assert.equal(parent.unreadCount,null);assert.equal(parent.mentionObserved,true);assert.equal(parent.mentions,null);
+  assert.equal(thread.name,'Peer');assert.equal(thread.unread,true);assert.equal(thread.messages.length,2);assert.equal(w.clientState.at,1000);
+  s.ingestClientState({workspaceId:'TTWO',threads:[{channel:'DTWO',ts:'100.000001',last_read:'100.000002',subscribed:true}]});
+  assert.equal(s.snapshot().workspaces[0].items.find(i=>i.threadTs).unread,false);
+});
+test('fresh cache unread flags survive stale sidebar observations; fallback resumes when cache observation stops',()=>{
+  let now=1000;const s=new ActivityStore({now:()=>now});
+  const cached={workspaceId:'TONE',channels:[{id:'CONE',has_unreads:true,mentionObserved:false}]};
+  s.ingestClientState(cached);s.ingestDOM({workspaceId:'TONE',conversations:[{channelId:'CONE',unread:false,unreadObserved:true}]});
+  assert.equal(item(s).unread,true);now+=46000;
+  s.ingestDOM({workspaceId:'TONE',conversations:[{channelId:'CONE',unread:false,unreadObserved:true}]});assert.equal(item(s).unread,false);
+  s.ingestClientState({...cached,channels:[{id:'CONE'}],truncated:true});assert.equal(item(s).unread,false);assert.equal(s.snapshot().workspaces[0].clientState.truncated,true);
+});
+
+test('unknown cache unread does not suppress DOM evidence, and native count responses clear old mentions',()=>{
+  const s=new ActivityStore({now:()=>1000});s.ingestClientState({workspaceId:'TONE',channels:[{id:'CONE',has_unreads:true,mentionObserved:true}]});
+  s.ingestClientState({workspaceId:'TONE',channels:[{id:'CONE'}]});
+  s.ingestDOM({workspaceId:'TONE',conversations:[{channelId:'CONE',unread:false,unreadObserved:true}]});assert.equal(item(s).unread,false);
+  s.ingest(meta('client.counts'),{channels:[{id:'CONE',mention_count:0}]});assert.equal(item(s).mentionObserved,false);
+});

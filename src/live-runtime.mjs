@@ -11,7 +11,7 @@ const { TriageState } = await import(`./triage-state.mjs?revision=${Date.now()}`
 const teamFromURL = value => { try { const url = new URL(value); if (url.origin !== 'https://app.slack.com') return null;
   return url.pathname.match(/^\/client\/([TE][A-Z0-9]+)(?:\/|$)/)?.[1] || null; } catch { return null; } };
 export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(root,'.lab/dev'), slackPID=0, slackVersion }) {
-  const store = new ActivityStore({maxMessagesPerItem:200});
+  const store = new ActivityStore({maxMessagesPerItem:200,maxWorkspaces:12});
   const local=await new TriageState(path.join(runtimeDir,'triage-state.json')).load();
   let actionError=null,returnEpoch=0,nativeHotkey=false;
   const knownWorkspaces=new Map(),selectedWorkspaces=new Map();
@@ -23,7 +23,7 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
   const customApi={since:Date.now(),requests:0,ratelimited:0,authFailed:0,methods:{}};
   const metricMethods=new Set(['auth.test','users.conversations','client.counts','subscriptions.thread.getView','conversations.history','conversations.replies','users.info','conversations.mark']);
   const socketTypes = new Map();
-  const stats = { readResponses: 0, domSnapshots: 0, skippedBodies: 0, errors: 0, lastPush: 0 };
+  const stats = { readResponses: 0, domSnapshots: 0, clientStateSnapshots:0, skippedBodies: 0, errors: 0, lastPush: 0 };
   const mods=await createModLoader({cdp,root,runtimeDir,slackVersion});
   let disposed = false, polling = false, bodyReads = 0;
   const entryFor = sessionId => [...sessions.values()].find(e => e.sessionId === sessionId);
@@ -79,6 +79,7 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
     await cdp.send('Runtime.addBinding', { name: '__pmeTriageAction' }, entry.sessionId);
     await cdp.send('Runtime.addBinding', { name: '__pmeShellState' }, entry.sessionId);
     await cdp.send('Runtime.addBinding', { name: '__pmeApiMetric' }, entry.sessionId);
+    await cdp.send('Runtime.addBinding', { name: '__pmeClientState' }, entry.sessionId);
     await mods.reconcile(entry);
     attached.add(entry.sessionId);
   }
@@ -87,6 +88,17 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
     const entry = entryFor(message.sessionId);
     if (!entry) return;
     const p = message.params;
+    if(message.method==='Runtime.bindingCalled'&&p.name==='__pmeClientState'){
+      if(typeof p.payload!=='string'||p.payload.length>300000)return;
+      try{const r=JSON.parse(p.payload),current=teamFromURL(entry.url);
+        if(!current||r.rendererWorkspaceId!==current||!workspaceID(r.workspaceId))return;
+        for(const w of Array.isArray(r.knownWorkspaces)?r.knownWorkspaces.slice(0,12):[])if(workspaceID(w.id)&&typeof w.name==='string'){
+          knownWorkspaces.set(w.id,{id:w.id,name:w.name.slice(0,180)});store.workspace(w.id).name=w.name.slice(0,180);
+        }
+        if(r.workspaceId!==current&&!knownWorkspaces.has(r.workspaceId))return;
+        if(store.ingestClientState(r))stats.clientStateSnapshots++;
+      }catch{stats.errors++;}return;
+    }
     if(message.method==='Runtime.bindingCalled'&&p.name==='__pmeApiMetric'){
       if(!teamFromURL(entry.url)||typeof p.payload!=='string'||p.payload.length>250)return;
       try{const r=JSON.parse(p.payload);
@@ -195,7 +207,7 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
       snapshot.settings=local.settings;snapshot.nativeHotkey=shell.connected()&&nativeHotkey;snapshot.localError=local.error||actionError;
       snapshot.canUndo=!!local.undo&&Date.now()-local.undo.at<30000;
       snapshot.undoKey=snapshot.canUndo?local.undo.key:null;
-      snapshot.apiPolicy='manual-only';snapshot.markReadAvailable=mods.enabled('mark-read');snapshot.network=refreshes.status().online?'available':'offline';
+      snapshot.apiPolicy='manual-only';snapshot.customReadsAvailable=mods.enabled('history-reader');snapshot.markReadAvailable=mods.enabled('mark-read');snapshot.network=refreshes.status().online?'available':'offline';
       for(const workspace of snapshot.workspaces)for(const item of workspace.items){item.triage=local.project(item);item.readMark=readMarker.state(item.key);}
       snapshot.workspaceDirectory=[...knownWorkspaces.values()].map(w=>({...w,connected:true,stale:refreshes.get(w.id).status!=='ready'||Date.now()-(refreshes.get(w.id).countsAt||0)>150000}));
       for(const w of snapshot.workspaces)w.activity=refreshes.get(w.id);
@@ -228,6 +240,7 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
         await cdp.send('Runtime.removeBinding', { name: '__pmeTriageAction' }, e.sessionId).catch(() => {});
         await cdp.send('Runtime.removeBinding', { name: '__pmeShellState' }, e.sessionId).catch(() => {});
         await cdp.send('Runtime.removeBinding', { name: '__pmeApiMetric' }, e.sessionId).catch(() => {});
+        await cdp.send('Runtime.removeBinding', { name: '__pmeClientState' }, e.sessionId).catch(() => {});
         await cdp.send('Network.disable', {}, e.sessionId).catch(() => {});
       }
       // Complete already accepted local decisions before shutdown returns.

@@ -67,3 +67,18 @@ Native conversations/composers and passive observation still work. Use `enable`
 in place of `disable` to restore the optional adapters. These switches persist
 on this machine. To update an old polling build, stop it before pulling; changing
 files alone does not stop its running code.
+
+## Passive cache observation (0.13.0)
+
+The independently removable `state-observer` hydrates conversations, names,
+messages and thread read cursors that Slack already has in memory, including
+background workspaces. It listens to local store updates; it never dispatches
+Slack actions, opens sockets, fetches history or navigates to collect data.
+`feature.clientStateSnapshots` counts accepted observations. Cached read-only
+previews continue working when the history adapter is disabled.
+
+This is a private, version-sensitive integration tested against Slack 4.52.155.
+It exports a bounded set of relevant fields, not Slack's entire state. Coverage
+remains partial, and exact unread counts are intentionally omitted where only
+boolean evidence is established. If it cannot locate a compatible store, ordinary
+DOM/network observation remains available, with no automatic API fallback.

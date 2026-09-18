@@ -5,6 +5,17 @@
   ],
   "modules": [
     {
+      "id": "state-observer",
+      "version": "0.13.0",
+      "source": "src/renderer/state-observer.js",
+      "global": "__PME_OBSERVER__",
+      "requires": [
+        "slackPage",
+        "dom",
+        "sessionConfig"
+      ]
+    },
+    {
       "id": "history-reader",
       "version": "0.12.0",
       "source": "src/renderer/read-api.js",
@@ -37,7 +48,7 @@
     },
     {
       "id": "triage-surface",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "source": "src/renderer/triage.js",
       "global": "__PME_TRIAGE__",
       "requires": [

@@ -65,7 +65,7 @@
   const filtered = () => items().filter(item => {
     const query = $('search').value.trim().toLocaleLowerCase();
     return (!query || item.name.toLocaleLowerCase().includes(query)) &&
-      (filter === 'mentions' && item.mentions>0 || filter === 'attention' && (item.triage?.needsAction || heldRow?.key===item.key&&heldRow.filter===filter&&item.triage?.state==='active') || filter === 'later' && item.triage?.state==='later' || filter === 'done' && item.triage?.state==='done' || filter === 'all' || filter === 'unread' && (item.unread === true || heldRow?.key===item.key&&heldRow.filter===filter&&item.triage?.state==='active') || filter === 'dms' && ['dm','groupDM'].includes(item.kind) || filter === 'threads' && item.kind === 'thread');
+      (filter === 'mentions' && (item.mentions>0||item.mentionObserved===true) || filter === 'attention' && (item.triage?.needsAction || heldRow?.key===item.key&&heldRow.filter===filter&&item.triage?.state==='active') || filter === 'later' && item.triage?.state==='later' || filter === 'done' && item.triage?.state==='done' || filter === 'all' || filter === 'unread' && (item.unread === true || heldRow?.key===item.key&&heldRow.filter===filter&&item.triage?.state==='active') || filter === 'dms' && ['dm','groupDM'].includes(item.kind) || filter === 'threads' && item.kind === 'thread');
   }).sort((a,b)=>Number(b.triage?.pinned)-Number(a.triage?.pinned));
   const el = (tag, className, content) => { const node = document.createElement(tag); if (className) node.className = className; if (content != null) node.textContent = content; return node; };
   const time = ts => { const date = new Date(Number(ts) * 1000); return Number.isFinite(date.getTime()) ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''; };
@@ -76,7 +76,7 @@
     timeout:'Loading timed out. Retry when ready.',workspace_changed:'The workspace changed. Reopen the conversation.',
     ratelimited:'Slack is rate limiting reads. Wait before retrying.',invalid_cursor:'This page expired. Refresh to start again.'};
   function requestHistory(action='open') {
-    const item=items().find(i=>i.key===selection);if(!item||!connected())return;
+    const item=items().find(i=>i.key===selection);if(!item||!connected()||!snapshot.customReadsAvailable)return;
     if(typeof window.__pmeLoadHistory!=='function'){$('history-status').textContent='Reader connection unavailable. Reload the mod to reconnect.';return;}
     if(action==='older')olderAnchor={key:selection,height:$('messages').scrollHeight,top:$('messages').scrollTop,thread:!!item.threadTs};
     window.__pmeLoadHistory(JSON.stringify({workspaceId:item.workspaceId,key:item.key,action}));
@@ -149,14 +149,14 @@
     for (const button of shadow.querySelectorAll('[data-filter]')) button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
     const activeWorkspace=snapshot.workspaces[0],activity=activeWorkspace?.activity;
     const waiting=Math.max(0,Math.ceil(((activity?.nextAt||0)-Date.now())/1000));
-    const unavailable=!connected()||viewTeam()==='*'||activity?.status==='loading'||activity?.queued||waiting>0;
+    const unavailable=!snapshot.customReadsAvailable||!connected()||viewTeam()==='*'||activity?.status==='loading'||activity?.queued||waiting>0;
     $('activity-refresh').disabled=unavailable;
     $('activity-refresh').title='Optional extra Slack API reads for the selected workspace. No background polling.';
     $('activity-more').hidden=viewTeam()==='*'||!activity?.hasMore;$('activity-more').disabled=unavailable;
-    const detail=viewTeam()==='*'?'Select a workspace for an optional refresh':activity?.status==='loading'?'Refreshing on request…':activity?.queued?'Refresh queued…':
+    const detail=!snapshot.customReadsAvailable?'Custom API reads disabled':viewTeam()==='*'?'Select a workspace for an optional refresh':activity?.status==='loading'?'Refreshing on request…':activity?.queued?'Refresh queued…':
       activity?.status==='error'?activity.error:waiting?`Manual refresh available in ${waiting}s`:activity?.countsAvailable===false?'Some unread/thread information unavailable':activity?.hasMore?'More conversations available on request':'';
     $('activity-status').textContent=snapshot.network==='offline'?'Slack reports offline · cached messages and local triage are available':
-      ['Using Slack’s activity · no background polling',detail].filter(Boolean).join(' · ');
+      [snapshot.workspaces.some(w=>w.clientState?.at&&Date.now()-w.clientState.at<45000)?'Observing Slack’s cached state · no background polling':'Using Slack’s activity · no background polling',snapshot.workspaces.some(w=>w.clientState?.truncated)?'Cache coverage limited':detail].filter(Boolean).join(' · ');
     const picker=$('workspace-picker'),directory=snapshot.workspaceDirectory||[];
     if(JSON.stringify(directory)!==picker.dataset.signature){picker.replaceChildren();const all=el('option','','All workspaces');all.value='*';picker.append(all);for(const w of directory){const option=el('option','',w.name);option.value=w.id;option.disabled=!w.connected;picker.append(option);}picker.dataset.signature=JSON.stringify(directory);}
     picker.value=viewTeam();picker.disabled=!connected();picker.hidden=directory.length<2;
@@ -201,11 +201,11 @@
     else if($('notice').textContent.startsWith('Triage disconnected')||$('notice').textContent==='Connecting to triage…')$('notice').textContent='';
     const history=item?.history,loading=['loading','queued'].includes(history?.status);
     $('coverage').textContent = item ? `${item.messages.length} messages in memory · ${history?.status==='ready'?'history loaded':'partial context'}${history?.hasMore?' · more available':''}` : '';
-    $('refresh').disabled=!connected()||!item||loading||(history?.retryAt||0)>Date.now();
+    $('refresh').disabled=!snapshot.customReadsAvailable||!connected()||!item||loading||(history?.retryAt||0)>Date.now();
     $('refresh').textContent=history?.status==='error'?'Retry':'Refresh';
     $('older').hidden=!history?.canLoadOlder;$('older').disabled=loading||$('refresh').disabled;
     $('older').textContent=item?.threadTs?'Load more replies':'Load older';
-    $('history-status').textContent=loading?'Loading from Slack…':history?.status==='error'?(loadErrors[history.error]||'Could not load messages. Retry when ready.'):
+    $('history-status').textContent=!snapshot.customReadsAvailable?'Showing messages already loaded by Slack · no API requests':loading?'Loading from Slack…':history?.status==='error'?(loadErrors[history.error]||'Could not load messages. Retry when ready.'):
       history?.bounded?'Memory limit reached · showing recent messages':history?.hasMore&&!history.canLoadOlder?'More history exists, but Slack supplied no next page.':
       history?.status==='ready'?'Loaded without a mark-read request.':'';
     const signature = JSON.stringify([selection, item?.messages,history?.status]);
@@ -214,7 +214,7 @@
       const nearBottom = $('messages').scrollHeight - $('messages').scrollTop - $('messages').clientHeight < 70;
       const scroll = $('messages').scrollTop;
       $('messages').replaceChildren();
-      if (!item?.messages.length) $('messages').append(el('div','empty',loading?'Loading messages…':history?.status==='ready'?'No messages returned for this conversation.':'No messages loaded yet. Use Retry or Refresh above.'));
+      if (!item?.messages.length) $('messages').append(el('div','empty',loading?'Loading messages…':history?.status==='ready'?'No messages returned for this conversation.':snapshot.customReadsAvailable?'No messages loaded yet. Use Retry or Refresh above.':'Slack has not loaded these messages yet. Open Native chat to read them.'));
       for (const message of item?.messages || []) {
         const article = el('article','message'); const header = el('div','message-head');
         header.append(el('span','author',message.author),el('time','time',time(message.ts)));const body=el('div','body');for(const part of message.parts||[{type:'text',text:message.text||'[No text content]'}]){const node=el(['a','strong','em','s','code','pre'].includes(part.type)?part.type:'span',part.type==='mention'?'mention':'',part.text);if(part.type==='a'&&/^https?:\/\//.test(part.href)){node.href=part.href;node.target='_blank';node.rel='noopener noreferrer';}body.append(node);}article.append(header,body);
@@ -409,7 +409,7 @@
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
   idle=setInterval(observe,10000);
-  window.__PME_TRIAGE__={version:'0.12.0',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
+  window.__PME_TRIAGE__={version:'0.13.0',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
     status:()=>({mode,edge,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
     dispose:async()=>{if(disposed)return;disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearTimeout(hoverTimer);
       window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});await geometry('stock').catch(()=>{});host.remove();delete window.__PME_TRIAGE__;

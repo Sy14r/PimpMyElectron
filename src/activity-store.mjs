@@ -86,7 +86,7 @@ export class ActivityStore {
     const flag = bool(raw.has_unreads);
     const mentions = count(raw.mention_count_display) ?? count(raw.mention_count);
     if (exact !== null || flag !== null) Object.assign(fields, { unreadCount: exact, unread: exact !== null ? exact > 0 : flag, countsAt: this.now() });
-    if (mentions !== null) fields.mentions = mentions;
+    if (mentions !== null) { fields.mentions = mentions; fields.mentionObserved = mentions > 0; }
     const existing=ws.items.get(`${ws.id}:${raw.id}:`);
     if (timestamp(raw.latest)&&(!existing?.latest||compareTs(raw.latest,existing.latest)>0)) fields.latest = raw.latest;
     const item = this.upsert(ws, raw.id, fields);
@@ -182,6 +182,36 @@ export class ActivityStore {
     if (raw.subtype === 'thread_broadcast' && threadTs) this.message(ws, this.upsert(ws, event.channel), raw);
     this.trimMessages(); return true;
   }
+  ingestClientState(observation) {
+    const ws=this.workspace(observation?.workspaceId);if(!ws)return false;
+    for(const u of (Array.isArray(observation.users)?observation.users:[]).slice(0,1200))this.user(ws,u);
+    for(const row of (Array.isArray(observation.channels)?observation.channels:[]).slice(0,600)){
+      if(!channelID(row?.id))continue;
+      this.conversation(ws,row);
+      this.upsert(ws,row.id,{source:'client-state',clientStateAt:this.now(),clientCountsAt:typeof row.has_unreads==='boolean'?this.now():0,lastRead:timestamp(row.last_read)||undefined,
+        mentionObserved:typeof row.mentionObserved==='boolean'?row.mentionObserved:null,
+        ...(typeof row.mentionObserved==='boolean'?{mentions:null}:{}),
+        ...(typeof row.has_unreads==='boolean'?{unread:row.has_unreads,unreadCount:row.has_unreads?null:0,countsAt:this.now()}: {})});
+    }
+    for(const raw of (Array.isArray(observation.messages)?observation.messages:[]).slice(0,200)){
+      if(!channelID(raw?.channel)||!timestamp(raw.ts))continue;
+      const thread=timestamp(raw.thread_ts)&&raw.thread_ts!==raw.ts?raw.thread_ts:null;
+      const parent=ws.items.get(`${ws.id}:${raw.channel}:`);
+      const item=this.upsert(ws,raw.channel,{source:'client-state',historyObserved:true,...(thread?{name:parent?.name}: {})},thread);
+      this.message(ws,item,raw);
+      if(!thread&&raw.reply_count>0){const root=this.upsert(ws,raw.channel,{name:parent?.name,source:'client-state'},raw.ts);this.message(ws,root,raw);}
+    }
+    for(const row of (Array.isArray(observation.threads)?observation.threads:[]).slice(0,200)){
+      if(!channelID(row?.channel)||!timestamp(row.ts))continue;
+      const parent=ws.items.get(`${ws.id}:${row.channel}:`);
+      const item=this.upsert(ws,row.channel,{name:parent?.name,source:'client-state',clientStateAt:this.now(),subscribed:row.subscribed===true,lastRead:timestamp(row.last_read)||undefined},row.ts);
+      if(row.root?.ts===row.ts)this.message(ws,item,row.root);
+      // A known thread cursor can classify cached replies, but supplies no exact total.
+      if(item.lastRead&&item.latest){item.unread=compareTs(item.latest,item.lastRead)>0;item.unreadCount=item.unread?null:0;item.countsAt=this.now();}
+    }
+    ws.clientStateAt=this.now();ws.clientStateTruncated=observation.truncated===true||ws.items.size>=this.maxItems;
+    this.trimMessages();this.revision++;return true;
+  }
   ingestDOM(observation) {
     const ws = this.workspace(observation?.workspaceId);
     if (!ws) return;
@@ -191,7 +221,7 @@ export class ActivityStore {
       const old = ws.items.get(`${ws.id}:${row.channelId}:`);
       this.upsert(ws, row.channelId, { name: text(row.name, 180) || undefined,
         kind: row.kind === 'dm' || row.kind === 'groupDM' ? row.kind : old?.kind || 'channel',
-        ...(row.unreadObserved === true && typeof row.unread === 'boolean' ? {
+        ...(row.unreadObserved === true && typeof row.unread === 'boolean' && !(old?.clientCountsAt && this.now()-old.clientCountsAt<45000) ? {
           unread: row.unread, unreadCount: row.unread === false ? 0 : null, countsAt: this.now()
         } : {}),
         source: old?.source === 'slack-response' ? 'slack-response' : 'visible-dom' });
@@ -212,11 +242,11 @@ export class ActivityStore {
       const channelNames=new Map([...ws.items.values()].filter(i=>!i.threadTs).map(i=>[i.channelId,i.name]));
       const itemName=item=>{const base=item.threadTs?ws.items.get(`${ws.id}:${item.channelId}:`)||item:item;return base.peer?ws.users.get(base.peer)||base.name:base.name;};
       return ({
-      id: ws.id, name: ws.name, observedAt: ws.observedAt, methods: [...ws.methods],
+      id: ws.id, name: ws.name, observedAt: ws.observedAt,clientState:{at:ws.clientStateAt||0,truncated:ws.clientStateTruncated===true}, methods: [...ws.methods],
       items: [...ws.items.values()].filter(i => !i.archived).map(item => ({
         key: item.key, workspaceId: ws.id, channelId: item.channelId, threadTs: item.threadTs,
         name: itemName(item),
-        kind: item.kind, unread: item.unread, unreadCount: item.unreadCount, mentions: item.mentions,
+        kind: item.kind, mentionObserved:item.mentionObserved, unread: item.unread, unreadCount: item.unreadCount, mentions: item.mentions,
         countsStale: !item.countsAt || now - item.countsAt > 60000,
         observedAt: item.observedAt, stale: now - item.observedAt > 60000, latest: item.latest,
         source: item.source, historyObserved: item.historyObserved,

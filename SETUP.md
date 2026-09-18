@@ -31,6 +31,19 @@ restart/reload. The older `feature.methods` counter includes native Slack traffi
 The [pilot guide](pilot/README.md#api-traffic-diagnostics) also describes disabling
 both optional API adapters for a strictly native-only test.
 
+## Passive cache observer (0.13.0)
+
+The `state-observer` module reads Slack's existing local state and subscribes to
+local changes. It adds no API calls and works with both `history-reader` and
+`mark-read` disabled. Those disable settings survive updates. Cached previews now
+work without trying to load history; use Native chat for content Slack has not
+already loaded. `feature.clientStateSnapshots` in `npm run dev:status` counts
+accepted cache observations. See [coverage and validation](research/passive-state.md).
+
+If a Slack update breaks this optional observer, disable it with
+`npm run mods -- disable state-observer`; the existing DOM/network observation
+and native UI continue to work. No fallback API polling is enabled.
+
 ## Prerequisites
 
 - Node.js 22 or newer, including npm.
