@@ -20,6 +20,8 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
 
   const requests = new Map(), attached = new Set();
   const observedMethods = new Map(), shapes = new Map();
+  const customApi={since:Date.now(),requests:0,ratelimited:0,authFailed:0,methods:{}};
+  const metricMethods=new Set(['auth.test','users.conversations','client.counts','subscriptions.thread.getView','conversations.history','conversations.replies','users.info','conversations.mark']);
   const socketTypes = new Map();
   const stats = { readResponses: 0, domSnapshots: 0, skippedBodies: 0, errors: 0, lastPush: 0 };
   const mods=await createModLoader({cdp,root,runtimeDir,slackVersion});
@@ -32,7 +34,7 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
     if(!mods.enabled('history-reader'))return {ok:false,error:'adapter_disabled'};
     return evaluate(entry,`window.__PME_READS__?.read(${JSON.stringify(request)})`);
   }});
-  const readMarker=createReadMarker({store,onResult:workspace=>refreshes.request(workspace),mark:async request=>{
+  const readMarker=createReadMarker({store,onResult:()=>{},mark:async request=>{
     if(!mods.enabled('mark-read'))return {ok:false,error:'adapter_disabled'};
     const entry=pickEntry(request.workspaceId)||pickEntry();if(!entry)return {ok:false,error:'workspace_changed'};
     return evaluate(entry,`window.__PME_MARK_READ__?.mark(${JSON.stringify(request)})`);
@@ -42,7 +44,7 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
   const scopeFor=entry=>selectedWorkspaces.get(entry.sessionId)||(local.settings.workspace==='*'||knownWorkspaces.has(local.settings.workspace)?local.settings.workspace:null)||teamFromURL(entry.url);
   const inScope=(entry,workspace)=>workspace===scopeFor(entry)||scopeFor(entry)==='*'&&knownWorkspaces.has(workspace);
   async function shellCommand(op,workspaceId){const entry=pickEntry(workspaceId)||pickEntry();if(!entry)throw Error('No connected workspace');
-    if(op==='switch'&&knownWorkspaces.has(workspaceId)){selectedWorkspaces.set(entry.sessionId,workspaceId);await local.configure({workspace:workspaceId});void refreshActivity(entry,false,workspaceId);}
+    if(op==='switch'&&knownWorkspaces.has(workspaceId)){selectedWorkspaces.set(entry.sessionId,workspaceId);await local.configure({workspace:workspaceId});}
     if(op==='stock'&&!await evaluate(entry,'!!window.__PME_TRIAGE__')){await evaluate(entry,`(async()=>{const w=desktop.window,id=await w.getWindowId();await w.callBrowserWindowMethod(id,'show');await w.callBrowserWindowMethod(id,'focus');})()`);return {mode:'stock'};}
     return evaluate(entry,`window.__PME_TRIAGE__?.command(${JSON.stringify(op==='switch'?'queue':op)})`);
   }
@@ -62,7 +64,8 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
     if(result.threads)store.ingest({method:'subscriptions.thread.getView',workspaceId},result.threads);
   }});
   function refreshActivity(entry,more=false,workspaceId=scopeFor(entry)){
-    for(const id of workspaceId==='*'?knownWorkspaces.keys():[workspaceId])refreshes.request(id,{more,reason:'manual'});
+    // Enrichment is explicit and scoped: All workspaces must not fan out API calls.
+    if(workspaceId!=='*')refreshes.request(workspaceId,{more,reason:'manual'});
   }
   function syncConnectivity(){
     const reports=[...uiStates.values()].filter(s=>typeof s.online==='boolean');
@@ -75,6 +78,7 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
     await cdp.send('Runtime.addBinding', { name: '__pmeLoadHistory' }, entry.sessionId);
     await cdp.send('Runtime.addBinding', { name: '__pmeTriageAction' }, entry.sessionId);
     await cdp.send('Runtime.addBinding', { name: '__pmeShellState' }, entry.sessionId);
+    await cdp.send('Runtime.addBinding', { name: '__pmeApiMetric' }, entry.sessionId);
     await mods.reconcile(entry);
     attached.add(entry.sessionId);
   }
@@ -83,6 +87,15 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
     const entry = entryFor(message.sessionId);
     if (!entry) return;
     const p = message.params;
+    if(message.method==='Runtime.bindingCalled'&&p.name==='__pmeApiMetric'){
+      if(!teamFromURL(entry.url)||typeof p.payload!=='string'||p.payload.length>250)return;
+      try{const r=JSON.parse(p.payload);
+        if(!['read','mark-read'].includes(r.adapter)||!metricMethods.has(r.method))return;
+        if(r.event==='request'){customApi.requests++;customApi.methods[r.method]=(customApi.methods[r.method]||0)+1;}
+        else if(r.event==='ratelimited')customApi.ratelimited++;
+        else if(r.event==='auth_failed')customApi.authFailed++;
+      }catch{}return;
+    }
     if(message.method==='Runtime.bindingCalled'&&p.name==='__pmeShellState'){
       if(typeof p.payload!=='string'||p.payload.length>4000)return;
       try{const r=JSON.parse(p.payload);if(r.workspaceId!==teamFromURL(entry.url))return;
@@ -98,7 +111,7 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
       try{const r=JSON.parse(p.payload),workspace=teamFromURL(entry.url);
         if(!workspace||!inScope(entry,r.workspaceId))return;
         if(r.action==='activity'){void refreshActivity(entry,r.more===true);return;}
-        if(r.action==='switch'&&(r.target==='*'||knownWorkspaces.has(r.target))){selectedWorkspaces.set(entry.sessionId,r.target);void local.configure({workspace:r.target}).catch(()=>{actionError='Could not save workspace preference.';});void refreshActivity(entry,false,r.target);return;}
+        if(r.action==='switch'&&(r.target==='*'||knownWorkspaces.has(r.target))){selectedWorkspaces.set(entry.sessionId,r.target);void local.configure({workspace:r.target}).catch(()=>{actionError='Could not save workspace preference.';});return;}
         const item=store.workspaces.get(r.workspaceId)?.items.get(r.key);
         if(r.action==='mark-read'){void readMarker.mark(r.workspaceId,r.key,r.ts);return;}
         const requestId=typeof r.requestId==='string'&&/^[a-z0-9-]{1,60}$/.test(r.requestId)?r.requestId:null;
@@ -123,7 +136,7 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
         const candidates=[...store.workspaces.values()].filter(w=>w.items.has(`${w.id}:${frame.channel}:`));
         const eventTeam=sourceTeam?(workspaceID(sourceTeam)&&(knownWorkspaces.has(sourceTeam)||sourceTeam===current)?sourceTeam:null):candidates.length===1?candidates[0].id:null;
         if(current&&type==='hello')refreshes.resume();
-        if(current&&store.ingestEvent(eventTeam, frame))refreshes.request(eventTeam);
+        if(current)store.ingestEvent(eventTeam, frame);
       } catch { /* Non-JSON or unsupported frames are ignored. */ }
     }
     if (message.method === 'Page.frameNavigated' && !p.frame.parentId) entry.url = p.frame.url;
@@ -182,7 +195,7 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
       snapshot.settings=local.settings;snapshot.nativeHotkey=shell.connected()&&nativeHotkey;snapshot.localError=local.error||actionError;
       snapshot.canUndo=!!local.undo&&Date.now()-local.undo.at<30000;
       snapshot.undoKey=snapshot.canUndo?local.undo.key:null;
-      snapshot.markReadAvailable=mods.enabled('mark-read');snapshot.network=refreshes.status().online?'available':'offline';
+      snapshot.apiPolicy='manual-only';snapshot.markReadAvailable=mods.enabled('mark-read');snapshot.network=refreshes.status().online?'available':'offline';
       for(const workspace of snapshot.workspaces)for(const item of workspace.items){item.triage=local.project(item);item.readMark=readMarker.state(item.key);}
       snapshot.workspaceDirectory=[...knownWorkspaces.values()].map(w=>({...w,connected:true,stale:refreshes.get(w.id).status!=='ready'||Date.now()-(refreshes.get(w.id).countsAt||0)>150000}));
       for(const w of snapshot.workspaces)w.activity=refreshes.get(w.id);
@@ -203,8 +216,8 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
   return {
     attach,
     async detach(entry) { attached.delete(entry.sessionId);uiStates.delete(entry.sessionId);actionResults.delete(entry.sessionId);selectedWorkspaces.delete(entry.sessionId);mods.detach(entry);syncConnectivity(); },
-    status: () => ({ ...store.status(), ...stats, methods: Object.fromEntries(observedMethods), shapes: Object.fromEntries(shapes), socketTypes: Object.fromEntries(socketTypes),
-      shell:{connected:shell.connected(),hotkeyRegistered:nativeHotkey},network:refreshes.status().online?'available':'offline',refreshQueue:{active:refreshes.status().active,queued:refreshes.status().queued},activity:refreshes.status().workspaces.map(a=>({status:a.status,at:a.at,attemptAt:a.attemptAt,nextAt:a.nextAt,hasMore:a.hasMore,countsAvailable:a.countsAvailable,threadsAvailable:a.threadsAvailable})),history:history.status(),mode: 'triage-with-native-reply', mods:mods.status(),liveUI:mods.enabled('triage-surface'), partial: true }),
+    status: () => ({ ...store.status(), ...stats, customApi:{...customApi,methods:{...customApi.methods}}, methods: Object.fromEntries(observedMethods), shapes: Object.fromEntries(shapes), socketTypes: Object.fromEntries(socketTypes),
+      shell:{connected:shell.connected(),hotkeyRegistered:nativeHotkey},network:refreshes.status().online?'available':'offline',apiPolicy:'manual-only',refreshQueue:{active:refreshes.status().active,queued:refreshes.status().queued},activity:refreshes.status().workspaces.map(a=>({status:a.status,at:a.at,attemptAt:a.attemptAt,nextAt:a.nextAt,hasMore:a.hasMore,countsAvailable:a.countsAvailable,threadsAvailable:a.threadsAvailable})),history:history.status(),mode: 'triage-with-native-reply', mods:mods.status(),liveUI:mods.enabled('triage-surface'), partial: true }),
     async dispose() {
       if(disposed)return;
       disposed = true; clearInterval(timer); cdp.off('event', event);
@@ -214,8 +227,11 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
         await cdp.send('Runtime.removeBinding', { name: '__pmeLoadHistory' }, e.sessionId).catch(() => {});
         await cdp.send('Runtime.removeBinding', { name: '__pmeTriageAction' }, e.sessionId).catch(() => {});
         await cdp.send('Runtime.removeBinding', { name: '__pmeShellState' }, e.sessionId).catch(() => {});
+        await cdp.send('Runtime.removeBinding', { name: '__pmeApiMetric' }, e.sessionId).catch(() => {});
         await cdp.send('Network.disable', {}, e.sessionId).catch(() => {});
       }
+      // Complete already accepted local decisions before shutdown returns.
+      await local.tail.catch(()=>{});
       requests.clear(); attached.clear(); store.workspaces.clear();
     }
   };

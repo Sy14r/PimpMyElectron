@@ -18,7 +18,7 @@ try{
     await fs.mkdir(path.dirname(destination),{recursive:true});await fs.writeFile(destination,data,{mode:name.endsWith('.command')?0o755:0o644});
     checksums.push(`${createHash('sha256').update(data).digest('hex')}  ${relative}`);
   }
-  const packageJSON=JSON.stringify({name:'slack-triage-pilot',version:'0.11.1',private:true,type:'module',engines:{node:'>=22'},scripts:{doctor:'node scripts/doctor.mjs',dev:'node scripts/dev.mjs','dev:stop':'node scripts/devctl.mjs stop','dev:reload':'node scripts/devctl.mjs reload',mods:'node scripts/mods.mjs',shell:'node scripts/shellctl.mjs'}},null,2)+'\n';
+  const packageJSON=JSON.stringify({name:'slack-triage-pilot',version:'0.12.0',private:true,type:'module',engines:{node:'>=22'},scripts:{doctor:'node scripts/doctor.mjs',dev:'node scripts/dev.mjs','dev:stop':'node scripts/devctl.mjs stop','dev:reload':'node scripts/devctl.mjs reload',mods:'node scripts/mods.mjs',shell:'node scripts/shellctl.mjs'}},null,2)+'\n';
   await fs.writeFile(path.join(stage,'package.json'),packageJSON);checksums.push(`${createHash('sha256').update(packageJSON).digest('hex')}  package.json`);
   await fs.writeFile(path.join(stage,'SHA256SUMS'),checksums.join('\n')+'\n');await fs.mkdir(path.dirname(out),{recursive:true});
   const zip=spawnSync('/usr/bin/ditto',['-c','-k','--norsrc','--keepParent',stage,out],{encoding:'utf8'});if(zip.status!==0)throw Error(zip.stderr||'Archive creation failed');

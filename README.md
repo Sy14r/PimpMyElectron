@@ -10,7 +10,7 @@ Research performed September 17–18, 2026, against **Slack 4.52.155 / Electron 
 - [Direct-download validation and remaining checks](research/direct-download.md)
 - [Local evidence notes](evidence/README.md)
 
-The live development workflow now includes a menu-bar controller, global shortcut, thin edge strip, queue/reader disclosure, local Done/Later/Pin/Undo with keyboard advancement, explicit conversation Mark read, two-workspace aggregation, on-demand history and threads, native Slack replies inside triage, and independently removable runtime modules. It remains a partial activity view using private Slack interfaces. A bounded refresh queue retains cached content through connection loss and refreshes automatically after reconnect, with visible freshness/retry state.
+The live development workflow now includes a menu-bar controller, global shortcut, thin edge strip, queue/reader disclosure, local Done/Later/Pin/Undo with keyboard advancement, explicit conversation Mark read, two-workspace aggregation, on-demand history and threads, native Slack replies inside triage, and independently removable runtime modules. It remains a partial activity view using private Slack interfaces. As of 0.12.0, background activity is passive: existing Slack responses, socket events and visible UI supply observations. There is no automatic API polling or reconnect retry. Optional API refreshes require selecting one workspace and clicking Refresh activity. See the [API traffic audit](research/api-traffic.md), including the coverage tradeoff and corporate logout investigation.
 
 ## Live development
 

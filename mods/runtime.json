@@ -6,7 +6,7 @@
   "modules": [
     {
       "id": "history-reader",
-      "version": "0.9.0",
+      "version": "0.12.0",
       "source": "src/renderer/read-api.js",
       "global": "__PME_READS__",
       "requires": [
@@ -16,7 +16,7 @@
     },
     {
       "id": "mark-read",
-      "version": "0.8.0",
+      "version": "0.12.0",
       "source": "src/renderer/mark-read.js",
       "global": "__PME_MARK_READ__",
       "requires": [
@@ -37,7 +37,7 @@
     },
     {
       "id": "triage-surface",
-      "version": "0.10.0",
+      "version": "0.12.0",
       "source": "src/renderer/triage.js",
       "global": "__PME_TRIAGE__",
       "requires": [

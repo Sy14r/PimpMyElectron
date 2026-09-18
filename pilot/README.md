@@ -22,7 +22,7 @@ If macOS prevents opening the command file, open Terminal in this folder and run
 - The reader's explicit **Mark read** button advances the conversation cursor only through the latest loaded message at click time, after checking account identity and the existing cursor. Local Done remains independent. Thread marking is disabled until separately verified. An uncertain result is not retried automatically; refresh activity before another attempt.
 - **Normal Slack** restores the usual client window. Use it if a conversation is missing from Slack's sidebar, a thread root isn't loaded, or native chat cannot verify the editor. Open the intended conversation/thread there and retry.
 
-The queue is a partial view, with bounded discovery and on-demand history. Check Slack Activity/Threads during the pilot to assess coverage. Cached messages and local decisions remain available during a connection loss. The panel shows last successful unread refresh age and retry progress; reconnect triggers new reads automatically. Network recovery does not replay sends or Mark read. Real Mac sleep/wake remains unverified. Open known threads from the triage queue; arbitrary navigation into other native panes is not yet integrated. Rich native composer controls, full-screen combinations and multiple monitors need further acceptance.
+The queue is a partial view, with bounded discovery and on-demand history. Check Slack Activity/Threads during the pilot to assess coverage. Cached messages and local decisions remain available during a connection loss. Version 0.12.0 observes Slack’s existing activity without automatic API polling, including after reconnect or workspace selection. Background unread/thread coverage can be incomplete until Slack loads it. For optional extra reads, select one workspace and click **Refresh activity** (at most once per minute); All workspaces cannot bulk refresh. Conversation discovery is cached for 15 minutes. Network recovery does not replay sends or Mark read. Real Mac sleep/wake remains unverified. Open known threads from the triage queue; arbitrary navigation into other native panes is not yet integrated. Rich native composer controls, full-screen combinations and multiple monitors need further acceptance.
 
 ## Recovery and updates
 
@@ -42,3 +42,28 @@ Disabling triage restores ordinary Slack; disabling native reply removes its lay
 The runtime uses private Slack interfaces. A new Slack version may require adapter updates; the installed app stays untouched. `.lab/` contains private logs, state, developer control sockets and potentially screenshots if you take them. Keep it local. Production diagnostics should report module health and counts, not message content.
 
 The bundle contains no automated send or mark-read experiments. All sending in the pilot is user-operated through Slack's native editor.
+
+## API traffic diagnostics
+
+`npm run dev:status` reports `feature.apiPolicy: "manual-only"` and
+`feature.customApi`: counts of requests, rate-limit responses, authentication
+failures and request methods since this runtime started/reloaded. These contain
+no tokens, names or message content. `feature.methods` is the older combined
+observation counter and includes Slack's own requests; it is not our API overhead.
+Native navigation/sending still causes ordinary Slack traffic. Optional manual
+refresh, read-only history and explicit Mark read cause custom calls. No custom API
+requests are caused by local Done/Later/Pin or queue scope changes. Advancing to
+the next native conversation can still cause Slack’s normal loading requests.
+
+To test native-only with even optional custom API actions disabled:
+
+```sh
+npm run mods -- disable history-reader
+npm run mods -- disable mark-read
+npm run dev:reload
+```
+
+Native conversations/composers and passive observation still work. Use `enable`
+in place of `disable` to restore the optional adapters. These switches persist
+on this machine. To update an old polling build, stop it before pulling; changing
+files alone does not stop its running code.

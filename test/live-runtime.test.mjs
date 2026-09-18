@@ -37,7 +37,14 @@ test('passive runtime scopes snapshots, ignores write responses, and cleans up',
   event('Network.webSocketFrameReceived',{response:{opcode:1,payloadData:JSON.stringify({type:'message',team:'TTWO',channel:'CONE',ts:'100.000005',text:'background-two'})}});
   event('Network.webSocketFrameReceived',{response:{opcode:1,payloadData:JSON.stringify({type:'message',team:'TUNKNOWN',channel:'CONE',ts:'100.000006',text:'untrusted-team'})}});
   event('Network.webSocketFrameReceived',{response:{opcode:1,payloadData:JSON.stringify({type:'message',channel:'CONE',ts:'100.000007',text:'ambiguous-event'})}});
+  for(const target of ['*','TTWO','TONE'])event('Runtime.bindingCalled',{name:'__pmeTriageAction',payload:JSON.stringify({workspaceId:target==='*'?'TONE':target==='TTWO'?'TONE':'TTWO',action:'switch',target})});
+  event('Runtime.bindingCalled',{name:'__pmeTriageAction',payload:JSON.stringify({workspaceId:'TTWO',action:'switch',target:'TTWO'})},'s2');
+  for(const online of [false,true])event('Runtime.bindingCalled',{name:'__pmeShellState',payload:JSON.stringify({workspaceId:'TONE',online,resumed:true})});
+  event('Network.webSocketFrameReceived',{response:{opcode:1,payloadData:JSON.stringify({type:'hello'})}});
   await new Promise(resolve=>setTimeout(resolve,1600));
+  assert.equal(cdp.evaluations.filter(e=>e.expression.startsWith('window.__PME_READS__?.activity(')).length,0);
+  assert.equal(runtime.status().apiPolicy,'manual-only');assert.equal(runtime.status().customApi.requests,0);
+
   assert.equal(cdp.captures.get('s1').workspaces.length,1);assert.equal(cdp.captures.get('s1').workspaces[0].id,'TONE');
   assert.equal(cdp.captures.get('s2').workspaces[0].id,'TTWO');
   assert.equal(JSON.stringify(cdp.captures.get('s1')).includes('two-private'),false);
@@ -47,6 +54,18 @@ test('passive runtime scopes snapshots, ignores write responses, and cleans up',
   assert.equal(JSON.stringify(cdp.captures.get('s1')).includes('background-two'),false);
   assert.equal(cdp.commands.some(c=>c.method==='Network.getResponseBody'),false);
   assert.equal(cdp.commands.every(c=>['Network.enable','Runtime.addBinding','Page.addScriptToEvaluateOnNewDocument'].includes(c.method)),true);
+  event('Runtime.bindingCalled',{name:'__pmeApiMetric',payload:JSON.stringify({adapter:'read',method:'client.counts',event:'request',token:'MUST NOT RETAIN'})});
+  event('Runtime.bindingCalled',{name:'__pmeApiMetric',payload:JSON.stringify({adapter:'read',method:'unknown',event:'request'})});
+  assert.deepEqual(runtime.status().customApi.methods,{'client.counts':1});
+  assert.equal(JSON.stringify(runtime.status()).includes('MUST NOT RETAIN'),false);
+  event('Runtime.bindingCalled',{name:'__pmeTriageAction',payload:JSON.stringify({workspaceId:'TONE',action:'switch',target:'*'})});
+  event('Runtime.bindingCalled',{name:'__pmeTriageAction',payload:JSON.stringify({workspaceId:'TONE',action:'activity'})});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(cdp.evaluations.filter(e=>e.expression.startsWith('window.__PME_READS__?.activity(')).length,0);
+  event('Runtime.bindingCalled',{name:'__pmeTriageAction',payload:JSON.stringify({workspaceId:'TONE',action:'switch',target:'TONE'})});
+  event('Runtime.bindingCalled',{name:'__pmeTriageAction',payload:JSON.stringify({workspaceId:'TONE',action:'activity'})});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(cdp.evaluations.filter(e=>e.expression.startsWith('window.__PME_READS__?.activity(')).length,1);
   event('Page.frameNavigated',{frame:{url:'https://example.test/client/TONE/CONE'}});
   event('Network.webSocketFrameReceived',{response:{opcode:1,payloadData:JSON.stringify({type:'message',channel:'CONE',ts:'100.000004',text:'bad-origin'})}});
   assert.equal(runtime.status().messages,4);

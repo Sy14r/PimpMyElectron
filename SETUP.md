@@ -14,6 +14,23 @@ Run the preflight below before launching. A managed laptop can still restrict
 sign-in or debugging even when the distribution matches. A successful source
 clone does not prove compatibility with that laptop.
 
+## Corporate logout / API traffic update (0.12.0)
+
+Stop an older running triage build before updating. Version 0.12.0 removes all
+background enrichment polling and message/reconnect-triggered API refreshes.
+Queue workspace selection is local; opening native chat uses Slack's own UI.
+Optional manual refresh is scoped to one workspace and limited to once per
+minute, and read-only history/Mark read still make explicit custom requests.
+Background unread and thread coverage now depends on what Slack itself reports.
+See the [traffic audit](research/api-traffic.md) for evidence and limitations.
+
+`npm run dev:status` should show `feature.apiPolicy: "manual-only"`.
+`feature.customApi.requests` should remain unchanged while you only leave triage
+idle, switch its queue scope, or use native chat. Counters reset on runtime
+restart/reload. The older `feature.methods` counter includes native Slack traffic.
+The [pilot guide](pilot/README.md#api-traffic-diagnostics) also describes disabling
+both optional API adapters for a strictly native-only test.
+
 ## Prerequisites
 
 - Node.js 22 or newer, including npm.
