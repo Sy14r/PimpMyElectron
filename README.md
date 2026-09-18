@@ -46,8 +46,12 @@ collapse/normal Slack. The centered resting strip and pill keep their compact si
 
 **0.15.2** removes the custom top bar once the native conversation/thread pane is
 ready, giving Slack's own view the full height. Escape outside native text entry
-closes that pane and keeps the inbox open; Escape in the editor remains Slack's.
+closes that pane and keeps the inbox open.
 Loading/error states retain recovery controls. Native drafts are preserved.
+
+**0.15.3** makes the first Escape in the native composer release typing focus
+without changing the draft. Press Escape again to return to the queue. Holding
+Escape does not advance through both steps; active IME composition stays with Slack.
 
 Before moving to another Mac, run `npm run doctor` there. It checks the installed Slack distribution, version, signature, profile ownership and build prerequisites without launching Slack or reading account data. The launcher detects Mac App Store and official direct-download distributions and selects their separate development profiles. See the setup guide for the current validation status. Build a clean source transfer with `npm run package:pilot`; the zip under `dist/` includes Start/Stop command files and excludes private state and send experiments. See [pilot setup](pilot/README.md) and [next pilot proof points](research/pilot-next.md).
 

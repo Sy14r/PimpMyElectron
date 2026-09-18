@@ -150,3 +150,16 @@ outside it returning to a visible 420px inbox, and an unchanged draft. No custom
 API calls were added. The native layout was also visually checked. Keyboard
 regressions cover native vs. triage focus, composition, already-handled keys,
 queue collapse and standard Slack passthrough.
+
+## Composer Escape focus release — 0.15.3
+
+In the framed native composer, Escape now blurs the active editor and keeps the
+thread open. A second distinct press returns to the queue. Key repeat is consumed
+without advancing either step. Other native text fields, active IME composition
+and already-handled events retain their existing behavior; standard Slack is
+unchanged. No message content is modified.
+
+Validation: 89 unit tests passed. The running dev client confirmed composer blur,
+thread retention, repeat suppression, second-press return to the 420px queue and
+unchanged draft content. The custom header stayed hidden and the native pane
+filled the 1130px viewport. Custom API request delta was zero.

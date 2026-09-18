@@ -380,10 +380,16 @@
     const nativeTyping=document.activeElement!==host&&document.activeElement?.closest?.(editable)||
       !fromTriage&&event.composedPath().some(n=>n?.closest?.(editable));
     if(mode==='reply'&&event.key==='Escape'){
-      if(nativeTyping||event.isComposing||event.defaultPrevented)return;
-      event.preventDefault();event.stopImmediatePropagation();void transition('queue');return;
+      if(event.isComposing||event.defaultPrevented)return;
+      const composer=document.activeElement?.closest?.('[data-pme-native-reply-pane] [data-qa="texty_input"][contenteditable="true"]');
+      if(nativeTyping&&!composer)return;
+      event.preventDefault();event.stopImmediatePropagation();
+      // A held Escape must not blur the composer and immediately close its pane.
+      if(event.repeat)return;
+      if(composer){document.activeElement.blur();return;}
+      void transition('queue');return;
     }
-    // Slack owns composition keys, including its autocomplete and formatting menus.
+    // Other composition keys stay with Slack.
     if(mode==='reply'&&!fromTriage)return;
     if(fromTriage)event.stopImmediatePropagation();
     const typing=event.composedPath().some(n=>n?.matches?.('input,textarea,select,[contenteditable="true"]'));
@@ -508,7 +514,7 @@
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
   idle=setInterval(observe,10000);
-  window.__PME_TRIAGE__={version:'0.15.2',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
+  window.__PME_TRIAGE__={version:'0.15.3',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
     status:()=>({mode,edge,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
     dispose:async()=>{if(disposed)return;setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);
       window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});await geometry('stock').catch(()=>{});host.remove();delete window.__PME_TRIAGE__;
