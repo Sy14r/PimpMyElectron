@@ -7,7 +7,7 @@
   const valid=t=>t&&/^[TE][A-Z0-9]+$/.test(t.workspaceId)&&/^[CDG][A-Z0-9]+$/.test(t.channelId)&&(!t.threadTs||/^\d+\.\d+$/.test(t.threadTs));
   try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(valid(saved?.target)&&Date.now()-saved.at<86400000){target=saved.target;active=saved.active===true;}}catch{}
   const style=document.createElement('style');style.id='pme-native-reply-style';
-  style.textContent=`[data-pme-native-reply-pane]{position:fixed!important;inset:144px 0 0 420px!important;width:calc(100vw - 420px)!important;height:calc(100vh - 144px)!important;min-width:0!important;z-index:2!important;background:var(--sk_primary_background,#1a1d21);}
+  style.textContent=`[data-pme-native-reply-pane]{position:fixed!important;inset:0 0 0 420px!important;width:calc(100vw - 420px)!important;height:100vh!important;max-height:none!important;min-width:0!important;z-index:2!important;background:var(--sk_primary_background,#1a1d21);}
     body[data-pme-native-reply] .p-view_contents:not([data-pme-native-reply-pane]){visibility:hidden!important;}
     body[data-pme-native-reply] [data-pme-native-reply-pane]{visibility:visible!important;}
     body[data-pme-native-reply] > .ReactModalPortal > .ReactModal__Overlay{z-index:2147483647!important;}

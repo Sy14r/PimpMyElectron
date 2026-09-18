@@ -130,3 +130,23 @@ bounds; compact centering, original window restoration, all-Spaces flags and
 unchanged underlying conversation also passed. The rendered queue was visually
 checked: at a 1130px work-area height, its scrolling list reaches 1118px (the
 remaining 12px is bottom padding), with no footer or shortcut legend.
+
+## Native pane without a custom header — 0.15.2
+
+Ready native conversations and threads occupy the right pane from top to bottom,
+without the custom title/action bar. Loading/error states still offer recovery
+controls. The old 144px top inset and Slack's inherited maximum-height constraint
+are removed. Option-click on a queue item still opens the cached reader with its
+local action controls.
+
+Escape outside native text entry suspends the native framing and returns to the
+420px queue, preserving the native draft. Escape inside a native editable field,
+during composition, or already handled by Slack is left alone. A subsequent
+Escape from the queue retains its existing collapse behavior.
+
+A live thread check confirmed the custom bar hidden, native pane at y=0 with the
+full 1130px viewport height, Escape in the composer staying in the thread, Escape
+outside it returning to a visible 420px inbox, and an unchanged draft. No custom
+API calls were added. The native layout was also visually checked. Keyboard
+regressions cover native vs. triage focus, composition, already-handled keys,
+queue collapse and standard Slack passthrough.

@@ -135,7 +135,7 @@
     const controls=shadow.querySelector('.triage-controls'),container=mode==='reply'?$('reply-chrome'):shadow.querySelector('.reader-header');
     if(controls.parentElement!==container){if(mode==='reply')container.append(controls);else container.insertBefore(controls,$('mark-status'));}
     $('mark-read').hidden=mode==='reply';
-    $('reply-chrome').hidden=mode!=='reply';$('reply-placeholder').hidden=mode!=='reply'||ready;
+    $('reply-chrome').hidden=mode!=='reply'||ready;$('reply-placeholder').hidden=mode!=='reply'||ready;
     const destination=openingKey?items().find(i=>i.key===openingKey):reply?.target;
     $('reply-destination').textContent=destination?`${destination.workspaceName||snapshot.workspaceDirectory?.find(w=>w.id===destination.workspaceId)?.name||destination.workspaceId} · ${destination.name}${destination.threadTs?' · Thread':''}`:'Native Slack conversation';
     $('reply-state').textContent=openingKey?'Opening native conversation…':ready?'Slack’s editor · ⌘⇧Y collapses and keeps your draft':reply?.reason||'Native reply is unavailable.';
@@ -375,9 +375,17 @@
       event.preventDefault();event.stopImmediatePropagation();void command('toggle');return;
     }
     if (mode==='stock')return;
+    const fromTriage=event.composedPath().includes(host);
+    const editable='input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]';
+    const nativeTyping=document.activeElement!==host&&document.activeElement?.closest?.(editable)||
+      !fromTriage&&event.composedPath().some(n=>n?.closest?.(editable));
+    if(mode==='reply'&&event.key==='Escape'){
+      if(nativeTyping||event.isComposing||event.defaultPrevented)return;
+      event.preventDefault();event.stopImmediatePropagation();void transition('queue');return;
+    }
     // Slack owns composition keys, including its autocomplete and formatting menus.
-    if(mode==='reply'&&!event.composedPath().includes(host))return;
-    if(event.composedPath().includes(host))event.stopImmediatePropagation();
+    if(mode==='reply'&&!fromTriage)return;
+    if(fromTriage)event.stopImmediatePropagation();
     const typing=event.composedPath().some(n=>n?.matches?.('input,textarea,select,[contenteditable="true"]'));
     if(detailMode()&&!typing&&!event.metaKey&&!event.ctrlKey&&!event.altKey&&!event.shiftKey&&!event.isComposing){
       const action={e:'done',l:'later',p:'pin'}[event.key.toLowerCase()];
@@ -500,7 +508,7 @@
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
   idle=setInterval(observe,10000);
-  window.__PME_TRIAGE__={version:'0.15.1',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
+  window.__PME_TRIAGE__={version:'0.15.2',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
     status:()=>({mode,edge,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
     dispose:async()=>{if(disposed)return;setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);
       window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});await geometry('stock').catch(()=>{});host.remove();delete window.__PME_TRIAGE__;
