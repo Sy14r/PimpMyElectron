@@ -58,3 +58,39 @@ test('a live unread signal does not need a startup count to become visible',()=>
 test('cached state from a different account in the same workspace is not exported',()=>{
   const s=state();s.bootData={user_id:'UOLD'};const env=setup([s]);env.accounts.TONE.user_id='UNEW';env.flush();assert.equal(env.snapshots.length,0);env.api.dispose();
 });
+test('live per-channel counts reveal new DMs in both workspaces while startup counts and arrays stay empty',()=>{
+  const one=state(),two=state('TTWO');
+  for(const s of [one,two])s.unreadCounts.initialUnreads.DONE={unreadCnt:0,unreadHighlightCnt:0};
+  const env=setup([one,two]);env.flush();assert.ok(env.snapshots.every(s=>s.channels[0].has_unreads===false));
+  for(let i=0;i<2;i++){
+    const s=env.stores[i].state;
+    env.stores[i].state={...s,unreadCounts:{...s.unreadCounts,countsPerChannel:inherited({DONE:{unreadCnt:1,unreadHighlightCnt:1}})}};
+    env.change(i);
+  }
+  env.flush();assert.equal(env.snapshots.length,4);
+  for(const s of env.snapshots.slice(-2)){assert.equal(s.channels[0].has_unreads,true);assert.equal(s.channels[0].mentionObserved,true);assert.equal(s.channels[0].unread_count,undefined);}
+  assert.equal(env.network(),0);assert.equal(env.dispatches(),0);env.api.dispose();
+});
+test('live zero counts clear unread and mentions despite stale positive startup counts and arrays',()=>{
+  const s=state();s.channels.DONE={...s.channels.DONE,unreads:['100.000002'],unread_highlights:['100.000002']};
+  s.unreadCounts.countsPerChannel=inherited({DONE:{unreadCnt:1,unreadHighlightCnt:1}});
+  const env=setup([s]);env.flush();assert.equal(env.snapshots[0].channels[0].has_unreads,true);
+  env.stores[0].state={...s,unreadCounts:{...s.unreadCounts,countsPerChannel:inherited({DONE:{unreadCnt:0,unreadHighlightCnt:0}})}};
+  env.change();env.flush();const row=env.snapshots.at(-1).channels[0];
+  assert.equal(row.has_unreads,false);assert.equal(row.mentionObserved,false);env.api.dispose();
+});
+test('live counts work without startup metadata and missing fields remain unknown independently',()=>{
+  const s=state();delete s.unreadCounts.initialUnreads.DONE;
+  s.unreadCounts.countsPerChannel=inherited({DONE:{unreadCnt:0}});
+  const env=setup([s]);env.flush();const row=env.snapshots[0].channels[0];
+  assert.equal(row.has_unreads,false);assert.equal(row.mentionObserved,undefined);env.api.dispose();
+});
+test('removing a live count after reading falls back to the cleared startup state',()=>{
+  const s=state();s.unreadCounts.initialUnreads.DONE={unreadCnt:0,unreadHighlightCnt:0};
+  s.unreadCounts.countsPerChannel=inherited({DONE:{unreadCnt:1,unreadHighlightCnt:1}});
+  const env=setup([s]);env.flush();assert.equal(env.snapshots[0].channels[0].has_unreads,true);
+  const counts=Object.create(s.unreadCounts.countsPerChannel);counts.DONE=undefined;
+  env.stores[0].state={...s,channelCursors:{DONE:'100.000002'},unreadCounts:{...s.unreadCounts,countsPerChannel:counts}};
+  env.change();env.flush();assert.equal(env.snapshots.at(-1).channels[0].has_unreads,false);
+  assert.equal(env.snapshots.at(-1).channels[0].mentionObserved,false);env.api.dispose();
+});

@@ -6,7 +6,7 @@
   "modules": [
     {
       "id": "state-observer",
-      "version": "0.13.0",
+      "version": "0.14.2",
       "source": "src/renderer/state-observer.js",
       "global": "__PME_OBSERVER__",
       "requires": [

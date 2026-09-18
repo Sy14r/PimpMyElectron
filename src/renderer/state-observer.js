@@ -30,17 +30,18 @@
     const ids=keys(state.channels,601).filter(channelId);if(ids.length>600)result.truncated=true;
     for(const id of ids.slice(0,600)){
       const c=data(state.channels,id);if(!c||c.id!==id||c.isUnknown||c.isNonExistent)continue;
-      const initial=data(state.unreadCounts?.initialUnreads,id),unreads=c.unreads,highlights=c.unread_highlights;
-      // Initial counts + live unread arrays are separate pieces of client state.
-      // Until their count semantics are qualified, export only a boolean signal.
+      const current=data(state.unreadCounts?.countsPerChannel,id),initial=data(state.unreadCounts?.initialUnreads,id),unreads=c.unreads,highlights=c.unread_highlights;
+      // Slack updates countsPerChannel even when startup counts and the channel's
+      // unread arrays stay unchanged. A live zero must also override stale positives.
+      const currentCount=count(current?.unreadCnt),currentMentions=count(current?.unreadHighlightCnt);
       const initialCount=count(initial?.unreadCnt),initialMentions=count(initial?.unreadHighlightCnt);
       const knownUnread=initialCount!==undefined&&Array.isArray(unreads);
       const knownMentions=initialMentions!==undefined&&Array.isArray(highlights);
       result.channels.push({id,name:str(c.name||c.name_normalized,180),user:userId(c.user)?c.user:undefined,
         is_im:c.is_im===true,is_mpim:c.is_mpim===true,is_archived:c.is_archived===true,
-        has_unreads:initialCount>0||Array.isArray(unreads)&&unreads.length>0?true:knownUnread?false:undefined,
+        has_unreads:currentCount!==undefined?currentCount>0:initialCount>0||Array.isArray(unreads)&&unreads.length>0?true:knownUnread?false:undefined,
         // Preserve unknown exact counts instead of presenting a guessed total.
-        mentionObserved:initialMentions>0||Array.isArray(highlights)&&highlights.length>0?true:knownMentions?false:undefined,
+        mentionObserved:currentMentions!==undefined?currentMentions>0:initialMentions>0||Array.isArray(highlights)&&highlights.length>0?true:knownMentions?false:undefined,
         latest:ts(data(state.channelLatests,id)),last_read:ts(data(state.channelCursors,id))});
     }
     const peers=result.channels.map(c=>c.user).filter(Boolean),names=[...new Set([...peers,...keys(state.members,1201).filter(userId)])];
@@ -107,6 +108,6 @@
       health.workspaces=watches.size;
     }catch{health.errors++;}
   }
-  window.__PME_OBSERVER__={version:'0.13.0',status:()=>({...health}),dispose(){disposed=true;clearInterval(scanTimer);for(const w of watches.values()){w.unsubscribe();clearTimeout(w.timer);}watches.clear();delete window.__PME_OBSERVER__;}};
+  window.__PME_OBSERVER__={version:'0.14.2',status:()=>({...health}),dispose(){disposed=true;clearInterval(scanTimer);for(const w of watches.values()){w.unsubscribe();clearTimeout(w.timer);}watches.clear();delete window.__PME_OBSERVER__;}};
   discover();scanTimer=setInterval(discover,10000);
 })();

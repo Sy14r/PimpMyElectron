@@ -30,7 +30,7 @@ getters. It only exports an explicit allowlist of fields.
   heartbeat at most every 30 seconds. No network request is involved.
 - Hydrate cached conversation names, DM peers, author names, message previews,
   thread roots/replies, latest activity and subscribed-thread read cursors.
-- Use Slack's initial-unread and live-unread signals for boolean unread/mention
+- Use Slack's live per-channel counts first, then initial-unread and unread-array signals for boolean unread/mention
   state. Missing evidence remains unknown; positive unread does not invent an
   exact count. Cached thread cursors classify cached latest replies, not a
   guaranteed full server history.
@@ -82,3 +82,30 @@ claimed.
 Next live checks: new background DMs and subscribed-thread replies in both
 workspaces, reading them in another client, edits/deletes, account/provider
 replacement, real sleep/wake, and comparing a busy inbox against Slack Activity.
+
+## Live unread regression — 0.14.2
+
+The user sent new DMs that ordinary Slack marked unread, but the custom pill
+remained empty. Message ingestion worked: both new messages were already cached.
+The observer read `unreadCounts.initialUnreads` and each channel's `unreads`
+array, which remained zero/empty. Slack's current
+`unreadCounts.countsPerChannel[channelId]` independently reported
+`unreadCnt: 1` and `unreadHighlightCnt: 1` in both workspaces.
+
+The observer now gives valid live per-channel counts precedence, including zero,
+for boolean unread and mention state. Startup counts and arrays remain fallbacks
+when a live field is unavailable. Dictionary access still respects inheritance
+and tombstones. Exact message totals remain unexposed; the pill counts destinations.
+
+After reloading this fix, both real unread DMs immediately produced two dots and
+two pill items, with **zero custom API requests**. Regression tests reproduce
+updates to only the counts map in two workspace stores, clearing with live zero
+despite stale positive fallback data, and independently missing count fields.
+All **75 tests** pass, including removal of a live count entry after reading.
+The Personal Test DM cleared when Slack's live count entry disappeared. The haxx
+DM subsequently cleared as well, and the user confirmed native opening worked.
+Both pill items disappeared, with no change to the local-only Done action and
+zero custom API requests. Finally, with both dots cleared and triage collapsed,
+the user sent another Personal Test DM: it appeared as one dot and one item
+without opening Slack or reloading the mod. The custom API counter remained
+zero throughout the live read/new-message round trip.
