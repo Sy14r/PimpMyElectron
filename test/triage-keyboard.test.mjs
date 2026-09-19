@@ -6,14 +6,14 @@ const source=await fs.readFile(new URL('../src/renderer/triage.js',import.meta.u
 const start=source.indexOf("document.addEventListener('keydown',")+"document.addEventListener('keydown',".length;
 const end=source.indexOf('},{capture:true,signal:abort.signal});',start)+1;
 assert.ok(start>0&&end>start);
-function escape({mode='reply',nativeEditable=false,triageFocus=false,composing=false,handled=false,composer=false,repeat=false,presses=1}={}){
- const transitions=[],host={},body={closest:()=>null};let blurred=false;
+function escape({mode='reply',nativeEditable=false,triageFocus=false,composing=false,handled=false,composer=false,repeat=false,presses=1,popup=false}={}){
+ const transitions=[],host={},body={closest:()=>null};let blurred=false,popupClosed=false;
  const native={closest:selector=>selector.includes('data-pme-native-reply-pane')?(composer?native:null):(nativeEditable||composer?native:null),blur(){blurred=true;env.document.activeElement=body;}},target=triageFocus?host:native;
- const env={mode,host,document:{activeElement:target},lastInteraction:0,touch(){},Date,detailMode:()=>mode==='reply'||mode==='reading',restMode:()=>'strip',transition:next=>transitions.push(next)};
+ const env={mode,host,workspaceDialog:{open:popup},closeWorkspacePicker(){popupClosed=true;env.workspaceDialog.open=false;},document:{activeElement:target},lastInteraction:0,touch(){},Date,detailMode:()=>mode==='reply'||mode==='reading',restMode:()=>'strip',transition:next=>transitions.push(next)};
  const listener=vm.runInNewContext(`(${source.slice(start,end)})`,env);
  let prevented=false,stopped=false;
  for(let i=0;i<presses;i++)listener({key:'Escape',code:'Escape',repeat,isComposing:composing,defaultPrevented:handled,composedPath:()=>[env.document.activeElement],preventDefault(){prevented=true;},stopImmediatePropagation(){stopped=true;}});
- return {transitions,prevented,stopped,...(composer?{blurred}: {})};
+ return {transitions,prevented,stopped,...(composer?{blurred}: {}),...(popup?{popupClosed}: {})};
 }
 test('Escape outside the native editor closes the detail pane and retains the inbox',()=>{
  for(const triageFocus of [false,true])assert.deepEqual(escape({triageFocus}),{transitions:['queue'],prevented:true,stopped:true});
@@ -36,4 +36,8 @@ test('Repeated Escape does not blur or close the native pane',()=>{
 });
 test('Composition and already-handled Escape do not blur the composer',()=>{
  for(const options of [{composing:true},{handled:true}])assert.deepEqual(escape({composer:true,...options}),{transitions:[],prevented:false,stopped:false,blurred:false});
+});
+
+test('Escape closes the workspace popup without collapsing the queue or closing native chat',()=>{
+ for(const mode of ['queue','reply'])assert.deepEqual(escape({mode,popup:true}),{transitions:[],prevented:true,stopped:true,popupClosed:true});
 });

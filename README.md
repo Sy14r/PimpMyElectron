@@ -18,6 +18,13 @@ senders are checked against the current top-level Slack execution context. Fully
 stop and restart after upgrading; a mod reload cannot harden an old launcher.
 See [launch modes and security boundaries](SETUP.md#everyday-controls-and-development-mode-0190).
 
+Version **0.20.0** gives the inbox the full window width, removes redundant header
+copy, and makes the workspace title open a compact custom picker. Compose, standard
+Slack, and close-to-pill use header icons; detail controls sit beside the filters.
+In All workspaces, Compose asks for a destination workspace without changing the
+inbox scope. Escape dismisses the picker before affecting the inbox or native chat.
+On an already-running 0.19.0 launcher, `npm run dev:reload` applies this UI update.
+
 ## Live development
 
 Version **0.14.0** centers the resting strip and expanded pill vertically on the

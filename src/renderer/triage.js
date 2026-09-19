@@ -18,12 +18,12 @@
       :host{font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#edf0f7;color-scheme:dark}
       *{box-sizing:border-box}button,input{font:inherit}button{cursor:pointer}button,input{color:inherit}
       button{border:0;background:transparent;border-radius:8px}button:hover{background:#ffffff0e}
-      button:focus-visible,input:focus-visible{outline:2px solid #b7a8ec;outline-offset:2px}button:disabled{opacity:.4;cursor:default}
+      button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #b7a8ec;outline-offset:2px}button:disabled{opacity:.4;cursor:default}
       [hidden]{display:none!important}#opener{position:fixed;right:18px;bottom:18px;pointer-events:auto;padding:10px 15px;background:#262337;border:1px solid #827097;border-radius:24px;box-shadow:0 4px 20px #0006;display:flex;gap:9px;align-items:center;font-weight:600}
       .signal{width:7px;height:7px;border-radius:50%;background:#99d3b9}.shell{pointer-events:auto;position:fixed;inset:0;background:#141925;display:flex;box-shadow:0 0 60px #0007}
       .rail{width:44px;flex-shrink:0;background:#10141f;border-right:1px solid #ffffff0c;display:flex;flex-direction:column;align-items:center;gap:9px;padding:12px 0}.rail button{width:32px;height:32px;font-size:13px;background:#ffffff07;color:#a4adc0}.rail .brand{background:#b6a5e8;color:#20182b;font-weight:800}.spacer{flex:1}
-      .queue{width:376px;flex-shrink:0;display:flex;flex-direction:column;padding:22px 16px 12px;border-right:1px solid #ffffff10;min-height:0}.eyebrow{font-size:10px;font-weight:600;letter-spacing:1.7px;color:#b3a4d5;text-transform:uppercase}h1{font-size:25px;line-height:1.2;letter-spacing:-.6px;margin:8px 0}#workspace{color:#8f9aaf;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .queue-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.queue-heading h1{min-width:0}#compose{padding:7px 10px;background:#ab8cdd20;color:#d6c8ef;flex-shrink:0}#compose:hover{background:#ab8cdd35}#search{margin-top:12px;width:100%;border:1px solid #ffffff12;border-radius:8px;background:#ffffff05;padding:9px 11px;outline-offset:0;font-size:12px}#search::placeholder{color:#758196}
+      .queue{width:420px;max-width:100vw;flex-shrink:0;display:flex;flex-direction:column;padding:22px 16px 12px;border-right:1px solid #ffffff10;min-height:0}.eyebrow{font-size:10px;font-weight:600;letter-spacing:1.7px;color:#b3a4d5;text-transform:uppercase}h1{font-size:25px;line-height:1.2;letter-spacing:-.6px;margin:8px 0}
+      .queue-heading{display:flex;align-items:center;gap:6px}.inbox-icon{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:5px;flex-shrink:0;color:#a4adc0;font-size:16px}.control-icon{display:block;width:20px;height:20px;flex-shrink:0;pointer-events:none}.slack-icon{width:18px;height:18px}.close-icon{width:18px;height:18px}#inbox-stock{color:#8792a6}#inbox-stock:hover{color:#c4cada}.rail #restore{display:flex;align-items:center;justify-content:center}.filter-row{display:flex;align-items:center;gap:4px}.filter-row .filters{flex:1}.shell:not(.cluster)>.rail{display:none}.queue-heading h1{min-width:0;flex:1;position:relative}#compose{padding:5px;background:#ab8cdd20;color:#d6c8ef;flex-shrink:0}#compose:hover{background:#ab8cdd35}#search{margin-top:12px;width:100%;border:1px solid #ffffff12;border-radius:8px;background:#ffffff05;padding:9px 11px;outline-offset:0;font-size:12px}#search::placeholder{color:#758196}
       .filters{display:flex;gap:4px;flex-wrap:wrap;margin:12px 0}.filters button{padding:5px 9px;font-size:11px;color:#94a2b8}.filters button[aria-pressed="true"]{color:#d0bdf5;background:#ab8cdd20}
       #list{overflow:auto;flex:1;min-height:60px;padding:2px;scrollbar-width:none}#list::-webkit-scrollbar{display:none}.row{display:block;width:100%;text-align:left;border:1px solid transparent;padding:12px 10px;margin-bottom:4px}.row.selected{background:#a492d017;border-color:#b6a1e940}.row-head{display:flex;gap:7px;align-items:center}.kind{color:#7787a0;font-size:15px;width:15px;flex-shrink:0}.name{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;flex:1}.unread{width:6px;height:6px;background:#bca9f0;border-radius:50%}.badge{font-size:10px;color:#c5b3ee}.preview{font-size:11.5px;line-height:1.5;color:#8796ae;margin:7px 0 0 22px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.meta{font-size:10px;color:#748299;margin:5px 0 0 22px}
       .empty{padding:24px 10px;color:#8796af;font-size:12px;line-height:1.6}#notice:empty{display:none}
@@ -35,26 +35,32 @@
       .shell.cluster{overflow:hidden;background:#18171c}.shell.cluster .rail{border:0;width:44px;padding:7px 0;gap:6px;background:#18171c}.shell.cluster #rail-unread,.shell.cluster #collapse,.shell.cluster .rail>.spacer{display:none}.shell:not(.cluster) #pill-items,.shell:not(.cluster) #pill-empty{display:none}.shell.cluster #home{flex-shrink:0;width:30px;height:27px;font-size:11px}.shell.cluster #restore{flex-shrink:0;height:25px;width:30px;margin-top:auto;font-size:12px;color:#a99bbb}
       #pill-items{display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0;padding:2px 4px;scrollbar-width:none}#pill-items::-webkit-scrollbar{display:none}#pill-items .pill-item{position:relative;display:flex;align-items:center;justify-content:center;width:32px;height:32px;min-height:32px;padding:0;background:hsl(var(--pill-hue) 26% 25%);border:1px solid hsl(var(--pill-hue) 25% 39%);border-radius:10px;color:#f1eafc;font-size:11px;font-weight:650}#pill-items .pill-item:hover,#pill-items .pill-item:focus-visible{background:hsl(var(--pill-hue) 28% 36%);border-color:#cebbf5}#pill-items .pill-kind{position:absolute;bottom:-1px;right:-1px;font-size:8px;line-height:11px;min-width:11px;border-radius:4px;background:#11131d;color:#cebdf4}#pill-empty{flex-shrink:0;width:32px;height:40px;font-size:14px;color:#acbda9;padding:0}#pill-empty:hover{background:#ffffff14}
 
-      #workspace-picker{margin-top:8px;background:#202735;color:inherit;border:1px solid #ffffff15;border-radius:5px;padding:5px;width:100%}.activity-controls{display:flex;gap:6px;margin-top:10px}.activity-controls button{font-size:10px;color:#b5a6d5;padding:3px 5px}#activity-status{font-size:10px;color:#a3a1a9}
+      #workspace-picker{display:block;width:100%;min-width:0;background:transparent;color:inherit;border:0;border-radius:5px;padding:0;text-align:left;font:inherit;font-weight:inherit;letter-spacing:inherit;line-height:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#workspace-picker:hover{color:#d0bdf5}
+      #workspace-dialog{position:fixed;inset:68px auto auto 16px;margin:0;width:320px;max-width:calc(100vw - 32px);max-height:calc(100vh - 90px);padding:12px;background:#202331;color:#edf0f7;border:1px solid #ffffff20;border-radius:12px;box-shadow:0 16px 48px #0008;font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;pointer-events:auto}#workspace-dialog::backdrop{background:#0003}.workspace-dialog-heading{display:flex;align-items:center;justify-content:space-between;margin:0 0 7px;padding-left:8px}.workspace-dialog-heading h2{font-size:12px;font-weight:600;color:#aab2c4;margin:0}.workspace-dialog-heading button{width:28px;height:28px;font-size:18px;color:#aab2c4}#workspace-options{display:flex;flex-direction:column;gap:3px;max-height:calc(100vh - 160px);overflow:auto}.workspace-option{display:flex;align-items:center;gap:10px;min-height:38px;padding:8px;text-align:left;font-size:13px}.workspace-option[aria-pressed="true"]{background:#ab8cdd20;color:#d9c9f5}.workspace-option .workspace-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.workspace-check{width:15px;color:#c7b3ef}
+      .activity-controls{display:flex;gap:6px;margin-top:10px}.activity-controls button{font-size:10px;color:#b5a6d5;padding:3px 5px}#activity-status{font-size:10px;color:#a3a1a9}
       .shell.reply{width:420px;right:auto}.reply-chrome{position:fixed;left:420px;right:0;top:0;height:144px;pointer-events:auto;background:#191f2c;border-bottom:1px solid #ffffff16;padding:12px 16px;color:#cdd4e4;display:flex;flex-direction:column;gap:5px}.reply-chrome strong{font-size:13px}.reply-chrome small{font-size:10px;color:#a3adc0}.reply-chrome nav{display:flex;gap:8px}.reply-chrome button{font-size:11px;padding:3px 7px;background:#ffffff0a}.reply-placeholder{position:fixed;left:420px;right:0;top:144px;bottom:0;pointer-events:auto;background:#191f2c;padding:24px;color:#a3adc0;font-size:13px}
-      @media(max-width:650px){.shell.reply{width:44px}.shell.reply .queue{display:none}.reply-chrome,.reply-placeholder{left:44px}}
+      @media(max-width:650px){.shell.reply>.rail,.shell.reading>.rail{display:flex}.shell.reply{width:44px}.shell.reply .queue{display:none}.reply-chrome,.reply-placeholder{left:44px}}
       @media(prefers-reduced-motion:no-preference){.row{transition:background .12s}#edge-tab{transition:background .16s,box-shadow .16s}.shell.cluster .rail{animation:pill-reveal .18s ease-out}@keyframes pill-reveal{from{opacity:.5}to{opacity:1}}}@media(max-width:650px){.shell.reading .queue{display:none}.reader{width:calc(100vw - 44px)}}
       :host([data-detail-motion]) .shell.reply{width:420px!important;right:auto}
       :host([data-detail-motion]) .shell .queue{display:flex!important;position:relative;z-index:2;background:#141925}
-      :host([data-detail-motion]) .rail{position:relative;z-index:3}
+      :host([data-detail-motion]) .shell>.rail{display:none}
       :host([data-detail-motion]) .reader,:host([data-detail-motion]) .reply-chrome,:host([data-detail-motion]) .reply-placeholder{position:fixed;left:420px;right:auto;width:var(--pme-detail-width,400px);transform:translateX(calc(100vw - 420px - var(--pme-detail-width,400px)))}
       :host([data-detail-motion]) .reader{top:0;bottom:0;z-index:1}
     </style>
     <button id="edge-tab" hidden aria-label="Reveal triage" title="Reveal triage"><span id="edge-dots" aria-hidden="true"></span><span id="edge-overflow" hidden aria-hidden="true"></span></button>
     <button id="opener" aria-label="Open triage"><span class="signal"></span>Triage</button>
     <section class="shell" hidden aria-label="Slack triage">
-      <nav class="rail" aria-label="Triage views"><button class="brand" id="home" aria-label="Show queue">T</button><button id="rail-unread" aria-label="Unread observed conversations">●</button><button id="reply-latest" hidden aria-label="Jump to latest messages" title="Jump to latest messages">↓</button><div id="pill-items" aria-label="Unread conversations and threads"></div><button id="pill-empty" type="button" hidden aria-label="Open triage inbox" title="All caught up · Open triage inbox">✓</button><div class="spacer"></div><button id="restore" aria-label="Return to normal Slack" title="Normal Slack">↗</button><button id="collapse" aria-label="Collapse to rail" title="Collapse">›</button></nav>
-      <section class="queue"><div class="eyebrow">Your attention, in one place</div><div class="queue-heading"><h1>Your attention</h1><button id="compose" type="button" aria-label="Compose new message">Compose</button></div><div id="workspace"></div><select id="workspace-picker" aria-label="Workspace"></select><input id="search" type="search" placeholder="Filter conversations…" aria-label="Filter observed conversations" autocomplete="off">
-        <div class="activity-controls"><button id="activity-refresh">Refresh activity</button><button id="activity-more" hidden>More conversations</button></div><div id="activity-status" role="status"></div><div class="filters" role="group" aria-label="Filter activity"><button data-filter="all" aria-pressed="true">All</button><button data-filter="unread" aria-pressed="false">Unread</button><button data-filter="mentions" aria-pressed="false">Mentions</button><button data-filter="dms" aria-pressed="false">DMs</button><button data-filter="threads" aria-pressed="false">Threads</button></div><div id="list" aria-label="Observed conversations"></div>
+      <nav class="rail" aria-label="Triage views"><button class="brand" id="home" aria-label="Show queue">T</button><button id="rail-unread" aria-label="Unread observed conversations">●</button><button id="reply-latest" hidden aria-label="Jump to latest messages" title="Jump to latest messages">↓</button><div id="pill-items" aria-label="Unread conversations and threads"></div><button id="pill-empty" type="button" hidden aria-label="Open triage inbox" title="All caught up · Open triage inbox">✓</button><div class="spacer"></div><button id="restore" aria-label="Return to normal Slack" title="Normal Slack"><svg class="control-icon slack-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><g transform="rotate(0 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(90 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(180 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(270 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g></svg></button><button id="collapse" aria-label="Collapse to rail" title="Collapse">›</button></nav>
+      <section class="queue"><div class="queue-heading"><h1><button id="workspace-picker" type="button" aria-label="Choose workspace" aria-haspopup="dialog" aria-expanded="false" aria-controls="workspace-dialog">Workspace</button></h1><button class="inbox-icon" id="compose" type="button" title="Compose new message" aria-label="Compose new message"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-7"/><path d="m16 3 5 5M10 14l1-5 7-7a2.1 2.1 0 0 1 3 3l-7 7-4 2Z"/></svg></button><button class="inbox-icon" id="inbox-stock" title="Normal Slack" aria-label="Return to normal Slack"><svg class="control-icon slack-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><g transform="rotate(0 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(90 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(180 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(270 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g></svg></button><button class="inbox-icon" id="inbox-collapse" title="Close inbox to pill" aria-label="Close inbox to pill"><svg class="control-icon close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m7 7 10 10M17 7 7 17"/></svg></button></div><input id="search" type="search" placeholder="Filter conversations…" aria-label="Filter observed conversations" autocomplete="off">
+        <div class="activity-controls"><button id="activity-refresh">Refresh activity</button><button id="activity-more" hidden>More conversations</button></div><div id="activity-status" role="status"></div><div class="filter-row"><div class="filters" role="group" aria-label="Filter activity"><button data-filter="all" aria-pressed="true">All</button><button data-filter="unread" aria-pressed="false">Unread</button><button data-filter="mentions" aria-pressed="false">Mentions</button><button data-filter="dms" aria-pressed="false">DMs</button><button data-filter="threads" aria-pressed="false">Threads</button></div><button class="inbox-icon" id="inbox-latest" hidden title="Jump to latest messages" aria-label="Jump to latest messages">↓</button><button class="inbox-icon" id="inbox-back" hidden title="Close conversation" aria-label="Close conversation and return to inbox">←</button></div><div id="list" aria-label="Observed conversations"></div>
         <div id="notice" role="status"></div>
       </section>
       <section class="reader" hidden aria-label="Captured messages"><div class="reader-header"><button id="back" aria-label="Back to queue">←</button><div class="eyebrow">Message reader</div><h2 id="conversation"></h2><div id="coverage"></div><div class="triage-controls"><button id="done" title="E · Save Done locally, then open the next item">Done →</button><button id="mark-read" title="Mark Slack read through the latest message loaded here. Does not change local Done.">Mark read</button><button id="later" title="L · Snooze locally, then open the next item">Later →</button><select id="snooze" aria-label="Snooze duration" style="background:#202735;color:inherit;border:1px solid #ffffff15;border-radius:5px"><option value="15">15 min</option><option value="60" selected>1 hour</option><option value="240">4 hours</option><option value="1440">24 hours</option></select><button id="pin" title="P · Toggle local pin">Pin</button><button id="reopen" hidden>Bring back</button><button id="undo" hidden>Undo</button></div><div id="mark-status" role="status" style="font-size:11px;color:#b5a6d5;margin-top:8px"></div><div class="history-controls"><button id="refresh">Refresh</button><button id="reply" title="Use Slack’s native editor. Opening the conversation may mark it read.">Native chat</button><button id="handoff" title="Open this conversation in ordinary Slack. Slack may mark it read.">Open in Slack ↗</button><button id="older" hidden>Load older</button></div><div id="history-status" role="status" aria-live="polite"></div></div><div class="messages" id="messages"></div><div class="read-only"><span class="signal"></span>Reading alone does not mark read. Done is local; Mark read updates Slack.</div></section>
     </section><section id="reply-chrome" class="reply-chrome" hidden aria-label="Native Slack conversation"><strong id="reply-destination"></strong><small id="reply-state"></small><nav><button id="reply-queue">← Queue</button><button id="reply-back">Read-only view</button><button id="reply-retry" hidden>Retry</button><button id="reply-stock">Normal Slack ↗</button><button id="reply-collapse">Collapse</button></nav></section><div id="reply-placeholder" class="reply-placeholder" hidden role="status"></div>`;
+  const workspaceDialog=document.createElement('dialog');workspaceDialog.id='workspace-dialog';workspaceDialog.setAttribute('aria-labelledby','workspace-dialog-title');
+  workspaceDialog.innerHTML='<div class="workspace-dialog-heading"><h2 id="workspace-dialog-title">Workspaces</h2><button id="workspace-close" type="button" aria-label="Close workspace picker">×</button></div><div id="workspace-options"></div>';
+  shadow.append(workspaceDialog);
+  let workspacePickerPurpose='switch';
   document.body.append(host);
   const $ = id => shadow.getElementById(id);
   let snapshot = { workspaces: [] }, mode = 'stock', edge = 'right', filter = 'all', selection = null;
@@ -139,9 +145,11 @@
     if(stage){await transition('reply');if(run!==openSequence||disposed||mode!=='reply')return;window.__PME_REPLY__?.focus();}
     render();
   }
-  function startCompose(){
-    const workspaceId=viewTeam()==='*'?team():viewTeam();
-    if(!workspaceId||$('compose').disabled)return;
+  function startCompose(chosenWorkspace=null){
+    if(!connected()||$('compose').disabled)return;
+    if(viewTeam()==='*'&&!chosenWorkspace){openWorkspacePicker('compose');return;}
+    const workspaceId=chosenWorkspace||viewTeam();
+    if(!snapshot.workspaceDirectory?.some(w=>w.id===workspaceId&&w.connected))return;
     return startReply({kind:'compose',workspaceId,key:`${workspaceId}:compose`,name:'New message'});
   }
   function renderReply(){
@@ -150,6 +158,8 @@
     if(controls.parentElement!==container){if(mode==='reply')container.append(controls);else container.insertBefore(controls,$('mark-status'));}
     $('mark-read').hidden=mode==='reply';
     $('reply-latest').hidden=mode!=='reply'||!ready||reply?.target?.kind==='compose';
+    $('inbox-latest').hidden=$('reply-latest').hidden;
+    $('inbox-back').hidden=!detailMode();
     $('reply-back').hidden=reply?.target?.kind==='compose';
     controls.hidden=mode==='reply'&&reply?.target?.kind==='compose';
     $('reply-chrome').hidden=mode!=='reply'||ready;$('reply-placeholder').hidden=mode!=='reply'||ready;
@@ -207,7 +217,6 @@
     if (disposed) return;
     renderReply();renderPill();
     try{sessionStorage.setItem(viewKey,JSON.stringify({selection,filter,resumeReply}));}catch{}
-    $('workspace').textContent = snapshot.workspaces.map(w => w.name).join(' · ') || 'Waiting for workspace activity…';
     for (const button of shadow.querySelectorAll('[data-filter]')) button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
     const activeWorkspace=snapshot.workspaces[0],activity=activeWorkspace?.activity;
     const waiting=Math.max(0,Math.ceil(((activity?.nextAt||0)-Date.now())/1000));
@@ -219,12 +228,25 @@
     $('activity-status').textContent=snapshot.network==='offline'?'Slack is offline':
       activity?.status==='loading'?'Refreshing…':activity?.status==='error'?'Refresh failed. Try again.':'';
     $('activity-status').hidden=!$('activity-status').textContent;
-    const composeTeam=viewTeam()==='*'?team():viewTeam();
-    $('compose').disabled=!connected()||!window.__PME_REPLY__||!composeTeam;
-    $('compose').title=`Compose in ${snapshot.workspaceDirectory?.find(w=>w.id===composeTeam)?.name||'current workspace'}`;
-    const picker=$('workspace-picker'),directory=snapshot.workspaceDirectory||[];
-    if(JSON.stringify(directory)!==picker.dataset.signature){picker.replaceChildren();const all=el('option','','All workspaces');all.value='*';picker.append(all);for(const w of directory){const option=el('option','',w.name);option.value=w.id;option.disabled=!w.connected;picker.append(option);}picker.dataset.signature=JSON.stringify(directory);}
-    picker.value=viewTeam();picker.disabled=!connected();picker.hidden=directory.length<2;
+    const composeTeam=viewTeam(),composeChoices=(snapshot.workspaceDirectory||[]).filter(w=>w.connected);
+    $('compose').disabled=!connected()||!window.__PME_REPLY__||!(composeTeam==='*'?composeChoices.length:composeChoices.some(w=>w.id===composeTeam));
+    $('compose').title=composeTeam==='*'?'Choose workspace to compose':`Compose in ${composeChoices.find(w=>w.id===composeTeam)?.name||'current workspace'}`;
+    if(composeTeam==='*'){$('compose').setAttribute('aria-haspopup','dialog');$('compose').setAttribute('aria-controls','workspace-dialog');}else{$('compose').removeAttribute('aria-haspopup');$('compose').removeAttribute('aria-controls');}
+    const picker=$('workspace-picker'),selected=viewTeam()||'',directory=[...(snapshot.workspaceDirectory||[])];
+    const name=selected==='*'?'All workspaces':directory.find(w=>w.id===selected)?.name||snapshot.workspaces.find(w=>w.id===selected)?.name||'Workspace';
+    picker.textContent=name;picker.setAttribute('aria-label',`${name}, choose workspace`);picker.title=`Switch workspace · ${name}`;picker.disabled=!connected();
+    const options=$('workspace-options'),workspaceSignature=JSON.stringify([selected,directory,connected(),workspacePickerPurpose]);
+    if(options.dataset.signature!==workspaceSignature){
+      const focused=shadow.activeElement?.dataset.workspace;
+      const choices=workspacePickerPurpose==='compose'?directory:[{id:'*',name:'All workspaces',connected:true},...directory];
+      const rows=choices.map(w=>{
+        const button=el('button','workspace-option');button.type='button';button.dataset.workspace=w.id;button.disabled=!connected()||!w.connected;
+        button.setAttribute('aria-pressed',String(workspacePickerPurpose==='switch'&&w.id===selected));
+        button.append(el('span','workspace-name',w.name));const check=el('span','workspace-check',workspacePickerPurpose==='switch'&&w.id===selected?'✓':'');check.setAttribute('aria-hidden','true');button.append(check);return button;
+      });
+      options.replaceChildren(...rows);options.dataset.signature=workspaceSignature;
+      if(workspaceDialog.open&&focused)rows.find(b=>b.dataset.workspace===focused&&!b.disabled)?.focus();
+    }
     const rows = filtered();
     const listScroll = $('list').scrollTop;
     const focusKey = shadow.activeElement?.classList.contains('row')?shadow.activeElement.dataset.key:null;
@@ -295,6 +317,7 @@
     }
   }
   function applyLayout() {
+    closeWorkspacePicker(false);
     host.dataset.edge=edge;
     $('opener').hidden = mode !== 'stock';$('edge-tab').hidden=mode!=='strip';
     shadow.querySelector('.shell').hidden = ['stock','hidden','strip'].includes(mode);
@@ -396,7 +419,14 @@
   shadow.addEventListener('click',event=>{
     event.stopPropagation();const button=event.target.closest('button');if(!button)return;
     touch();clearTimeout(hoverTimer);hoverIntent=null;
-    if(button.dataset.key)openItem(button.dataset.key,{reader:event.altKey});
+    if(button.id==='workspace-picker')openWorkspacePicker();
+    else if(button.id==='workspace-close')closeWorkspacePicker();
+    else if(button.dataset.workspace){const target=button.dataset.workspace,purpose=workspacePickerPurpose;closeWorkspacePicker();if(purpose==='compose')void startCompose(target);else window.__pmeTriageAction?.(JSON.stringify({workspaceId:viewTeam(),action:'switch',target}));}
+    else if(button.id==='inbox-stock')void transition('stock');
+    else if(button.id==='inbox-collapse')void transition(restMode());
+    else if(button.id==='inbox-back')void transition('queue');
+    else if(button.id==='inbox-latest')window.__PME_REPLY__?.jumpToLatest();
+    else if(button.dataset.key)openItem(button.dataset.key,{reader:event.altKey});
     else if(button.dataset.thread)openItem(button.dataset.thread);
     else if(['done','later','pin','reopen','undo'].includes(button.id))localAction(button.id);
     else if(button.id==='compose')void startCompose();
@@ -419,12 +449,34 @@
     else if(button.id==='collapse')void transition(mode==='cluster'?'queue':restMode());
     else if(button.id==='back')void transition('queue');
   },{signal:abort.signal});
-  $('workspace-picker').addEventListener('change',()=>window.__pmeTriageAction?.(JSON.stringify({workspaceId:viewTeam(),action:'switch',target:$('workspace-picker').value})),{signal:abort.signal});
+  function closeWorkspacePicker(restoreFocus=true){
+    if(!workspaceDialog.open)return;workspaceDialog.close();$('workspace-picker').setAttribute('aria-expanded','false');$('compose').setAttribute('aria-expanded','false');
+    if(restoreFocus)$(workspacePickerPurpose==='compose'?'compose':'workspace-picker').focus({preventScroll:true});
+  }
+  function openWorkspacePicker(purpose='switch'){
+    if(workspaceDialog.open)return;workspacePickerPurpose=purpose;
+    $('workspace-dialog-title').textContent=purpose==='compose'?'Compose in…':'Workspaces';render();
+    workspaceDialog.showModal();$(purpose==='compose'?'compose':'workspace-picker').setAttribute('aria-expanded','true');
+    (workspaceDialog.querySelector('.workspace-option[aria-pressed="true"]:not(:disabled)')||workspaceDialog.querySelector('.workspace-option:not(:disabled)')||$('workspace-close')).focus();
+  }
+  workspaceDialog.addEventListener('cancel',event=>{event.preventDefault();closeWorkspacePicker();},{signal:abort.signal});
+  workspaceDialog.addEventListener('click',event=>{if(event.target===workspaceDialog){const r=workspaceDialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeWorkspacePicker();}},{signal:abort.signal});
   $('search').addEventListener('input',render,{signal:abort.signal});
   document.addEventListener('keydown',event=>{
     touch();
     if ((event.metaKey||event.ctrlKey)&&event.shiftKey&&event.code==='KeyY'&&(!snapshot.nativeHotkey||!connected())){
       event.preventDefault();event.stopImmediatePropagation();void command('toggle');return;
+    }
+    if(workspaceDialog.open){
+      event.stopImmediatePropagation();
+      if(event.key==='Escape'){event.preventDefault();closeWorkspacePicker();}
+      else if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){
+        event.preventDefault();const options=[...workspaceDialog.querySelectorAll('.workspace-option:not(:disabled)')];
+        const current=options.indexOf(shadow.activeElement),delta=event.key==='ArrowUp'?-1:1;
+        const index=event.key==='Home'?0:event.key==='End'?options.length-1:current<0?(delta>0?0:options.length-1):(current+delta+options.length)%options.length;
+        options[index]?.focus();
+      }
+      return;
     }
     if (mode==='stock')return;
     const fromTriage=event.composedPath().includes(host);
@@ -577,7 +629,7 @@
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
   idle=setInterval(observe,10000);
-  window.__PME_TRIAGE__={version:'0.18.1',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
+  window.__PME_TRIAGE__={version:'0.20.0',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
     status:()=>({mode,edge,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
     dispose:async()=>{if(disposed)return;setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);clearTimeout(pillIdleTimer);
       window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});clearDetailMotion();await geometry('stock').catch(()=>{});host.remove();delete window.__PME_TRIAGE__;
