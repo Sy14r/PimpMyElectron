@@ -14,7 +14,7 @@ If macOS prevents opening the command file, open Terminal in this folder and run
 
 ## Workflow
 
-- Side panes slide out from under the inbox and slide back when returning to the queue. Direct content switches stay instant; macOS Reduce Motion disables the resize animation. Idle collapse only affects the expanded pill.
+- Side panes slide out from under the inbox and slide back when returning to the queue. Direct content switches stay instant; macOS Reduce Motion disables the resize animation. Idle collapse only affects the expanded pill: leaving starts the configured countdown to the thin strip, returning cancels it, and Never disables it.
 - **Compose**, at the top right of the inbox, opens Slack’s native New Message
   view beside the list. Choose recipients and write in Slack’s editor. The selected
   workspace is used; All workspaces uses the active Slack workspace (shown in the

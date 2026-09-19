@@ -9,7 +9,7 @@ assert.ok(start>0&&end>start);
 function escape({mode='reply',nativeEditable=false,triageFocus=false,composing=false,handled=false,composer=false,repeat=false,presses=1}={}){
  const transitions=[],host={},body={closest:()=>null};let blurred=false;
  const native={closest:selector=>selector.includes('data-pme-native-reply-pane')?(composer?native:null):(nativeEditable||composer?native:null),blur(){blurred=true;env.document.activeElement=body;}},target=triageFocus?host:native;
- const env={mode,host,document:{activeElement:target},lastInteraction:0,Date,detailMode:()=>mode==='reply'||mode==='reading',restMode:()=>'strip',transition:next=>transitions.push(next)};
+ const env={mode,host,document:{activeElement:target},lastInteraction:0,touch(){},Date,detailMode:()=>mode==='reply'||mode==='reading',restMode:()=>'strip',transition:next=>transitions.push(next)};
  const listener=vm.runInNewContext(`(${source.slice(start,end)})`,env);
  let prevented=false,stopped=false;
  for(let i=0;i<presses;i++)listener({key:'Escape',code:'Escape',repeat,isComposing:composing,defaultPrevented:handled,composedPath:()=>[env.document.activeElement],preventDefault(){prevented=true;},stopImmediatePropagation(){stopped=true;}});

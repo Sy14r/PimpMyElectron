@@ -5,7 +5,7 @@
   if (!document.body) { document.addEventListener('DOMContentLoaded', installTriage, { once: true }); return; }
   const abort = new AbortController();
   let settings={edge:'right',rest:'strip',display:'main',idleSeconds:60},lastInteraction=Date.now(),displayInfo=[],displaySignature='',hoverTimer,hoverIntent=null;
-  let compactBounds=null,cursorCheckPending=false,stagedDetail=false;
+  let compactBounds=null,cursorCheckPending=false,stagedDetail=false,pillIdleTimer,pillPointerInside=false;
   let pillPreview=null;
   let lastHostUpdate=0,hostDisconnected=false;
   const connected=()=>Date.now()-lastHostUpdate<7000;
@@ -358,7 +358,7 @@
   }
   function transition(next,{stage=false}={}) {
     if (disposed || !['stock','hidden','strip','cluster','queue','reading','reply'].includes(next)) return Promise.resolve();
-    clearTimeout(hoverTimer);hoverIntent=null;
+    clearTimeout(hoverTimer);hoverIntent=null;clearTimeout(pillIdleTimer);
     setPillPreview(null);
     if(next!=='reply'){++openSequence;openingKey=null;}
     nativeQueue = nativeQueue.catch(()=>{}).then(async()=>{
@@ -388,12 +388,14 @@
         if (next === 'cluster') $('home').focus({preventScroll:true});
         if (next === 'stock') previousFocus?.focus?.({preventScroll:true});
       }
+      if(next!=='cluster')pillPointerInside=false;
+      if(next==='cluster')touch();else schedulePillCollapse();
       reportShell(['strip','hidden','cluster'].includes(next));
     });return nativeQueue;
   }
   shadow.addEventListener('click',event=>{
     event.stopPropagation();const button=event.target.closest('button');if(!button)return;
-    lastInteraction=Date.now();clearTimeout(hoverTimer);hoverIntent=null;
+    touch();clearTimeout(hoverTimer);hoverIntent=null;
     if(button.dataset.key)openItem(button.dataset.key,{reader:event.altKey});
     else if(button.dataset.thread)openItem(button.dataset.thread);
     else if(['done','later','pin','reopen','undo'].includes(button.id))localAction(button.id);
@@ -420,7 +422,7 @@
   $('workspace-picker').addEventListener('change',()=>window.__pmeTriageAction?.(JSON.stringify({workspaceId:viewTeam(),action:'switch',target:$('workspace-picker').value})),{signal:abort.signal});
   $('search').addEventListener('input',render,{signal:abort.signal});
   document.addEventListener('keydown',event=>{
-    lastInteraction=Date.now();
+    touch();
     if ((event.metaKey||event.ctrlKey)&&event.shiftKey&&event.code==='KeyY'&&(!snapshot.nativeHotkey||!connected())){
       event.preventDefault();event.stopImmediatePropagation();void command('toggle');return;
     }
@@ -479,13 +481,25 @@
     if(op==='toggle'&&resumeReply&&['stock','strip','cluster','hidden'].includes(mode)&&window.__PME_REPLY__?.status().target){await startReply(window.__PME_REPLY__.status().target);const w=desktop.window;await w.callBrowserWindowMethod(await w.getWindowId(),'focus');return {mode};}
     if(op==='minimize'){const w=desktop.window;await w.callBrowserWindowMethod(await w.getWindowId(),'minimize');reportShell(true);return {mode,returnFocus:true};}
     if(!['stock','hidden','strip','cluster','queue','reading','reply'].includes(next))return {mode};
-    lastInteraction=Date.now();await transition(next);
+    touch();await transition(next);
     if(['stock','queue','reading','reply'].includes(next)){const w=desktop.window;await w.callBrowserWindowMethod(await w.getWindowId(),'focus');}
     return {mode,returnFocus:['strip','hidden','cluster'].includes(mode)};
   }
+  function schedulePillCollapse(){
+    clearTimeout(pillIdleTimer);
+    if(disposed||mode!=='cluster'||pillPointerInside||settings.idleSeconds<=0)return;
+    const delay=Math.max(0,settings.idleSeconds*1000-(Date.now()-lastInteraction));
+    pillIdleTimer=setTimeout(()=>{
+      if(disposed||mode!=='cluster'||pillPointerInside||settings.idleSeconds<=0)return;
+      if(Date.now()-lastInteraction<settings.idleSeconds*1000){schedulePillCollapse();return;}
+      void transition('strip');
+    },delay);
+  }
+  function touch(){lastInteraction=Date.now();schedulePillCollapse();}
   function pillHover(inside){
-    if(inside)lastInteraction=Date.now();
-    const intent=inside&&mode==='strip'?'cluster':!inside&&mode==='cluster'&&restMode()==='strip'?'strip':null;
+    const changed=pillPointerInside!==inside;pillPointerInside=inside;
+    if(inside||changed)touch();
+    const intent=inside&&mode==='strip'?'cluster':null;
     if(intent===hoverIntent)return;
     clearTimeout(hoverTimer);hoverIntent=intent;
     if(intent){
@@ -494,10 +508,10 @@
         let visible=true;
         try{const w=window.desktop?.window;if(w?.callBrowserWindowMethod){const id=await w.getWindowId();visible=await w.callBrowserWindowMethod(id,'isVisible')&&!await w.callBrowserWindowMethod(id,'isMinimized');}}catch{visible=false;}
         if(!disposed&&mode===from&&hoverIntent===intent){hoverIntent=null;if(visible)void transition(intent);}
-      },inside?180:600);
+      },180);
     }
   }
-  shadow.addEventListener('pointermove',()=>{lastInteraction=Date.now();if(['strip','cluster'].includes(mode))pillHover(true);},{signal:abort.signal});
+  shadow.addEventListener('pointermove',()=>{touch();if(['strip','cluster'].includes(mode))pillHover(true);},{signal:abort.signal});
   host.addEventListener('pointerleave',()=>{pillHover(false);setPillPreview(null);},{signal:abort.signal});
   host.addEventListener('pointerenter',()=>pillHover(true),{signal:abort.signal});
   $('edge-tab').addEventListener('pointerenter',()=>pillHover(true),{signal:abort.signal});
@@ -528,7 +542,6 @@
     if(disposed)return;
     const pulse=Date.now();reportShell(false,pulse-lastPulse>15000);lastPulse=pulse;
     if(hostDisconnected===connected()){hostDisconnected=!connected();render();}
-    if(mode==='cluster'&&settings.idleSeconds>0&&Date.now()-lastInteraction>settings.idleSeconds*1000)void transition(restMode());
     try{const displays=await desktop.screen.getAllDisplays();const signature=JSON.stringify(displays.map(d=>[d.id,d.workArea]));
       if(displaySignature&&signature!==displaySignature&&!['stock','hidden'].includes(mode))void transition(mode);displaySignature=signature;
     }catch{}
@@ -564,9 +577,9 @@
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
   idle=setInterval(observe,10000);
-  window.__PME_TRIAGE__={version:'0.18.0',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
+  window.__PME_TRIAGE__={version:'0.18.1',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
     status:()=>({mode,edge,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
-    dispose:async()=>{if(disposed)return;setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);
+    dispose:async()=>{if(disposed)return;setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);clearTimeout(pillIdleTimer);
       window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});clearDetailMotion();await geometry('stock').catch(()=>{});host.remove();delete window.__PME_TRIAGE__;
     }};
   observe();render();

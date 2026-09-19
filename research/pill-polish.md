@@ -188,3 +188,22 @@ Validation: live computed styles confirmed both scrollbar overrides and a
 scrollable list. Only All, Unread, Mentions, DMs and Threads were rendered. The
 actual restoration code passed checks for all three removed filters and a
 retained Unread selection. Renderer syntax and diff checks passed.
+
+## One authoritative pill-collapse countdown — 0.18.1
+
+A legacy mouse-leave timer collapsed the expanded pill after 600ms independently
+of the configured idle delay. It competed with the pill-only idle check added in
+0.18.0, so selecting 15 seconds did not control hover-exit behavior.
+
+Both collapse paths are replaced by one countdown using the selected delay.
+Entering the pill cancels it; leaving starts a fresh countdown. Repeated outside
+cursor observations do not restart it. Never disables it. The timeout rechecks
+mode, disposal, pointer state and the current delay before collapsing to the thin
+strip. Keyboard/click activity renews the countdown, and the inbox and detail
+views never arm it. Entering the strip still uses the 180ms hover reveal delay.
+
+Validation: all 109 tests passed, including exact fake-clock boundaries, re-entry,
+Never, repeated cursor polls, changed settings and stale callbacks. With the real
+15-second setting and pointer outside, the running pill stayed expanded at 1 and
+14 seconds and was a strip at 16 seconds. The user's existing 15-second setting
+was retained.
