@@ -4,7 +4,7 @@
   if(!document.head||!document.body){document.addEventListener('DOMContentLoaded',installNativeReply,{once:true});return;}
   const key='__pme_native_reply_v1',abort=new AbortController();
   let target=null,active=false,state='idle',reason='',pane=null,editor=null,generation=0,disposed=false,scrollMethod=null,threadNavigation=null;
-  const valid=t=>t&&/^[TE][A-Z0-9]+$/.test(t.workspaceId)&&/^[CDG][A-Z0-9]+$/.test(t.channelId)&&(!t.threadTs||/^\d+\.\d+$/.test(t.threadTs));
+  const valid=t=>t&&/^[TE][A-Z0-9]+$/.test(t.workspaceId)&&(t.kind==='compose'?!t.channelId&&!t.threadTs:/^[CDG][A-Z0-9]+$/.test(t.channelId)&&(!t.threadTs||/^\d+\.\d+$/.test(t.threadTs)));
   try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(valid(saved?.target)&&Date.now()-saved.at<86400000){target=saved.target;active=saved.active===true;}}catch{}
   const style=document.createElement('style');style.id='pme-native-reply-style';
   style.textContent=`[data-pme-native-reply-pane]{position:fixed!important;inset:0 0 0 420px!important;width:calc(100vw - 420px)!important;height:100vh!important;max-height:none!important;min-width:0!important;z-index:2!important;background:var(--sk_primary_background,#1a1d21);}
@@ -16,15 +16,28 @@
   const path=()=>location.pathname.split('/');
   const nativeTeam=()=>document.querySelector('[data-qa="team_sidebar_item"][data-team-active="true"]')?.getAttribute('data-team');
   const inWorkspace=()=>target&&path()[2]===target.workspaceId&&nativeTeam()===target.workspaceId;
-  const inConversation=()=>inWorkspace()&&path()[3]===target.channelId;
+  const inConversation=()=>target?.kind!=='compose'&&inWorkspace()&&path()[3]===target.channelId;
   function save(){try{target?sessionStorage.setItem(key,JSON.stringify({target,active,at:Date.now()})):sessionStorage.removeItem(key);}catch{}}
   function notify(){window.dispatchEvent(new CustomEvent('pme-native-reply-state'));}
   function status(){return {active,state,reason,target:target&&{...target},ready:active&&state==='ready'&&verified(),scrollMethod,threadNavigation};}
   function unframe(){document.body?.removeAttribute('data-pme-native-reply');for(const n of document.querySelectorAll('[data-pme-native-reply-pane]'))n.removeAttribute('data-pme-native-reply-pane');pane=null;editor=null;}
   function verified(){
-    if(!active||!inConversation()||!pane?.isConnected||!editor?.isConnected||!pane.contains(editor))return false;
+    if(!active||!pane?.isConnected)return false;
+    if(target.kind==='compose'){
+      const found=locateCompose();if(!found||found.view!==pane)return false;
+      editor=found.input;return true;
+    }
+    if(!inConversation()||!editor?.isConnected||!pane.contains(editor))return false;
     const box=editor.closest('[data-qa="message_input"]');
     return box?.getAttribute('data-channel-id')===target.channelId&&(box.getAttribute('data-thread-ts')||null)===(target.threadTs||null);
+  }
+  function locateCompose(){
+    if(!inWorkspace())return null;
+    const pages=[...document.querySelectorAll('[data-qa="composer_page"]')];
+    if(pages.length!==1)return null;
+    const page=pages[0],input=page.querySelector('[data-qa="texty_input"][contenteditable="true"]'),view=page.closest('.p-view_contents');
+    if(!input||!view)return null;
+    return {input,view,recipient:page.querySelector('[data-qa="composer_page__destination-input"]')};
   }
   function locate(threadTs=target?.threadTs){
     if(!inConversation())return null;
@@ -52,7 +65,7 @@
     navigate({channelId:target.channelId,ts:target.threadTs});return true;
   }
   function jumpToLatest(){
-    if(!verified()||state!=='ready')return {ok:false};
+    if(target?.kind==='compose'||!verified()||state!=='ready')return {ok:false};
     let usedNative=false;
     try{
       const jump=target.threadTs?
@@ -73,12 +86,13 @@
   async function open(request){
     if(!valid(request)||disposed)return {ok:false,error:'Invalid reply destination'};
     const run=++generation;unframe();scrollMethod=null;threadNavigation=null;
-    target={workspaceId:request.workspaceId,channelId:request.channelId,threadTs:request.threadTs||null,
+    target=request.kind==='compose'?{kind:'compose',workspaceId:request.workspaceId,key:`${request.workspaceId}:compose`,name:'New message',workspaceName:String(request.workspaceName||request.workspaceId).slice(0,180)}:
+      {workspaceId:request.workspaceId,channelId:request.channelId,threadTs:request.threadTs||null,
       key:request.key||`${request.workspaceId}:${request.channelId}:${request.threadTs||''}`,name:String(request.name||request.channelId).slice(0,180),workspaceName:String(request.workspaceName||request.workspaceId).slice(0,180)};
-    active=true;state='loading';reason='Opening Slack’s native editor…';save();notify();
+    active=true;state='loading';reason=target.kind==='compose'?'Opening Slack’s new message composer…':'Opening Slack’s native editor…';save();notify();
     // Use Slack's own navigation. Assigning a URL can race the desktop client's
     // remembered workspace and restore the old route over the requested editor.
-    let workspaceClicked=false,channelClicks=0,lastChannelClick=0,threadClicked=false,tabClicked=false,auxClosed=false;
+    let workspaceClicked=false,channelClicks=0,lastChannelClick=0,threadClicked=false,tabClicked=false,auxClosed=false,composeClicked=false;
     const deadline=Date.now()+10000;
     try{for(let i=0;i<65&&Date.now()<deadline;i++){
       if(disposed||run!==generation||!active)return {cancelled:true};
@@ -88,18 +102,23 @@
       }
       // A Canvas/popout can obscure the conversation while its URL stays the
       // same. Selecting the native row also restores the actual message view.
-      if(inWorkspace()&&channelClicks<3&&!threadClicked&&Date.now()-lastChannelClick>=750&&!locate()){
+      if(target.kind==='compose'&&inWorkspace()&&!composeClicked&&!locateCompose()){
+        const button=document.querySelector('[data-qa="composer_button"]');
+        if(button){composeClicked=true;button.click();}
+      }
+      if(target.kind!=='compose'&&inWorkspace()&&channelClicks<3&&!threadClicked&&Date.now()-lastChannelClick>=750&&!locate()){
         const row=[...document.querySelectorAll('[data-qa="channel-sidebar-channel"]')].find(n=>n.getAttribute('data-qa-channel-sidebar-channel-id')===target.channelId);
         if(row){channelClicks++;lastChannelClick=Date.now();row.click();}
       }
-      const found=locate();
+      const found=target.kind==='compose'?locateCompose():locate();
       if(found){
         pane=found.view;editor=found.input;pane.setAttribute('data-pme-native-reply-pane','');document.body.setAttribute('data-pme-native-reply','');
         state='ready';reason='Slack’s editor · sending and drafts are handled by Slack';save();notify();
         // Allow the reframed list to measure its final height before jumping.
         await pause(80);if(disposed||run!==generation||!active)return {cancelled:true};
         if(!verified()){fail('The Slack destination changed. Reopen the conversation to continue.');return {ok:false,error:reason};}
-        jumpToLatest();editor.focus({preventScroll:true});return {ok:true};
+        if(target.kind==='compose')(found.recipient||editor).focus({preventScroll:true});
+        else{jumpToLatest();editor.focus({preventScroll:true});}return {ok:true};
       }
       if(inConversation()){
         // Once we click a thread, its pane can mount before its editor.
@@ -118,7 +137,7 @@
       }
       await pause(150);
     }}catch{if(run===generation&&active)fail('Slack could not open this destination. Retry or open it in Normal Slack.');return {ok:false,error:reason};}
-    if(run===generation&&active)fail(target.threadTs?'This thread is not loaded in Slack’s view. Open it in Normal Slack, then retry.':'Slack’s editor is unavailable here. Open the conversation in Normal Slack, then retry.');
+    if(run===generation&&active)fail(target.kind==='compose'?'Slack’s new message composer is unavailable. Retry or use Normal Slack.':target.threadTs?'This thread is not loaded in Slack’s view. Open it in Normal Slack, then retry.':'Slack’s editor is unavailable here. Open the conversation in Normal Slack, then retry.');
     return {ok:false,error:reason};
   }
   function suspend({forget=false}={}){generation++;active=false;state='idle';reason='';unframe();if(forget)target=null;save();notify();}
@@ -129,7 +148,15 @@
     if(sending&&(state!=='ready'||!verified())){event.preventDefault();event.stopImmediatePropagation();fail('The Slack destination changed. Reopen the conversation to continue.');}
   }
   document.addEventListener('click',guard,{capture:true,signal:abort.signal});document.addEventListener('keydown',guard,{capture:true,signal:abort.signal});
-  const timer=setInterval(()=>{if(active&&state==='ready'&&!verified())fail('The Slack destination changed. Reopen the conversation to continue.');},250);
+  const timer=setInterval(()=>{
+    if(!active||state!=='ready'||verified())return;
+    // Sending or closing New Message can leave its page through native routing.
+    // Return to the queue; never guess the new conversation's recipients.
+    if(target.kind==='compose'&&inWorkspace()&&!document.querySelector('[data-qa="composer_page"]')){
+      suspend({forget:true});window.dispatchEvent(new CustomEvent('pme-native-compose-closed'));return;
+    }
+    fail('The Slack destination changed. Reopen the conversation to continue.');
+  },250);
   window.__PME_REPLY__={open,status,suspend,jumpToLatest,
     dispose(){if(disposed)return;suspend();disposed=true;abort.abort();clearInterval(timer);style.remove();delete window.__PME_REPLY__;window.dispatchEvent(new CustomEvent('pme-native-reply-state'));}};
   window.dispatchEvent(new CustomEvent('pme-native-reply-installed'));

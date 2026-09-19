@@ -23,7 +23,7 @@
       .signal{width:7px;height:7px;border-radius:50%;background:#99d3b9}.shell{pointer-events:auto;position:fixed;inset:0;background:#141925;display:flex;box-shadow:0 0 60px #0007}
       .rail{width:44px;flex-shrink:0;background:#10141f;border-right:1px solid #ffffff0c;display:flex;flex-direction:column;align-items:center;gap:9px;padding:12px 0}.rail button{width:32px;height:32px;font-size:13px;background:#ffffff07;color:#a4adc0}.rail .brand{background:#b6a5e8;color:#20182b;font-weight:800}.spacer{flex:1}
       .queue{width:376px;flex-shrink:0;display:flex;flex-direction:column;padding:22px 16px 12px;border-right:1px solid #ffffff10;min-height:0}.eyebrow{font-size:10px;font-weight:600;letter-spacing:1.7px;color:#b3a4d5;text-transform:uppercase}h1{font-size:25px;line-height:1.2;letter-spacing:-.6px;margin:8px 0}#workspace{color:#8f9aaf;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .scope{display:flex;align-items:center;gap:6px;margin:17px 0 12px;font-size:11px;color:#9eacbc}.scope .signal{width:5px;height:5px}#search{width:100%;border:1px solid #ffffff12;border-radius:8px;background:#ffffff05;padding:9px 11px;outline-offset:0;font-size:12px}#search::placeholder{color:#758196}
+      .queue-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.queue-heading h1{min-width:0}#compose{padding:7px 10px;background:#ab8cdd20;color:#d6c8ef;flex-shrink:0}#compose:hover{background:#ab8cdd35}#search{margin-top:12px;width:100%;border:1px solid #ffffff12;border-radius:8px;background:#ffffff05;padding:9px 11px;outline-offset:0;font-size:12px}#search::placeholder{color:#758196}
       .filters{display:flex;gap:4px;flex-wrap:wrap;margin:12px 0}.filters button{padding:5px 9px;font-size:11px;color:#94a2b8}.filters button[aria-pressed="true"]{color:#d0bdf5;background:#ab8cdd20}
       #list{overflow:auto;flex:1;min-height:60px;padding:2px;scrollbar-width:none}#list::-webkit-scrollbar{display:none}.row{display:block;width:100%;text-align:left;border:1px solid transparent;padding:12px 10px;margin-bottom:4px}.row.selected{background:#a492d017;border-color:#b6a1e940}.row-head{display:flex;gap:7px;align-items:center}.kind{color:#7787a0;font-size:15px;width:15px;flex-shrink:0}.name{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;flex:1}.unread{width:6px;height:6px;background:#bca9f0;border-radius:50%}.badge{font-size:10px;color:#c5b3ee}.preview{font-size:11.5px;line-height:1.5;color:#8796ae;margin:7px 0 0 22px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.meta{font-size:10px;color:#748299;margin:5px 0 0 22px}
       .empty{padding:24px 10px;color:#8796af;font-size:12px;line-height:1.6}#notice:empty{display:none}
@@ -44,7 +44,7 @@
     <button id="opener" aria-label="Open triage"><span class="signal"></span>Triage</button>
     <section class="shell" hidden aria-label="Slack triage">
       <nav class="rail" aria-label="Triage views"><button class="brand" id="home" aria-label="Show queue">T</button><button id="rail-unread" aria-label="Unread observed conversations">●</button><button id="reply-latest" hidden aria-label="Jump to latest messages" title="Jump to latest messages">↓</button><div id="pill-items" aria-label="Unread conversations and threads"></div><button id="pill-empty" type="button" hidden aria-label="Open triage inbox" title="All caught up · Open triage inbox">✓</button><div class="spacer"></div><button id="restore" aria-label="Return to normal Slack" title="Normal Slack">↗</button><button id="collapse" aria-label="Collapse to rail" title="Collapse">›</button></nav>
-      <section class="queue"><div class="eyebrow">Your attention, in one place</div><h1>Your attention</h1><div id="workspace"></div><select id="workspace-picker" aria-label="Workspace"></select><div class="scope"><span class="signal"></span><span id="scope">Reading what Slack has loaded</span></div><input id="search" type="search" placeholder="Filter conversations…" aria-label="Filter observed conversations" autocomplete="off">
+      <section class="queue"><div class="eyebrow">Your attention, in one place</div><div class="queue-heading"><h1>Your attention</h1><button id="compose" type="button" aria-label="Compose new message">Compose</button></div><div id="workspace"></div><select id="workspace-picker" aria-label="Workspace"></select><input id="search" type="search" placeholder="Filter conversations…" aria-label="Filter observed conversations" autocomplete="off">
         <div class="activity-controls"><button id="activity-refresh">Refresh activity</button><button id="activity-more" hidden>More conversations</button></div><div id="activity-status" role="status"></div><div class="filters" role="group" aria-label="Filter activity"><button data-filter="all" aria-pressed="true">All</button><button data-filter="unread" aria-pressed="false">Unread</button><button data-filter="mentions" aria-pressed="false">Mentions</button><button data-filter="dms" aria-pressed="false">DMs</button><button data-filter="threads" aria-pressed="false">Threads</button></div><div id="list" aria-label="Observed conversations"></div>
         <div id="notice" role="status"></div>
       </section>
@@ -130,12 +130,19 @@
     await window.__PME_REPLY__?.open(destination);
     if(run===openSequence&&!disposed)render();
   }
+  function startCompose(){
+    const workspaceId=viewTeam()==='*'?team():viewTeam();
+    if(!workspaceId||$('compose').disabled)return;
+    return startReply({kind:'compose',workspaceId,key:`${workspaceId}:compose`,name:'New message'});
+  }
   function renderReply(){
     const reply=window.__PME_REPLY__?.status(),ready=!openingKey&&reply?.ready===true&&reply.target?.key===selection;
     const controls=shadow.querySelector('.triage-controls'),container=mode==='reply'?$('reply-chrome'):shadow.querySelector('.reader-header');
     if(controls.parentElement!==container){if(mode==='reply')container.append(controls);else container.insertBefore(controls,$('mark-status'));}
     $('mark-read').hidden=mode==='reply';
-    $('reply-latest').hidden=mode!=='reply'||!ready;
+    $('reply-latest').hidden=mode!=='reply'||!ready||reply?.target?.kind==='compose';
+    $('reply-back').hidden=reply?.target?.kind==='compose';
+    controls.hidden=mode==='reply'&&reply?.target?.kind==='compose';
     $('reply-chrome').hidden=mode!=='reply'||ready;$('reply-placeholder').hidden=mode!=='reply'||ready;
     const destination=openingKey?items().find(i=>i.key===openingKey):reply?.target;
     $('reply-destination').textContent=destination?`${destination.workspaceName||snapshot.workspaceDirectory?.find(w=>w.id===destination.workspaceId)?.name||destination.workspaceId} · ${destination.name}${destination.threadTs?' · Thread':''}`:'Native Slack conversation';
@@ -143,6 +150,7 @@
     $('reply-placeholder').textContent=openingKey?'Opening native conversation…':reply?.reason||'Native chat is unavailable. Use Read-only view or Normal Slack.';
     $('reply-retry').hidden=reply?.state!=='error';
   }
+  window.addEventListener('pme-native-compose-closed',()=>{if(mode==='reply')void transition('queue');},{signal:abort.signal});
   window.addEventListener('pme-native-reply-state',renderReply,{signal:abort.signal});
   window.addEventListener('pme-native-reply-installed',()=>{const r=window.__PME_REPLY__?.status();if(r?.target&&(r.active||mode==='reply'))void startReply(r.target);},{signal:abort.signal});
   function openReader(key){++openSequence;openingKey=null;selection=key;void transition('reading');requestHistory();}
@@ -191,7 +199,6 @@
     renderReply();renderPill();
     try{sessionStorage.setItem(viewKey,JSON.stringify({selection,filter,resumeReply}));}catch{}
     $('workspace').textContent = snapshot.workspaces.map(w => w.name).join(' · ') || 'Waiting for workspace activity…';
-    $('scope').textContent = `${items().length} observed · coverage is partial`;
     for (const button of shadow.querySelectorAll('[data-filter]')) button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
     const activeWorkspace=snapshot.workspaces[0],activity=activeWorkspace?.activity;
     const waiting=Math.max(0,Math.ceil(((activity?.nextAt||0)-Date.now())/1000));
@@ -199,10 +206,13 @@
     $('activity-refresh').disabled=unavailable;
     $('activity-refresh').title='Optional extra Slack API reads for the selected workspace. No background polling.';
     $('activity-more').hidden=viewTeam()==='*'||!activity?.hasMore;$('activity-more').disabled=unavailable;
-    const detail=!snapshot.customReadsAvailable?'Custom API reads disabled':viewTeam()==='*'?'Select a workspace for an optional refresh':activity?.status==='loading'?'Refreshing on request…':activity?.queued?'Refresh queued…':
-      activity?.status==='error'?activity.error:waiting?`Manual refresh available in ${waiting}s`:activity?.countsAvailable===false?'Some unread/thread information unavailable':activity?.hasMore?'More conversations available on request':'';
-    $('activity-status').textContent=snapshot.network==='offline'?'Slack reports offline · cached messages and local triage are available':
-      [snapshot.workspaces.some(w=>w.clientState?.at&&Date.now()-w.clientState.at<45000)?'Observing Slack’s cached state · no background polling':'Using Slack’s activity · no background polling',snapshot.workspaces.some(w=>w.clientState?.truncated)?'Cache coverage limited':detail].filter(Boolean).join(' · ');
+    shadow.querySelector('.activity-controls').hidden=!snapshot.customReadsAvailable;
+    $('activity-status').textContent=snapshot.network==='offline'?'Slack is offline':
+      activity?.status==='loading'?'Refreshing…':activity?.status==='error'?'Refresh failed. Try again.':'';
+    $('activity-status').hidden=!$('activity-status').textContent;
+    const composeTeam=viewTeam()==='*'?team():viewTeam();
+    $('compose').disabled=!connected()||!window.__PME_REPLY__||!composeTeam;
+    $('compose').title=`Compose in ${snapshot.workspaceDirectory?.find(w=>w.id===composeTeam)?.name||'current workspace'}`;
     const picker=$('workspace-picker'),directory=snapshot.workspaceDirectory||[];
     if(JSON.stringify(directory)!==picker.dataset.signature){picker.replaceChildren();const all=el('option','','All workspaces');all.value='*';picker.append(all);for(const w of directory){const option=el('option','',w.name);option.value=w.id;option.disabled=!w.connected;picker.append(option);}picker.dataset.signature=JSON.stringify(directory);}
     picker.value=viewTeam();picker.disabled=!connected();picker.hidden=directory.length<2;
@@ -338,7 +348,7 @@
       try { await geometry(next); } catch { $('notice').textContent='Window layout could not be applied. Normal Slack restores the saved layout.'; }
       if (next === 'queue') $('search').focus({preventScroll:true});
       if (next === 'reading') $('back').focus({preventScroll:true});
-      if (next === 'reply') $('reply-back').focus({preventScroll:true});
+      if (next === 'reply') $('reply-queue').focus({preventScroll:true});
       if (next === 'strip') $('edge-tab').focus({preventScroll:true});
       if (next === 'cluster') $('home').focus({preventScroll:true});
       if (next === 'stock') previousFocus?.focus?.({preventScroll:true});
@@ -351,6 +361,7 @@
     if(button.dataset.key)openItem(button.dataset.key,{reader:event.altKey});
     else if(button.dataset.thread)openItem(button.dataset.thread);
     else if(['done','later','pin','reopen','undo'].includes(button.id))localAction(button.id);
+    else if(button.id==='compose')void startCompose();
     else if(button.id==='mark-read')markRead();
     else if(button.id==='reply'||button.id==='reply-retry')void startReply(button.id==='reply-retry'?window.__PME_REPLY__?.status().target:undefined);
     else if(button.id==='reply-back')openReader(selection);
@@ -517,7 +528,7 @@
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
   idle=setInterval(observe,10000);
-  window.__PME_TRIAGE__={version:'0.16.1',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
+  window.__PME_TRIAGE__={version:'0.17.0',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
     status:()=>({mode,edge,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
     dispose:async()=>{if(disposed)return;setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);
       window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});await geometry('stock').catch(()=>{});host.remove();delete window.__PME_TRIAGE__;

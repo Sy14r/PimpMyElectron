@@ -14,6 +14,12 @@ If macOS prevents opening the command file, open Terminal in this folder and run
 
 ## Workflow
 
+- **Compose**, at the top right of the inbox, opens Slack’s native New Message
+  view beside the list. Choose recipients and write in Slack’s editor. The selected
+  workspace is used; All workspaces uses the active Slack workspace (shown in the
+  Compose tooltip). Collapse/reopen keeps the native draft. When Slack leaves the
+  New Message page, triage returns to the queue.
+
 - **⌘⇧Y** opens from your current desktop Space and collapses back to work. Configure edge, display, idle timeout and resting strip through the menu-bar T icon.
 - **Select an item once to open its native Slack conversation or thread beside the queue.** There is no separate Reply click or custom-history load first. Slack owns the messages, composer, drafts and Send control. Opening the native pane can mark the conversation read through Slack's normal behavior.
 - **Done**, **Later**, **Pin** and **Undo** in the cached reader change local records only. Done/Later save, then open the next native item; Undo restores the decision and destination. Later offers 15 minutes, 1 hour, 4 hours or 24 hours. New activity brings Done items back. A selected Attention/Unread item stays visible while open if Slack marks it read, so you can finish deciding what to do with it; this temporary hold does not persist after returning to the queue.

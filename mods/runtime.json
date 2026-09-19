@@ -37,7 +37,7 @@
     },
     {
       "id": "native-reply",
-      "version": "0.16.0",
+      "version": "0.17.0",
       "source": "src/renderer/native-reply.js",
       "global": "__PME_REPLY__",
       "requires": [
@@ -48,7 +48,7 @@
     },
     {
       "id": "triage-surface",
-      "version": "0.16.1",
+      "version": "0.17.0",
       "source": "src/renderer/triage.js",
       "global": "__PME_TRIAGE__",
       "requires": [

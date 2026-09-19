@@ -1,9 +1,9 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import fs from 'node:fs/promises';
 const source=await fs.readFile(new URL('../src/renderer/native-reply.js',import.meta.url),'utf8');
 function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeCallbacks=false,missingRoot=false,callbackTeam='TONE',selectionThrows=false,scrollThrows=false}={}){
-  const attributes=new Map(),bodyAttributes=new Map(),listeners=new Map(),storage=new Map(),navigations=[];let focused=false,removed=false;
+  const attributes=new Map(),bodyAttributes=new Map(),listeners=new Map(),storage=new Map(),navigations=[];let focused=false,removed=false,tick;const events=[];
   let threadPending=false,threadClosed=false;
-  const native={team:'TONE',switches:0,selects:0,threadNavigations:[],latestJumps:0,replyJumps:[]};
+  const native={team:'TONE',switches:0,selects:0,composeClicks:0,threadNavigations:[],latestJumps:0,replyJumps:[]};
   const teamButton={getAttribute:()=> 'TTWO',click(){native.switches++;native.team='TTWO';location.pathname='/client/TTWO/COLD';}};
   const channelRow={getAttribute:()=> 'CTWO',click(){if(selectionThrows)throw Error('native navigation failed');native.selects++;if(!delayFirstSelection||native.selects>1)box.channel='CTWO';location.pathname='/client/TTWO/CTWO';}};
   const box={channel:'CONE',thread,getAttribute(name){return name==='data-channel-id'?this.channel:name==='data-thread-ts'?this.thread:null;},querySelector:()=>editor};
@@ -15,16 +15,19 @@ function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeC
   const threadNode=nativeCallbacks?{__reactFiber$test:{memoizedProps:callbacks}}:{};
   const pane={isConnected:true,contains:n=>n===editor,setAttribute:(k,v)=>attributes.set(k,v),removeAttribute:k=>attributes.delete(k),querySelector:s=>s==='[data-qa="threads_flexpane"]'&&(thread||openingThread)?threadNode:s==='.c-virtual_list'?listNode:s==='.c-virtual_list [data-qa="slack_kit_scrollbar"]'?scroller:null};
   const editor={isConnected:true,textContent:'untouched user draft',closest:s=>s==='.p-view_contents'?pane:box,focus:()=>{focused=true;}};
+  const recipient={focused:false,focus(){this.focused=true;}};
+  const composePage={mounted:false,closest:()=>pane,querySelector:s=>s.includes('destination-input')?recipient:editor};
+  const composeButton={click(){native.composeClicks++;composePage.mounted=true;location.pathname='/client/'+native.team;}};
   const rootMessage={getAttribute:n=>n==='data-msg-ts'?openingThread:'CONE',querySelector:()=>({click(){threadPending=true;setTimeout(()=>{if(!threadClosed)box.thread=openingThread;},230);}})};
   const document={head:{append(){}},body:{setAttribute:(k,v)=>bodyAttributes.set(k,v),removeAttribute:k=>bodyAttributes.delete(k)},createElement:()=>({remove(){removed=true;}}),
-    querySelectorAll:s=>s==='[data-pme-native-reply-pane]'?(attributes.has('data-pme-native-reply-pane')?[pane]:[]):s==='[data-qa="message_input"][data-channel-id]'?[box]:s==='[data-qa="message_container"][data-msg-ts]'&&openingThread&&!missingRoot?[rootMessage]:s==='[data-qa="team_sidebar_item"]'?[teamButton]:s==='[data-qa="channel-sidebar-channel"]'?[channelRow]:[],
-    querySelector:s=>s==='[data-qa="team_sidebar_item"][data-team-active="true"]'?{getAttribute:()=>native.team}:s==='[data-qa="threads_flexpane"] button[aria-label="Close"]'&&threadPending?{click(){threadClosed=true;threadPending=false;}}:null,
+    querySelectorAll:s=>s==='[data-qa="composer_page"]'?(composePage.mounted?[composePage]:[]):s==='[data-pme-native-reply-pane]'?(attributes.has('data-pme-native-reply-pane')?[pane]:[]):s==='[data-qa="message_input"][data-channel-id]'?[box]:s==='[data-qa="message_container"][data-msg-ts]'&&openingThread&&!missingRoot?[rootMessage]:s==='[data-qa="team_sidebar_item"]'?[teamButton]:s==='[data-qa="channel-sidebar-channel"]'?[channelRow]:[],
+    querySelector:s=>s==='[data-qa="composer_button"]'?composeButton:s==='[data-qa="composer_page"]'?(composePage.mounted?composePage:null):s==='[data-qa="team_sidebar_item"][data-team-active="true"]'?{getAttribute:()=>native.team}:s==='[data-qa="threads_flexpane"] button[aria-label="Close"]'&&threadPending?{click(){threadClosed=true;threadPending=false;}}:null,
     addEventListener:(name,fn)=>listeners.set(name,fn)};
-  const window={dispatchEvent(){}};window.top=window;
+  const window={dispatchEvent(event){events.push(event.type);}};window.top=window;
   const location={origin:'https://app.slack.com',pathname:'/client/TONE/CONE',assign:url=>navigations.push(url)};
-  vm.runInNewContext(source,{window,document,location,AbortController,CustomEvent:class{},Date,setTimeout,clearInterval(){},setInterval:()=>1,
+  vm.runInNewContext(source,{window,document,location,AbortController,CustomEvent:class{constructor(type){this.type=type;}},Date,setTimeout,clearInterval(){},setInterval:fn=>{tick=fn;return 1;},
     sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}});
-  return {api:window.__PME_REPLY__,scroller,box,pane,editor,location,native,listeners,storage,navigations,attributes,bodyAttributes,focused:()=>focused,removed:()=>removed};
+  return {api:window.__PME_REPLY__,tick:()=>tick(),events,composePage,recipient,scroller,box,pane,editor,location,native,listeners,storage,navigations,attributes,bodyAttributes,focused:()=>focused,removed:()=>removed};
 }
 test('native reply frames the verified editor, preserves its draft and removes all layout changes',async()=>{
   const env=setup();assert.equal((await env.api.open({workspaceId:'TONE',channelId:'CONE'})).ok,true);
@@ -101,4 +104,30 @@ test('a thread callback belonging to another workspace is ignored in favor of th
   const env=setup({openingThread:'100.000001',nativeCallbacks:true,callbackTeam:'TOTHER'});
   const result=await env.api.open({workspaceId:'TONE',channelId:'CONE',threadTs:'100.000001'});
   assert.equal(result.ok,true);assert.equal(env.native.threadNavigations.length,0);assert.equal(env.api.status().threadNavigation,'visible-reply-bar');env.api.dispose();
+});
+
+
+test('Compose opens native recipient entry in the requested workspace and reuses its draft on resume',async()=>{
+  const env=setup();const request={kind:'compose',workspaceId:'TTWO'};
+  assert.equal((await env.api.open(request)).ok,true);assert.equal(env.native.switches,1);assert.equal(env.native.composeClicks,1);
+  assert.equal(env.native.selects,0);assert.equal(env.recipient.focused,true);assert.equal(env.api.status().ready,true);
+  assert.equal(env.api.status().target.key,'TTWO:compose');assert.equal(env.api.jumpToLatest().ok,false);
+  env.api.suspend();assert.equal((await env.api.open(request)).ok,true);assert.equal(env.native.composeClicks,1);
+  assert.equal(env.editor.textContent,'untouched user draft');assert.equal(JSON.stringify([...env.storage.values()]).includes('untouched user draft'),false);env.api.dispose();
+});
+test('Compose leaves recipient validation to Slack but blocks a different workspace',async()=>{
+  const env=setup();await env.api.open({kind:'compose',workspaceId:'TONE'});let blocked=false;
+  const event={type:'click',target:{closest:()=>({})},preventDefault(){blocked=true;},stopImmediatePropagation(){}};
+  env.listeners.get('click')(event);assert.equal(blocked,false);
+  env.native.team='TTWO';env.listeners.get('click')(event);assert.equal(blocked,true);assert.equal(env.api.status().state,'error');env.api.dispose();
+});
+test('leaving native Compose returns control to the inbox without adopting an unverified conversation',async()=>{
+  const env=setup();await env.api.open({kind:'compose',workspaceId:'TONE'});
+  env.composePage.mounted=false;env.location.pathname='/client/TONE/CNEW';env.tick();
+  assert.equal(env.api.status().active,false);assert.equal(env.api.status().target,null);assert.ok(env.events.includes('pme-native-compose-closed'));
+  assert.equal(env.editor.textContent,'untouched user draft');env.api.dispose();
+});
+test('Compose rejects mixed conversation targets before navigating',async()=>{
+  const env=setup();assert.equal((await env.api.open({kind:'compose',workspaceId:'TONE',channelId:'CONE'})).ok,false);
+  assert.equal(env.native.composeClicks,0);env.api.dispose();
 });

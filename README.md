@@ -66,6 +66,12 @@ leaving a stuck loading state. See [native navigation checks](research/native-na
 configured to always show scrollbars. Inbox filters are now All, Unread, Mentions,
 DMs and Threads. Saved Attention/Later/Done filter selections reset to All.
 
+**0.17.0** adds **Compose** at the top right of the inbox. It opens Slack’s native
+New Message view beside the queue, including recipient selection and the editor.
+It uses the selected workspace, or the active Slack workspace when All workspaces
+is selected. Collapse/reopen preserves Slack’s draft. The inbox’s observed-count
+and cached-state explanations have been removed. See [compose checks](research/native-compose.md).
+
 Before moving to another Mac, run `npm run doctor` there. It checks the installed Slack distribution, version, signature, profile ownership and build prerequisites without launching Slack or reading account data. The launcher detects Mac App Store and official direct-download distributions and selects their separate development profiles. See the setup guide for the current validation status. Build a clean source transfer with `npm run package:pilot`; the zip under `dist/` includes Start/Stop command files and excludes private state and send experiments. See [pilot setup](pilot/README.md) and [next pilot proof points](research/pilot-next.md).
 
 Quit Slack normally, then run `npm run dev`. The launcher starts official Slack in its owned development profile and automatically builds/starts the native menu controller. Existing development sign-ins persist. Press **⌘⇧Y from another app**, open or triage an item, then **⌘⇧Y** back to your work. Local triage decisions do not change Slack unread state. **Selecting an item opens Slack’s own conversation or thread pane alongside the queue immediately**, including its composer. There is no separate Reply click or custom-reader load first. **Option-click on an item** opens the lightweight cached reader. The ready native pane uses Slack’s own header; local triage actions remain in the cached reader and through keyboard shortcuts when focus is on the queue. **⌘⇧Y** collapses/reopens it while Slack keeps the draft. Opening the native view may mark the conversation read; **Done** remains local. **Open in Slack** is the ordinary-window fallback.
