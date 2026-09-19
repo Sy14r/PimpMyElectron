@@ -131,3 +131,10 @@ test('Compose rejects mixed conversation targets before navigating',async()=>{
   const env=setup();assert.equal((await env.api.open({kind:'compose',workspaceId:'TONE',channelId:'CONE'})).ok,false);
   assert.equal(env.native.composeClicks,0);env.api.dispose();
 });
+
+test('preparing a native pane defers editor focus until the reveal finishes',async()=>{
+ const env=setup();await env.api.open({workspaceId:'TONE',channelId:'CONE'},{focusEditor:false});
+ assert.equal(env.api.status().ready,true);assert.equal(env.focused(),false);
+ assert.equal(env.api.focus(),true);assert.equal(env.focused(),true);
+ env.api.suspend();assert.equal(env.api.focus(),false);env.api.dispose();
+});

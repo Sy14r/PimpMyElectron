@@ -5,7 +5,7 @@
   if (!document.body) { document.addEventListener('DOMContentLoaded', installTriage, { once: true }); return; }
   const abort = new AbortController();
   let settings={edge:'right',rest:'strip',display:'main',idleSeconds:60},lastInteraction=Date.now(),displayInfo=[],displaySignature='',hoverTimer,hoverIntent=null;
-  let compactBounds=null,cursorCheckPending=false;
+  let compactBounds=null,cursorCheckPending=false,stagedDetail=false;
   let pillPreview=null;
   let lastHostUpdate=0,hostDisconnected=false;
   const connected=()=>Date.now()-lastHostUpdate<7000;
@@ -39,6 +39,11 @@
       .shell.reply{width:420px;right:auto}.reply-chrome{position:fixed;left:420px;right:0;top:0;height:144px;pointer-events:auto;background:#191f2c;border-bottom:1px solid #ffffff16;padding:12px 16px;color:#cdd4e4;display:flex;flex-direction:column;gap:5px}.reply-chrome strong{font-size:13px}.reply-chrome small{font-size:10px;color:#a3adc0}.reply-chrome nav{display:flex;gap:8px}.reply-chrome button{font-size:11px;padding:3px 7px;background:#ffffff0a}.reply-placeholder{position:fixed;left:420px;right:0;top:144px;bottom:0;pointer-events:auto;background:#191f2c;padding:24px;color:#a3adc0;font-size:13px}
       @media(max-width:650px){.shell.reply{width:44px}.shell.reply .queue{display:none}.reply-chrome,.reply-placeholder{left:44px}}
       @media(prefers-reduced-motion:no-preference){.row{transition:background .12s}#edge-tab{transition:background .16s,box-shadow .16s}.shell.cluster .rail{animation:pill-reveal .18s ease-out}@keyframes pill-reveal{from{opacity:.5}to{opacity:1}}}@media(max-width:650px){.shell.reading .queue{display:none}.reader{width:calc(100vw - 44px)}}
+      :host([data-detail-motion]) .shell.reply{width:420px!important;right:auto}
+      :host([data-detail-motion]) .shell .queue{display:flex!important;position:relative;z-index:2;background:#141925}
+      :host([data-detail-motion]) .rail{position:relative;z-index:3}
+      :host([data-detail-motion]) .reader,:host([data-detail-motion]) .reply-chrome,:host([data-detail-motion]) .reply-placeholder{position:fixed;left:420px;right:auto;width:var(--pme-detail-width,400px);transform:translateX(calc(100vw - 420px - var(--pme-detail-width,400px)))}
+      :host([data-detail-motion]) .reader{top:0;bottom:0;z-index:1}
     </style>
     <button id="edge-tab" hidden aria-label="Reveal triage" title="Reveal triage"><span id="edge-dots" aria-hidden="true"></span><span id="edge-overflow" hidden aria-hidden="true"></span></button>
     <button id="opener" aria-label="Open triage"><span class="signal"></span>Triage</button>
@@ -120,15 +125,19 @@
     if(!item)return;
     if(!window.__PME_REPLY__){openReader(item.key);$('notice').textContent='Native chat is unavailable · opened the read-only view.';return;}
     const run=++openSequence;
+    await nativeQueue.catch(()=>{});if(run!==openSequence||disposed)return;
+    const stage=mode==='queue';
     heldRow=filtered().some(i=>i.key===item.key)?{key:item.key,filter}:null;
     selection=item.key;resumeReply=false;openingKey=item.key;
     // Mask and cancel the previous editor before waiting for window geometry.
     window.__PME_REPLY__.suspend();
     const destination={...item,workspaceName:item.workspaceName||snapshot.workspaceDirectory?.find(w=>w.id===item.workspaceId)?.name||item.workspaceId};
-    await transition('reply');if(run!==openSequence||mode!=='reply'||disposed)return;
+    await transition('reply',{stage});if(run!==openSequence||mode!=='reply'||disposed)return;
     openingKey=null;
-    await window.__PME_REPLY__?.open(destination);
-    if(run===openSequence&&!disposed)render();
+    await window.__PME_REPLY__?.open(destination,{focusEditor:!stage});
+    if(run!==openSequence||disposed||mode!=='reply')return;
+    if(stage){await transition('reply');if(run!==openSequence||disposed||mode!=='reply')return;window.__PME_REPLY__?.focus();}
+    render();
   }
   function startCompose(){
     const workspaceId=viewTeam()==='*'?team():viewTeam();
@@ -295,7 +304,15 @@
     shadow.querySelector('.queue').hidden = mode === 'cluster';
     shadow.querySelector('.reader').hidden = mode !== 'reading';
   }
-  async function geometry(next) {
+  function setDetailMotion(width=400){
+    host.dataset.detailMotion='true';host.style.setProperty('--pme-detail-width',`${width}px`);
+    document.body.setAttribute('data-pme-detail-motion','');document.body.style.setProperty('--pme-detail-width',`${width}px`);
+  }
+  function clearDetailMotion(){
+    stagedDetail=false;delete host.dataset.detailMotion;host.style.removeProperty('--pme-detail-width');
+    document.body.removeAttribute('data-pme-detail-motion');document.body.style.removeProperty('--pme-detail-width');
+  }
+  async function geometry(next,{animate=false}={}) {
     compactBounds=null;
     const w = window.desktop?.window;
     if (!w?.callBrowserWindowMethod) { $('notice').textContent = 'Window controls unavailable; triage uses the current window.'; return; }
@@ -330,28 +347,47 @@
     const height=compact?Math.min(pillHeight(next,pillItems().length),area.height):area.height;
     const y=compact?area.y+Math.round((area.height-height)/2):area.y;
     const bounds={x:edge==='right'?area.x+area.width-width:area.x,y,width,height};
-    await call('setBounds',bounds);
+    const sideWidth=Math.max(width,innerWidth)-420;
+    const moving=animate&&sideWidth>230;
+    if(moving)setDetailMotion(sideWidth);
+    try{await call('setBounds',bounds,moving);}
+    catch(error){if(!moving)throw error;await call('setBounds',bounds);}
+    // The native callback can precede the renderer's final resize frame.
+    if(moving)await new Promise(resolve=>setTimeout(resolve,50));
     if(compact)compactBounds=bounds;
   }
-  function transition(next) {
+  function transition(next,{stage=false}={}) {
     if (disposed || !['stock','hidden','strip','cluster','queue','reading','reply'].includes(next)) return Promise.resolve();
     clearTimeout(hoverTimer);hoverIntent=null;
     setPillPreview(null);
     if(next!=='reply'){++openSequence;openingKey=null;}
     nativeQueue = nativeQueue.catch(()=>{}).then(async()=>{
       if(disposed)return;
-      if (mode === 'stock' && next !== 'stock') previousFocus = document.activeElement;
-      if(mode==='reply'&&next!=='reply'){resumeReply=['strip','hidden','cluster'].includes(next);window.__PME_REPLY__?.suspend();}
-      if(next==='stock')resumeReply=false;
-      if(['stock','queue'].includes(next))heldRow=null;
-      mode=next;applyLayout();render();
-      try { await geometry(next); } catch { $('notice').textContent='Window layout could not be applied. Normal Slack restores the saved layout.'; }
-      if (next === 'queue') $('search').focus({preventScroll:true});
-      if (next === 'reading') $('back').focus({preventScroll:true});
-      if (next === 'reply') $('reply-queue').focus({preventScroll:true});
-      if (next === 'strip') $('edge-tab').focus({preventScroll:true});
-      if (next === 'cluster') $('home').focus({preventScroll:true});
-      if (next === 'stock') previousFocus?.focus?.({preventScroll:true});
+      const from=mode,isDetail=value=>['reading','reply'].includes(value);
+      const closing=isDetail(from)&&next==='queue'&&innerWidth>650;
+      const expanding=(from==='queue'||stagedDetail)&&isDetail(next);
+      const animate=!stage&&(closing||expanding)&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (from === 'stock' && next !== 'stock') previousFocus = document.activeElement;
+      try{
+        // Keep the current pane mounted while it slides back under the queue.
+        if(closing&&animate){setDetailMotion(innerWidth-420);await geometry(next,{animate:true});}
+        if(from==='reply'&&next!=='reply'){resumeReply=['strip','hidden','cluster'].includes(next);window.__PME_REPLY__?.suspend();}
+        if(next==='stock')resumeReply=false;
+        if(['stock','queue'].includes(next))heldRow=null;
+        if(stage){stagedDetail=true;setDetailMotion();}
+        else if(animate&&expanding)setDetailMotion();
+        mode=next;applyLayout();render();
+        if(!stage&&!(closing&&animate))await geometry(next,{animate});
+      }catch{$('notice').textContent='Window layout could not be applied. Normal Slack restores the saved layout.';}
+      finally{if(!stage)clearDetailMotion();}
+      if(!stage){
+        if (next === 'queue') $('search').focus({preventScroll:true});
+        if (next === 'reading') $('back').focus({preventScroll:true});
+        if (next === 'reply'&&!window.__PME_REPLY__?.status().ready) $('reply-queue').focus({preventScroll:true});
+        if (next === 'strip') $('edge-tab').focus({preventScroll:true});
+        if (next === 'cluster') $('home').focus({preventScroll:true});
+        if (next === 'stock') previousFocus?.focus?.({preventScroll:true});
+      }
       reportShell(['strip','hidden','cluster'].includes(next));
     });return nativeQueue;
   }
@@ -492,7 +528,7 @@
     if(disposed)return;
     const pulse=Date.now();reportShell(false,pulse-lastPulse>15000);lastPulse=pulse;
     if(hostDisconnected===connected()){hostDisconnected=!connected();render();}
-    if(['queue','cluster'].includes(mode)&&settings.idleSeconds>0&&Date.now()-lastInteraction>settings.idleSeconds*1000)void transition(restMode());
+    if(mode==='cluster'&&settings.idleSeconds>0&&Date.now()-lastInteraction>settings.idleSeconds*1000)void transition(restMode());
     try{const displays=await desktop.screen.getAllDisplays();const signature=JSON.stringify(displays.map(d=>[d.id,d.workArea]));
       if(displaySignature&&signature!==displaySignature&&!['stock','hidden'].includes(mode))void transition(mode);displaySignature=signature;
     }catch{}
@@ -528,10 +564,10 @@
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
   idle=setInterval(observe,10000);
-  window.__PME_TRIAGE__={version:'0.17.0',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
+  window.__PME_TRIAGE__={version:'0.18.0',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
     status:()=>({mode,edge,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
     dispose:async()=>{if(disposed)return;setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);
-      window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});await geometry('stock').catch(()=>{});host.remove();delete window.__PME_TRIAGE__;
+      window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});clearDetailMotion();await geometry('stock').catch(()=>{});host.remove();delete window.__PME_TRIAGE__;
     }};
   observe();render();
   if(window.__PME_REPLY__?.status().active&&window.__PME_REPLY__.status().target)void startReply(window.__PME_REPLY__.status().target);

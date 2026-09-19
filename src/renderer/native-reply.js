@@ -11,7 +11,8 @@
     body[data-pme-native-reply] .p-view_contents:not([data-pme-native-reply-pane]){visibility:hidden!important;}
     body[data-pme-native-reply] [data-pme-native-reply-pane]{visibility:visible!important;}
     body[data-pme-native-reply] > .ReactModalPortal > .ReactModal__Overlay{z-index:2147483647!important;}
-    @media(max-width:650px){[data-pme-native-reply-pane]{left:44px!important;width:calc(100vw - 44px)!important;}}`;
+    @media(max-width:650px){[data-pme-native-reply-pane]{left:44px!important;width:calc(100vw - 44px)!important;}}
+    body[data-pme-detail-motion] [data-pme-native-reply-pane]{left:420px!important;right:auto!important;width:var(--pme-detail-width,400px)!important;transform:translateX(calc(100vw - 420px - var(--pme-detail-width,400px)))!important;}`;
   document.head.append(style);
   const path=()=>location.pathname.split('/');
   const nativeTeam=()=>document.querySelector('[data-qa="team_sidebar_item"][data-team-active="true"]')?.getAttribute('data-team');
@@ -83,7 +84,11 @@
   }
   function fail(message){state='error';reason=message;unframe();notify();}
   const pause=ms=>new Promise(r=>setTimeout(r,ms));
-  async function open(request){
+  function focus(){
+    if(state!=='ready'||!verified())return false;
+    (target.kind==='compose'?locateCompose()?.recipient||editor:editor).focus({preventScroll:true});return true;
+  }
+  async function open(request,{focusEditor=true}={}){
     if(!valid(request)||disposed)return {ok:false,error:'Invalid reply destination'};
     const run=++generation;unframe();scrollMethod=null;threadNavigation=null;
     target=request.kind==='compose'?{kind:'compose',workspaceId:request.workspaceId,key:`${request.workspaceId}:compose`,name:'New message',workspaceName:String(request.workspaceName||request.workspaceId).slice(0,180)}:
@@ -117,8 +122,8 @@
         // Allow the reframed list to measure its final height before jumping.
         await pause(80);if(disposed||run!==generation||!active)return {cancelled:true};
         if(!verified()){fail('The Slack destination changed. Reopen the conversation to continue.');return {ok:false,error:reason};}
-        if(target.kind==='compose')(found.recipient||editor).focus({preventScroll:true});
-        else{jumpToLatest();editor.focus({preventScroll:true});}return {ok:true};
+        if(target.kind!=='compose')jumpToLatest();
+        if(focusEditor)focus();return {ok:true};
       }
       if(inConversation()){
         // Once we click a thread, its pane can mount before its editor.
@@ -157,7 +162,7 @@
     }
     fail('The Slack destination changed. Reopen the conversation to continue.');
   },250);
-  window.__PME_REPLY__={open,status,suspend,jumpToLatest,
+  window.__PME_REPLY__={open,status,suspend,jumpToLatest,focus,
     dispose(){if(disposed)return;suspend();disposed=true;abort.abort();clearInterval(timer);style.remove();delete window.__PME_REPLY__;window.dispatchEvent(new CustomEvent('pme-native-reply-state'));}};
   window.dispatchEvent(new CustomEvent('pme-native-reply-installed'));
 })();

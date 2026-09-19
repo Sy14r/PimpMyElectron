@@ -226,7 +226,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for display in displays { if let id=display["id"] as? String { displayMenu.addItem(entry(display["name"] as? String ?? id,data:["settings":["display":id]],checked:settings["display"] as? String == id)) } }
         let displayItem=NSMenuItem(title:"Display",action:nil,keyEquivalent:"");displayItem.submenu=displayMenu;menu.addItem(displayItem)
         let idleMenu=NSMenu();for seconds in [0,15,30,60,300] { idleMenu.addItem(entry(seconds == 0 ? "Never" : "\(seconds) seconds",data:["settings":["idleSeconds":seconds]],checked:settings["idleSeconds"] as? Int == seconds)) }
-        let idleItem=NSMenuItem(title:"Collapse when idle",action:nil,keyEquivalent:"");idleItem.submenu=idleMenu;menu.addItem(idleItem)
+        let idleItem=NSMenuItem(title:"Collapse pill when idle",action:nil,keyEquivalent:"");idleItem.submenu=idleMenu;menu.addItem(idleItem)
         if !workspaces.isEmpty { let sub=NSMenu();for ws in workspaces { if let id=ws["id"] as? String { let row=entry(ws["name"] as? String ?? id,data:["op":"switch","workspace":id]);row.isEnabled=ws["connected"] as? Bool == true;sub.addItem(row) } };let row=NSMenuItem(title:"Workspaces",action:nil,keyEquivalent:"");row.submenu=sub;menu.addItem(row) }
         menu.addItem(.separator());let quit=NSMenuItem(title:"Quit menu controller",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"");menu.addItem(quit);item.menu=menu
     }
