@@ -6,8 +6,16 @@ import vm from 'node:vm';
 import net from 'node:net';
 import fs from 'node:fs/promises';import os from 'node:os';import path from 'node:path';
 import {createRuntime} from '../src/live-runtime.mjs';
+import {createContextGuard} from '../src/context-guard.mjs';
 const root=fileURLToPath(new URL('..',import.meta.url));
 class FakeCDP extends EventEmitter {
+  constructor() {
+    super(); this.contextGuard=createContextGuard(this);
+    for(const [sessionId,team] of [['s1','TONE'],['s2','TTWO']]) {
+      this.contextGuard.frame(sessionId,{id:sessionId+'-frame',loaderId:'initial',url:`https://app.slack.com/client/${team}/CONE`});
+      this.emit('event',{sessionId,method:'Runtime.executionContextCreated',params:{context:{id:1,uniqueId:sessionId+'-context',origin:'https://app.slack.com',auxData:{isDefault:true,frameId:sessionId+'-frame'}}}});
+    }
+  }
   commands=[]; evaluations=[]; captures=new Map();
   async send(method,params,sessionId){this.commands.push({method,params,sessionId});return method==='Page.addScriptToEvaluateOnNewDocument'?{identifier:'script-'+sessionId}:{};}
   async evaluate(expression,sessionId){
@@ -23,9 +31,9 @@ class FakeCDP extends EventEmitter {
 test('passive runtime scopes snapshots, ignores write responses, and cleans up',async t=>{
   const cdp=new FakeCDP();
   const entries=[{targetId:'one',sessionId:'s1',url:'https://app.slack.com/client/TONE/CONE'},{targetId:'two',sessionId:'s2',url:'https://app.slack.com/client/TTWO/CONE'}];
-  const sessions=new Map(entries.map(e=>[e.targetId,e]));const runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'runtime-test-'));t.after(()=>fs.rm(runtimeDir,{recursive:true,force:true}));const runtime=await createRuntime({cdp,sessions,root,runtimeDir});
+  const sessions=new Map(entries.map(e=>[e.targetId,e]));const runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'runtime-test-'));t.after(()=>fs.rm(runtimeDir,{recursive:true,force:true}));const runtime=await createRuntime({cdp,contextGuard:cdp.contextGuard,sessions,root,runtimeDir});
   t.after(()=>runtime.dispose());for(const e of entries)await runtime.attach(e);
-  const event=(method,params,sessionId='s1')=>cdp.emit('event',{method,params,sessionId});
+  const event=(method,params,sessionId='s1')=>cdp.emit('event',{method,params:{executionContextId:1,...params},sessionId});
   for(const [i,e] of entries.entries()) event('Runtime.bindingCalled',{name:'__pmeReadOnlySnapshot',payload:JSON.stringify({workspaceId:i?'TTWO':'TONE',knownWorkspaces:[{id:'TONE',name:'One'},{id:'TTWO',name:'Two'}],channelId:'CONE',messages:[{ts:'100.000001',text:i?'two-private':'one-private'}]})},e.sessionId);
   event('Runtime.bindingCalled',{name:'__pmeReadOnlySnapshot',payload:JSON.stringify({workspaceId:'TTWO',channelId:'CONE',messages:[{ts:'100.000002',text:'spoof'}]})});
   event('Network.requestWillBeSent',{requestId:'write',request:{url:'https://app.slack.com/api/chat.postMessage',postData:'token=SECRET&text=hello'}});
@@ -70,16 +78,23 @@ test('passive runtime scopes snapshots, ignores write responses, and cleans up',
   event('Page.frameNavigated',{frame:{url:'https://example.test/client/TONE/CONE'}});
   event('Network.webSocketFrameReceived',{response:{opcode:1,payloadData:JSON.stringify({type:'message',channel:'CONE',ts:'100.000004',text:'bad-origin'})}});
   assert.equal(runtime.status().messages,4);
-  await runtime.dispose();assert.equal(cdp.listenerCount('event'),0);assert.equal(runtime.status().messages,0);
+  await runtime.dispose();cdp.contextGuard.dispose();assert.equal(cdp.listenerCount('event'),0);assert.equal(runtime.status().messages,0);
   assert.equal(cdp.commands.filter(c=>c.method==='Page.removeScriptToEvaluateOnNewDocument').length,10);
 });
 
 test('cache snapshots hydrate authorized background workspaces and reject stale renderer attribution without API calls',async t=>{
   const cdp=new FakeCDP(),entry={targetId:'one',sessionId:'s1',url:'https://app.slack.com/client/TONE/CONE'},sessions=new Map([['one',entry]]);
-  const runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'cache-runtime-'));const runtime=await createRuntime({cdp,sessions,root,runtimeDir});
+  const runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'cache-runtime-'));const runtime=await createRuntime({cdp,contextGuard:cdp.contextGuard,sessions,root,runtimeDir});
   t.after(async()=>{await runtime.dispose();await fs.rm(runtimeDir,{recursive:true,force:true});});await runtime.attach(entry);
   const snapshot={rendererWorkspaceId:'TONE',workspaceId:'TTWO',knownWorkspaces:[{id:'TONE',name:'One'},{id:'TTWO',name:'Two'}],channels:[{id:'DTWO',is_im:true,has_unreads:true}],messages:[{channel:'DTWO',ts:'100.000001',text:'cached background'}]};
-  const emit=r=>cdp.emit('event',{sessionId:'s1',method:'Runtime.bindingCalled',params:{name:'__pmeClientState',payload:JSON.stringify(r)}});
+  const emit=r=>cdp.emit('event',{sessionId:'s1',method:'Runtime.bindingCalled',params:{executionContextId:1,name:'__pmeClientState',payload:JSON.stringify(r)}});
+  for (const name of ['__pmeClientState','__pmeReadOnlySnapshot','__pmeShellState','__pmeTriageAction','__pmeLoadHistory','__pmeApiMetric']) {
+    cdp.emit('event',{sessionId:'s1',method:'Runtime.bindingCalled',params:{executionContextId:99,name,payload:JSON.stringify(snapshot)}});
+  }
+  assert.equal(runtime.status().callbackSecurity.rejected,6);
+  assert.equal(runtime.status().clientStateSnapshots,0);
+  assert.equal(runtime.status().messages,0);
+  assert.ok(cdp.commands.filter(c=>c.method==='Runtime.addBinding').every(c=>c.params.executionContextId===1));
   emit(snapshot);assert.equal(runtime.status().clientStateSnapshots,1);assert.equal(runtime.status().messages,1);
   emit({...snapshot,rendererWorkspaceId:'TTWO'});emit({...snapshot,workspaceId:'TUNKNOWN',knownWorkspaces:[]});
   assert.equal(runtime.status().clientStateSnapshots,1);assert.equal(runtime.status().messages,1);
@@ -88,9 +103,9 @@ test('cache snapshots hydrate authorized background workspaces and reject stale 
 });
 test('native hover preview uses scoped cached unread content and clears outside compact mode',async t=>{
   const cdp=new FakeCDP(),entry={targetId:'one',sessionId:'s1',url:'https://app.slack.com/client/TONE/CONE'},sessions=new Map([['one',entry]]);
-  const runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'preview-runtime-'));const runtime=await createRuntime({cdp,sessions,root,runtimeDir});
+  const runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'preview-runtime-'));const runtime=await createRuntime({cdp,contextGuard:cdp.contextGuard,sessions,root,runtimeDir});
   t.after(async()=>{await runtime.dispose();await fs.rm(runtimeDir,{recursive:true,force:true});});await runtime.attach(entry);
-  const emit=(name,value)=>cdp.emit('event',{sessionId:'s1',method:'Runtime.bindingCalled',params:{name,payload:JSON.stringify(value)}});
+  const emit=(name,value)=>cdp.emit('event',{sessionId:'s1',method:'Runtime.bindingCalled',params:{executionContextId:1,name,payload:JSON.stringify(value)}});
   emit('__pmeClientState',{rendererWorkspaceId:'TONE',workspaceId:'TTWO',knownWorkspaces:[{id:'TONE',name:'One'},{id:'TTWO',name:'Two'}],channels:[{id:'DTWO',is_im:true,has_unreads:true,last_read:'100.000001'}],messages:[{channel:'DTWO',ts:'100.000001',text:'old'},{channel:'DTWO',ts:'100.000002',text:'new'}]});
   await new Promise(r=>setTimeout(r,1600));
   const state=()=>new Promise((resolve,reject)=>{let data='';const socket=net.createConnection(path.join(runtimeDir,'shell.sock'));socket.on('connect',()=>socket.write('{"op":"state"}\n'));socket.on('error',reject);socket.on('data',c=>data+=c);socket.on('end',()=>resolve(JSON.parse(data).result));});
@@ -101,4 +116,23 @@ test('native hover preview uses scoped cached unread content and clears outside 
   assert.equal(JSON.stringify(shown).includes('UNTRUSTED'),false);
   emit('__pmeShellState',{workspaceId:'TONE',mode:'queue',preview});assert.equal((await state()).preview,null);
   assert.equal(runtime.status().customApi.requests,0);
+});
+
+test('a new main document rebinds callbacks while calls from its old context are refused',async t=>{
+  const cdp=new FakeCDP(),entry={targetId:'one',sessionId:'s1',url:'https://app.slack.com/client/TONE/CONE'},sessions=new Map([['one',entry]]);
+  const runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'navigation-runtime-'));
+  const runtime=await createRuntime({cdp,contextGuard:cdp.contextGuard,sessions,root,runtimeDir});
+  t.after(async()=>{await runtime.dispose();cdp.contextGuard.dispose();await fs.rm(runtimeDir,{recursive:true,force:true});});
+  await runtime.attach(entry);
+  const event=(method,params)=>cdp.emit('event',{sessionId:'s1',method,params});
+  const callback=executionContextId=>event('Runtime.bindingCalled',{executionContextId,name:'__pmeApiMetric',payload:JSON.stringify({adapter:'read',method:'client.counts',event:'request'})});
+  callback(1);assert.equal(runtime.status().customApi.requests,1);
+  event('Page.frameNavigated',{frame:{id:'s1-frame',loaderId:'new-document',url:entry.url}});
+  callback(1);assert.equal(runtime.status().customApi.requests,1);
+  event('Runtime.executionContextCreated',{context:{id:2,uniqueId:'new-context',origin:'https://app.slack.com',auxData:{isDefault:true,frameId:'s1-frame'}}});
+  await new Promise(r=>setTimeout(r,1600));
+  assert.equal(cdp.commands.filter(c=>c.method==='Runtime.addBinding'&&c.params.executionContextId===2).length,6);
+  callback(1);assert.equal(runtime.status().customApi.requests,1);
+  callback(2);assert.equal(runtime.status().customApi.requests,2);
+  assert.equal(runtime.status().callbackSecurity.rejected,2);
 });

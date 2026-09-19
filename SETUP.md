@@ -167,3 +167,35 @@ adapter changes; private Slack interfaces are not a stable extension API.
 Mac sleep/wake, all rich composer controls and every Slack distribution are not
 yet qualified. Automated live send/mark-read experiments are not setup steps;
 `npm test` uses the unit suite and does not send Slack messages.
+
+## Everyday controls and development mode (0.19.0)
+
+After pulling this release, **fully stop and restart** the launcher. Reloading the
+mod alone cannot replace the old launcher's developer control interface:
+
+```sh
+npm run dev:stop
+npm run dev
+```
+
+`npm run dev` and **Start Triage.command** now use everyday mode. The native menu,
+shortcuts, observer, previews and compose remain available. The local control
+socket permits status, stop, module reload and helper restart; it rejects arbitrary
+JavaScript evaluation, screenshots and network experiments. `npm run dev:status`
+reports `controlMode: "everyday"` and callback-context health. Existing module and
+cache settings are unchanged.
+
+For deliberate debugging against test workspaces, stop the everyday instance and
+launch `npm run dev:debug`. This enables arbitrary renderer evaluation and capture
+for that process only, prints a development-mode notice, and reports
+`controlMode: "development"`. A socket request cannot enable it. Live smoke scripts
+that use `inspect()` require this mode. Stop and start with `npm run dev` afterward.
+The existing integration-test profile is reused; development mode does not choose
+or isolate a different set of signed-in workspaces.
+
+Callbacks are restricted to the current default top-level Slack context, using
+CDP frame/origin metadata. Old contexts and child frames are rejected, and bindings
+are re-established after navigation. This does not sandbox trusted mod code or
+protect against scripts already executing in the authorized Slack context. The
+private CDP pipe remains necessary internally; repository and launcher code remain
+trusted. Cache retention and sign-out behavior are not changed in this release.

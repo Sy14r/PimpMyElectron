@@ -12,6 +12,12 @@ Research performed September 17–18, 2026, against **Slack 4.52.155 / Electron 
 
 The live development workflow now includes a menu-bar controller, global shortcut, thin edge strip, queue/reader disclosure, local Done/Later/Pin/Undo with keyboard advancement, explicit conversation Mark read, two-workspace aggregation, on-demand history and threads, native Slack replies inside triage, and independently removable runtime modules. It remains a partial activity view using private Slack interfaces. As of 0.12.0, background activity is passive: existing Slack responses, socket events and visible UI supply observations. There is no automatic API polling or reconnect retry. Optional API refreshes require selecting one workspace and clicking Refresh activity. Version 0.13.0 also hydrates cached conversations, messages and thread cursors directly from Slack’s existing local state, including background workspaces; see [passive state observation](research/passive-state.md). See the [API traffic audit](research/api-traffic.md), including the coverage tradeoff and corporate logout investigation.
 
+Version **0.19.0** defaults to everyday controls: arbitrary evaluation, screenshots
+and network experiments require the explicit `npm run dev:debug` launch. Callback
+senders are checked against the current top-level Slack execution context. Fully
+stop and restart after upgrading; a mod reload cannot harden an old launcher.
+See [launch modes and security boundaries](SETUP.md#everyday-controls-and-development-mode-0190).
+
 ## Live development
 
 Version **0.14.0** centers the resting strip and expanded pill vertically on the

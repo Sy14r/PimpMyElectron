@@ -11,7 +11,8 @@ const { TriageState } = await import(`./triage-state.mjs?revision=${Date.now()}`
 
 const teamFromURL = value => { try { const url = new URL(value); if (url.origin !== 'https://app.slack.com') return null;
   return url.pathname.match(/^\/client\/([TE][A-Z0-9]+)(?:\/|$)/)?.[1] || null; } catch { return null; } };
-export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(root,'.lab/dev'), slackPID=0, slackVersion }) {
+export async function createRuntime({ cdp, contextGuard, sessions, root, runtimeDir=path.join(root,'.lab/dev'), slackPID=0, slackVersion }) {
+  if (!contextGuard) throw Error('A trusted CDP context guard is required');
   const store = new ActivityStore({maxMessagesPerItem:200,maxWorkspaces:12});
   const local=await new TriageState(path.join(runtimeDir,'triage-state.json')).load();
   let actionError=null,returnEpoch=0,nativeHotkey=false;
@@ -81,15 +82,24 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
     const reports=[...uiStates.values()].filter(s=>typeof s.online==='boolean');
     refreshes.setOnline(!reports.length||reports.some(s=>s.online));
   }
+  const bindingNames = ['__pmeReadOnlySnapshot','__pmeLoadHistory','__pmeTriageAction','__pmeShellState','__pmeApiMetric','__pmeClientState'];
+  const boundContexts = new Map();
+  let rejectedCallbacks = 0;
+  async function bindContext(entry) {
+    const context = contextGuard.current(entry);
+    if (!context) { boundContexts.delete(entry.sessionId); return; }
+    const identity = context.uniqueId || context.id;
+    if (boundContexts.get(entry.sessionId) === identity) return;
+    for (const name of bindingNames) {
+      if (contextGuard.current(entry) !== context) return;
+      await cdp.send('Runtime.addBinding', {name, executionContextId: context.id}, entry.sessionId);
+    }
+    if (contextGuard.current(entry) === context) boundContexts.set(entry.sessionId, identity);
+  }
   async function attach(entry) {
     if (attached.has(entry.sessionId)) return;
     await cdp.send('Network.enable', { maxTotalBufferSize: 12 * 1024 * 1024, maxResourceBufferSize: 4 * 1024 * 1024 }, entry.sessionId);
-    await cdp.send('Runtime.addBinding', { name: '__pmeReadOnlySnapshot' }, entry.sessionId);
-    await cdp.send('Runtime.addBinding', { name: '__pmeLoadHistory' }, entry.sessionId);
-    await cdp.send('Runtime.addBinding', { name: '__pmeTriageAction' }, entry.sessionId);
-    await cdp.send('Runtime.addBinding', { name: '__pmeShellState' }, entry.sessionId);
-    await cdp.send('Runtime.addBinding', { name: '__pmeApiMetric' }, entry.sessionId);
-    await cdp.send('Runtime.addBinding', { name: '__pmeClientState' }, entry.sessionId);
+    await bindContext(entry);
     await mods.reconcile(entry);
     attached.add(entry.sessionId);
   }
@@ -98,6 +108,9 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
     const entry = entryFor(message.sessionId);
     if (!entry) return;
     const p = message.params;
+    if (message.method === 'Runtime.bindingCalled' && !contextGuard.allows(message, entry)) { rejectedCallbacks++; return; }
+    if (message.method === 'Runtime.executionContextsCleared' || message.method === 'Runtime.executionContextDestroyed') boundContexts.delete(entry.sessionId);
+    if (message.method === 'Page.navigatedWithinDocument' && contextGuard.url(entry.sessionId) === p.url) entry.url = p.url;
     if(message.method==='Runtime.bindingCalled'&&p.name==='__pmeClientState'){
       if(typeof p.payload!=='string'||p.payload.length>300000)return;
       try{const r=JSON.parse(p.payload),current=teamFromURL(entry.url);
@@ -228,6 +241,7 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
         // Deliver the explicitly selected scope only to a still-authorized Slack page.
         const scope=scopeFor(entry);
         const scoped = { ...snapshot, actionResult:actionResults.get(entry.sessionId)||null,selectedWorkspace:scope,workspaces: snapshot.workspaces.filter(w => scope==='*'?knownWorkspaces.has(w.id):w.id===scope) };
+        await bindContext(entry);
         await mods.reconcile(entry);
         await evaluate(entry, `if(location.origin==='https://app.slack.com' && location.pathname.match(/^\\/client\\/([TE][A-Z0-9]+)(?:\\/|$)/)?.[1]===${JSON.stringify(workspace)})window.__PME_TRIAGE__?.update(${JSON.stringify(scoped)})`);
       }
@@ -237,8 +251,8 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
   }, 1500);
   return {
     attach,
-    async detach(entry) { attached.delete(entry.sessionId);uiStates.delete(entry.sessionId);actionResults.delete(entry.sessionId);selectedWorkspaces.delete(entry.sessionId);mods.detach(entry);syncConnectivity(); },
-    status: () => ({ ...store.status(), ...stats, customApi:{...customApi,methods:{...customApi.methods}}, methods: Object.fromEntries(observedMethods), shapes: Object.fromEntries(shapes), socketTypes: Object.fromEntries(socketTypes),
+    async detach(entry) { attached.delete(entry.sessionId);boundContexts.delete(entry.sessionId);uiStates.delete(entry.sessionId);actionResults.delete(entry.sessionId);selectedWorkspaces.delete(entry.sessionId);mods.detach(entry);syncConnectivity(); },
+    status: () => ({ callbackSecurity:{rejected:rejectedCallbacks,ready:[...sessions.values()].filter(e=>contextGuard.current(e)).length}, ...store.status(), ...stats, customApi:{...customApi,methods:{...customApi.methods}}, methods: Object.fromEntries(observedMethods), shapes: Object.fromEntries(shapes), socketTypes: Object.fromEntries(socketTypes),
       shell:{connected:shell.connected(),hotkeyRegistered:nativeHotkey},network:refreshes.status().online?'available':'offline',apiPolicy:'manual-only',refreshQueue:{active:refreshes.status().active,queued:refreshes.status().queued},activity:refreshes.status().workspaces.map(a=>({status:a.status,at:a.at,attemptAt:a.attemptAt,nextAt:a.nextAt,hasMore:a.hasMore,countsAvailable:a.countsAvailable,threadsAvailable:a.threadsAvailable})),history:history.status(),mode: 'triage-with-native-reply', mods:mods.status(),liveUI:mods.enabled('triage-surface'), partial: true }),
     async dispose() {
       if(disposed)return;
@@ -255,7 +269,7 @@ export async function createRuntime({ cdp, sessions, root, runtimeDir=path.join(
       }
       // Complete already accepted local decisions before shutdown returns.
       await local.tail.catch(()=>{});
-      requests.clear(); attached.clear(); store.workspaces.clear();
+      requests.clear(); attached.clear(); boundContexts.clear(); store.workspaces.clear();
     }
   };
 }

@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { PipeCDP } from '../src/pipe.mjs';
 import {inspectInstallation,claimProfile} from '../src/slack-installation.mjs';
+import {createContextGuard} from '../src/context-guard.mjs';
+import {createControlPolicy} from '../src/control-policy.mjs';
+
+const controlPolicy = createControlPolicy(process.argv.slice(2));
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
@@ -23,6 +27,7 @@ const log = fs.openSync(path.join(dir, 'slack.log'), 'w', 0o600);
 const args = ['--integrationTestMode', '--remote-debugging-pipe'];
 const child = spawn(installation.executable, args, { stdio: ['ignore', log, log, 'pipe', 'pipe'] });
 const cdp = new PipeCDP(child.stdio[3], child.stdio[4]);
+const contextGuard = createContextGuard(cdp);
 const sessions = new Map();
 let stopping = false;
 let feature;
@@ -63,7 +68,7 @@ async function loadFeature() {
   feature = undefined;
   try {
     const module = await import(`../src/live-runtime.mjs?revision=${Date.now()}`);
-    feature = await module.createRuntime({ cdp, sessions, root, slackPID: child.pid, slackVersion:installation.version });
+    feature = await module.createRuntime({ cdp, contextGuard, sessions, root, slackPID: child.pid, slackVersion:installation.version });
     featureError = null;
   } catch {
     featureError = 'Mod runtime could not start. Ordinary Slack remains available; fix the module and reload.';
@@ -89,6 +94,14 @@ async function restartHelper() {
   }
   startHelper();return {helperRunning:!!helper};
 }
+async function prepareEntry(entry) {
+  if (entry.contextReady) return;
+  await cdp.send('Page.enable', {}, entry.sessionId);
+  const {frameTree} = await cdp.send('Page.getFrameTree', {}, entry.sessionId);
+  contextGuard.frame(entry.sessionId, frameTree.frame);
+  await cdp.send('Runtime.enable', {}, entry.sessionId);
+  entry.contextReady = true;
+}
 async function discover() {
   if (stopping) return;
   const { targetInfos } = await cdp.send('Target.getTargets');
@@ -102,13 +115,12 @@ async function discover() {
     try { url = new URL(target.url); } catch { continue; }
     if (url.origin !== 'https://app.slack.com') continue;
     const existing = sessions.get(target.targetId);
-    if (existing) { existing.url = target.url; await feature?.attach?.(existing).catch(() => {}); continue; }
+    if (existing) { existing.url = target.url; await prepareEntry(existing); await feature?.attach?.(existing).catch(() => {}); continue; }
     try {
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId: target.targetId, flatten: true });
     const entry = { targetId: target.targetId, sessionId, url: target.url };
     sessions.set(target.targetId, entry);
-    await cdp.send('Runtime.enable', {}, sessionId);
-    await cdp.send('Page.enable', {}, sessionId);
+    await prepareEntry(entry);
     await feature?.attach?.(entry);
     logStatus('Attached to a Slack page; message contents are not logged.');
     } catch { logStatus('A Slack page is reconnecting; other pages remain available.'); }
@@ -135,9 +147,10 @@ const server = net.createServer(connection => {
     const line = buffer.slice(0, buffer.indexOf('\n')); buffer = '';
     try {
       const request = JSON.parse(line);
+      controlPolicy.assert(request);
       let result;
       if (request.op === 'status') {
-        result = { running: !stopping, pid: child.pid, installation:{app:installation.app,version:installation.version,distribution:installation.distribution}, pages: [...sessions.values()].map(e => ({ targetId: e.targetId,
+        result = { running: !stopping, controlMode: controlPolicy.mode, pid: child.pid, installation:{app:installation.app,version:installation.version,distribution:installation.distribution}, pages: [...sessions.values()].map(e => ({ targetId: e.targetId,
           signedIn: /^https:\/\/app\.slack\.com\/client\/[TE][A-Z0-9]+/.test(e.url) })), featureError, helperRunning: !!helper, feature: feature?.status?.() || null };
       } else if(request.op==='test-network-offline'){
         result=await testOffline(request.durationMs);
@@ -191,7 +204,7 @@ const timer = setInterval(async () => {
   finally { busy = false; }
 }, 1000);
 child.on('error', error => { logStatus(error.message); void stop(); });
-child.on('exit', () => { stopping = true;clearTimeout(networkTest?.timer);networkTest=null; helper?.kill('SIGTERM'); cdp.close(); clearInterval(timer); server.close();
+child.on('exit', () => { stopping = true;clearTimeout(networkTest?.timer);networkTest=null; helper?.kill('SIGTERM'); contextGuard.dispose(); cdp.close(); clearInterval(timer); server.close();
   void feature?.dispose?.().catch(() => {});
   if (fs.existsSync(socketPath)) fs.unlinkSync(socketPath);
   fs.closeSync(log); logStatus('Slack closed. Development sign-in preserved.');
@@ -199,5 +212,5 @@ child.on('exit', () => { stopping = true;clearTimeout(networkTest?.timer);networ
 process.on('SIGINT', () => void stop()); process.on('SIGTERM', () => void stop());
 await serial(loadFeature);
 if (!stopping) startHelper();
-server.listen(socketPath, () => { fs.chmodSync(socketPath, 0o600); logStatus('Private-pipe dev session started. Sign into your non-sensitive workspace in Slack.'); });
+server.listen(socketPath, () => { fs.chmodSync(socketPath, 0o600); logStatus(controlPolicy.mode === 'development' ? 'DEVELOPMENT MODE: arbitrary evaluation and screenshots enabled. Use test workspaces.' : 'Triage started with everyday controls. Developer evaluation and screenshots are disabled.'); });
 fs.writeFileSync(path.join(dir, 'session.json'), JSON.stringify({ runtimePid: process.pid, slackPid: child.pid, profile, socketPath }, null, 2), { mode: 0o600 });

@@ -90,3 +90,17 @@ It exports a bounded set of relevant fields, not Slack's entire state. Coverage
 remains partial, and exact unread counts are intentionally omitted where only
 boolean evidence is established. If it cannot locate a compatible store, ordinary
 DOM/network observation remains available, with no automatic API fallback.
+
+## Everyday mode (0.19.0)
+
+Fully stop and restart after updating to this release; a module reload alone does
+not replace the launcher's control interface. **Start Triage.command** and
+`npm run dev` disable arbitrary evaluation, screenshots and network experiments.
+Status, stop, module reload, helper restart, and normal triage UI controls remain.
+The status response identifies `controlMode: "everyday"`.
+
+`npm run dev:debug` explicitly enables developer controls for troubleshooting in
+test workspaces. It reuses your existing profile, so it does not remove or isolate
+corporate sign-ins. Stop and restart normally when finished. The new caller checks
+accept only the current top-level Slack context and reconnect after navigation.
+There are no changes to cache retention or optional API-adapter settings.
