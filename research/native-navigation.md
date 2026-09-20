@@ -78,6 +78,8 @@ Changes:
 
 No prefetching, extra Slack API calls, cached editor clones or hidden duplicate conversations were introduced. Cold destinations still depend on Slack's normal fetch/render latency.
 
+Fast conversation switches now use a solid cover matching the native pane's themed background, instead of briefly showing the loading card and its controls. Once the requested destination is verified, the cover fades away over 120 ms. A small loading label appears only after 300 ms; errors immediately retain Retry and full Slack recovery actions. Reduce Motion disables the fade. The previous editor is still suspended immediately, and the inbox-to-detail slide remains unchanged. Live frame sampling across a DM, channel and thread observed no loading-card flashes and confirmed the cover faded to zero opacity.
+
 
 ## Notifications-only app conversations
 
@@ -86,3 +88,13 @@ The built-in Slack app is a native DM with a message list and a `message-input-s
 Display readiness is separate from editor/send verification: notification content can scroll, open native header menus and hand off to full Slack, while it cannot authorize sending or take composer focus. Regular app/bot conversations that have a standard composer continue through the existing editor path. Custom App Home pages and arbitrary agent layouts are not covered by this detection.
 
 Live validation opened the Personal Test Slack app notification card, switched to a normal DM with its composer, and returned to the read-only app view. No app actions or invitations were submitted, and no additional Slack API calls were introduced.
+
+## Cached DMs missing from the sidebar (Slackbot)
+
+The legacy Slackbot conversation can exist in Slack's cache without a mounted sidebar entry. It has a normal message view and composer; triage's failure was the sidebar-only navigation path, not an unsupported renderer. This is distinct from the newer Slackbot AI entry point.
+
+If a cached DM is absent from the sidebar, triage can now use Slack's native search once. It waits for the native query editor to become editable, searches the cached display name, and selects only a navigational member result matching the cached peer ID in the requested workspace. It does not select a result by display name or open Slackbot AI. The existing workspace/channel/composer verification still gates rendering and sending. Thread snapshots inherit the parent DM's peer identity.
+
+The lookup is bounded to three seconds, skips an already open native overlay, cancels when superseded, and yields if the user edits its query. No direct API calls or background polling were added; this on-demand native search can generate Slack's own normal search requests.
+
+Live validation opened Slackbot from triage with Agents & apps collapsed and confirmed the native greeting, themed conversation header, and editable composer. No messages were sent.

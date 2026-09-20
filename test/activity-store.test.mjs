@@ -61,6 +61,16 @@ test('thread events create a separate reader and deleting root removes its captu
   assert.equal(s.snapshot().workspaces[0].items.some(i=>i.kind==='thread'),false);
 });
 
+test('DM snapshots retain cached recipient identity, including parent identity for threads',()=>{
+  const s=new ActivityStore();
+  s.ingestClientState({workspaceId:'TONE',channels:[{id:'DONE',is_im:true,user:'USLACKBOT'}]});
+  s.ingestClientState({workspaceId:'TTWO',channels:[{id:'DONE',is_im:true,user:'UOTHER'}]});
+  s.ingestEvent('TONE',{type:'message',channel:'DONE',ts:'100.000002',thread_ts:'100.000001',user:'UAUTHOR',text:'reply'});
+  assert.equal(item(s,'DONE').peer,'USLACKBOT');
+  assert.equal(item(s,'DONE','TTWO').peer,'UOTHER');
+  assert.equal(s.snapshot().workspaces.find(w=>w.id==='TONE').items.find(i=>i.threadTs).peer,'USLACKBOT');
+});
+
 test('timestamp ordering preserves precision and capture storage is bounded', () => {
   assert.ok(compareTs('9999999999.000001','9999999999.000002')<0);
   assert.ok(compareTs('9.9','10.1')<0);assert.equal(compareTs('100.1','100.100000'),0);

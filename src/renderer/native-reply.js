@@ -5,7 +5,7 @@
   const key='__pme_native_reply_v1',abort=new AbortController();
   let target=null,active=false,state='idle',reason='',pane=null,editor=null,composer=null,generation=0,disposed=false,scrollMethod=null,threadNavigation=null;
   let pendingSend=null,sendSequence=0;
-  let header=null,openSlackButton=null,readOnly=false;
+  let header=null,openSlackButton=null,readOnly=false,cancelLookup=null;
   let menuButton=null,conversationMenu=null,auxiliary=null,auxiliaryMissingAt=0;
   const hiddenHeaderNodes=new Set();
   const valid=t=>t&&/^[TE][A-Z0-9]+$/.test(t.workspaceId)&&(t.kind==='compose'?!t.channelId&&!t.threadTs:/^[CDG][A-Z0-9]+$/.test(t.channelId)&&(!t.threadTs||/^\d+\.\d+$/.test(t.threadTs)));
@@ -211,7 +211,7 @@
     composer?.removeAttribute('data-pme-native-composer');composer=root;
     composer?.setAttribute('data-pme-native-composer','');
   }
-  function unframe(){pendingSend=null;clearHeader();document.body?.removeAttribute('data-pme-native-reply');composer?.removeAttribute('data-pme-native-composer');composer=null;for(const n of document.querySelectorAll('[data-pme-native-reply-pane]')){n.removeAttribute('data-pme-native-reply-pane');n.removeAttribute('data-pme-native-auxiliary');}auxiliary=null;auxiliaryMissingAt=0;pane=null;editor=null;readOnly=false;}
+  function unframe(){cancelLookup?.();pendingSend=null;clearHeader();document.body?.removeAttribute('data-pme-native-reply');composer?.removeAttribute('data-pme-native-composer');composer=null;for(const n of document.querySelectorAll('[data-pme-native-reply-pane]')){n.removeAttribute('data-pme-native-reply-pane');n.removeAttribute('data-pme-native-auxiliary');}auxiliary=null;auxiliaryMissingAt=0;pane=null;editor=null;readOnly=false;}
   // A notifications-only pane is valid to display, never valid to send through.
   function verifiedPane(){return readOnly?active&&pane?.isConnected&&locateReadOnly()?.view===pane:verified();}
   function verified(){
@@ -312,6 +312,42 @@
       frame=requestAnimationFrame(()=>{frame=requestAnimationFrame(finish);});
     });
   }
+  async function findMissingDM(run){
+    // A cached DM (notably legacy Slackbot) may have no sidebar row yet. Use
+    // Slack's native search once, matching the cached member ID, never its name.
+    if(!/^D[A-Z0-9]+$/.test(target.channelId)||!target.peer||!inWorkspace()||overlayOpen())return false;
+    const button=document.querySelector('[data-qa="top_nav_search"]');if(!button)return false;
+    const destination={...target};let modal=null,field=null,typed=false,cancelled=false;
+    const cancel=()=>{if(cancelled)return;cancelled=true;if(modal?.isConnected)modal.querySelector('[data-qa="search_input_close"]')?.click();};
+    cancelLookup=cancel;
+    const current=()=>!cancelled&&!disposed&&active&&run===generation&&target.key===destination.key&&inWorkspace();
+    try{
+      // This native control opens on mousedown, not click.
+      button.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:0}));const deadline=Date.now()+3000;
+      while(current()&&Date.now()<deadline){
+        const input=document.querySelector('[data-qa="floating_omniswitcher_input"] [data-qa="texty_input"]');
+        // Quill mounts before enabling editing; inserting sooner loses the query.
+        if(input?.isContentEditable&&input.getAttribute('data-team-id')===destination.workspaceId){
+          field=input;modal=input.closest('.ReactModal__Content');if(!modal)return false;
+          if(!typed){
+            // Let Slack's editor process input normally; don't mutate its DOM or
+            // call search endpoints. This is only the switcher's query field.
+            field.focus();if(document.activeElement!==field)return false;
+            const range=document.createRange();range.selectNodeContents(field);
+            const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);
+            if(!document.execCommand('insertText',false,destination.name))return false;
+            typed=true;
+          }
+          // If the user changes the query, stop controlling this search.
+          if(field.textContent.trim()!==destination.name){modal=null;return false;}
+          const result=[...modal.querySelectorAll('[data-qa="search_autocomplete"] [data-type="member"][data-is-navigational="true"]')].find(n=>n.getAttribute('data-id')===destination.peer);
+          if(result&&current()){result.click();modal=null;return true;}
+        }else if(typed)return false;
+        await waitForNativeChange();
+      }
+      return false;
+    }finally{if(cancelLookup===cancel)cancelLookup=null;cancel();}
+  }
   function focus(){
     if(state!=='ready'||!verified())return false;
     (target.kind==='compose'?locateCompose()?.recipient||editor:editor).focus({preventScroll:true});return true;
@@ -323,11 +359,11 @@
     const run=++generation;unframe();scrollMethod=null;threadNavigation=null;
     target=request.kind==='compose'?{kind:'compose',workspaceId:request.workspaceId,key:`${request.workspaceId}:compose`,name:'New message',workspaceName:String(request.workspaceName||request.workspaceId).slice(0,180)}:
       {workspaceId:request.workspaceId,channelId:request.channelId,threadTs:request.threadTs||null,
-      key:request.key||`${request.workspaceId}:${request.channelId}:${request.threadTs||''}`,name:String(request.name||request.channelId).slice(0,180),workspaceName:String(request.workspaceName||request.workspaceId).slice(0,180)};
+      key:request.key||`${request.workspaceId}:${request.channelId}:${request.threadTs||''}`,peer:/^[UW][A-Z0-9]+$/.test(request.peer||'')?request.peer:undefined,name:String(request.name||request.channelId).slice(0,180),workspaceName:String(request.workspaceName||request.workspaceId).slice(0,180)};
     active=true;state='loading';reason=target.kind==='compose'?'Opening Slack’s new message composer…':'Opening Slack’s native editor…';save();notify();
     // Use Slack's own navigation. Assigning a URL can race the desktop client's
     // remembered workspace and restore the old route over the requested editor.
-    let workspaceClicked=false,channelClicks=0,lastChannelClick=0,threadClicked=false,tabClicked=false,auxClosed=false,composeClicked=false;
+    let workspaceClicked=false,channelClicks=0,lastChannelClick=0,threadClicked=false,tabClicked=false,auxClosed=false,composeClicked=false,lookupAttempted=false;
     const deadline=Date.now()+10000;
     try{close?.click();while(Date.now()<deadline){
       if(disposed||run!==generation||!active)return {cancelled:true};
@@ -351,6 +387,7 @@
       if(target.kind!=='compose'&&inWorkspace()&&channelClicks<3&&!threadClicked&&Date.now()-lastChannelClick>=750&&!locate()&&!(target.threadTs&&locate(null))){
         const row=[...document.querySelectorAll('[data-qa="channel-sidebar-channel"]')].find(n=>n.getAttribute('data-qa-channel-sidebar-channel-id')===target.channelId);
         if(row){channelClicks++;lastChannelClick=Date.now();row.click();}
+        else if(!lookupAttempted&&!inConversation()&&target.peer){lookupAttempted=true;await findMissingDM(run);continue;}
       }
       const found=target.kind==='compose'?locateCompose():locate();
       if(found){

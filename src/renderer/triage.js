@@ -41,6 +41,13 @@
       .activity-controls{display:flex;gap:6px;margin-top:10px}.activity-controls button{font-size:10px;color:#b5a6d5;padding:3px 5px}#activity-status{font-size:10px;color:#a3a1a9}
       .shell.reply{width:420px;right:auto}.reply-chrome{position:fixed;left:420px;right:0;top:0;height:144px;pointer-events:auto;background:#191f2c;border-bottom:1px solid #ffffff16;padding:12px 16px;color:#cdd4e4;display:flex;flex-direction:column;gap:5px}.reply-chrome strong{font-size:13px}.reply-chrome small{font-size:10px;color:#a3adc0}.reply-chrome nav{display:flex;gap:8px}.reply-chrome button{font-size:11px;padding:3px 7px;background:#ffffff0a}.reply-placeholder{position:fixed;left:420px;right:0;top:144px;bottom:0;pointer-events:auto;background:#191f2c;padding:24px;color:#a3adc0;font-size:13px}
       @media(max-width:650px){.shell.reply>.rail,.shell.reading>.rail{display:flex}.shell.reply{width:44px}.shell.reply .queue{display:none}.reply-chrome,.reply-placeholder{left:44px}}
+      /* Cover native route changes with the pane's own background, rather than
+         flashing a card. Only slow loads show a quiet label; errors keep actions. */
+      .reply-placeholder:not([data-state="error"]){top:0;display:flex;align-items:center;justify-content:center}
+      .reply-placeholder[data-state="ready"]{opacity:0;pointer-events:none}
+      .reply-placeholder[data-state="loading"] span{animation:reply-loading-label 1ms step-end .3s both}
+      @keyframes reply-loading-label{from{visibility:hidden}to{visibility:visible}}
+      @media(prefers-reduced-motion:no-preference){.reply-placeholder[data-state="ready"]{transition:opacity .12s ease-out}}
       @media(prefers-reduced-motion:no-preference){.row{transition:background .12s}#edge-tab{transition:background .16s,box-shadow .16s}.shell.cluster .rail{animation:pill-reveal .18s ease-out}@keyframes pill-reveal{from{opacity:.5}to{opacity:1}}}@media(max-width:650px){.shell.reading .queue{display:none}.reader{width:calc(100vw - 44px)}}
       :host([data-detail-motion]) .shell.reply{width:420px!important;right:auto;z-index:2}
       :host([data-detail-motion]) .reply-chrome,:host([data-detail-motion]) .reply-placeholder{z-index:1}
@@ -63,7 +70,7 @@
         <div id="notice" role="status"></div>
       </section>
       <section class="reader" hidden aria-label="Captured messages"><div class="reader-header"><button id="back" aria-label="Back to queue">←</button><div class="eyebrow">Message reader</div><h2 id="conversation"></h2><div id="coverage"></div><div class="triage-controls"><button id="done" title="E · Save Done locally, then open the next item">Done →</button><button id="mark-read" title="Mark Slack read through the latest message loaded here. Does not change local Done.">Mark read</button><button id="later" title="L · Snooze locally, then open the next item">Later →</button><select id="snooze" aria-label="Snooze duration" style="background:#202735;color:inherit;border:1px solid #ffffff15;border-radius:5px"><option value="15">15 min</option><option value="60" selected>1 hour</option><option value="240">4 hours</option><option value="1440">24 hours</option></select><button id="pin" title="P · Toggle local pin">Pin</button><button id="reopen" hidden>Bring back</button><button id="undo" hidden>Undo</button></div><div id="mark-status" role="status" style="font-size:11px;color:#b5a6d5;margin-top:8px"></div><div class="history-controls"><button id="refresh">Refresh</button><button id="reply" title="Use Slack’s native editor. Opening the conversation may mark it read.">Native chat</button><button id="handoff" title="Open this conversation in ordinary Slack. Slack may mark it read.">Open in Slack ↗</button><button id="older" hidden>Load older</button></div><div id="history-status" role="status" aria-live="polite"></div></div><div class="messages" id="messages"></div><div class="read-only"><span class="signal"></span>Reading alone does not mark read. Done is local; Mark read updates Slack.</div></section>
-    </section><section id="reply-chrome" class="reply-chrome" hidden aria-label="Native Slack conversation"><strong id="reply-destination"></strong><small id="reply-state"></small><nav><button id="reply-queue">← Queue</button><button id="reply-back">Read-only view</button><button id="reply-retry" hidden>Retry</button><button id="reply-stock">Normal Slack ↗</button><button id="reply-collapse">Collapse</button></nav></section><div id="reply-placeholder" class="reply-placeholder" hidden role="status"></div>`;
+    </section><section id="reply-chrome" class="reply-chrome" hidden aria-label="Native Slack conversation"><strong id="reply-destination"></strong><small id="reply-state"></small><nav><button id="reply-queue">← Queue</button><button id="reply-back">Read-only view</button><button id="reply-retry" hidden>Retry</button><button id="reply-stock">Normal Slack ↗</button><button id="reply-collapse">Collapse</button></nav></section><div id="reply-placeholder" class="reply-placeholder" hidden role="status"><span id="reply-placeholder-message"></span></div>`;
   const workspaceDialog=document.createElement('dialog');workspaceDialog.id='workspace-dialog';workspaceDialog.setAttribute('aria-labelledby','workspace-dialog-title');
   workspaceDialog.innerHTML='<div class="workspace-dialog-heading"><h2 id="workspace-dialog-title">Workspaces</h2><button id="workspace-close" type="button" aria-label="Close workspace picker">×</button></div><div id="workspace-options"></div>';
   shadow.append(workspaceDialog);
@@ -180,11 +187,15 @@
     $('inbox-back').hidden=!detailMode();
     $('reply-back').hidden=reply?.target?.kind==='compose';
     controls.hidden=mode==='reply'&&reply?.target?.kind==='compose';
-    $('reply-chrome').hidden=mode!=='reply'||ready||!!quickReply;$('reply-placeholder').hidden=mode!=='reply'||ready||!!quickReply;
+    const failed=!openingKey&&!ready&&reply?.state==='error';
+    $('reply-chrome').hidden=mode!=='reply'||!failed||!!quickReply;
+    const cover=$('reply-placeholder');cover.hidden=mode!=='reply'||!!quickReply;
+    cover.dataset.state=ready?'ready':failed?'error':'loading';
+    cover.setAttribute('aria-hidden',String(ready||cover.hidden));
     const destination=openingKey?items().find(i=>i.key===openingKey):reply?.target;
     $('reply-destination').textContent=destination?`${destination.workspaceName||snapshot.workspaceDirectory?.find(w=>w.id===destination.workspaceId)?.name||destination.workspaceId} · ${destination.name}${destination.threadTs?' · Thread':''}`:'Native Slack conversation';
     $('reply-state').textContent=openingKey?'Opening native conversation…':ready?'Slack’s editor · ⌘⇧Y collapses and keeps your draft':reply?.reason||'Native reply is unavailable.';
-    $('reply-placeholder').textContent=openingKey?'Opening native conversation…':reply?.reason||'Native chat is unavailable. Use Read-only view or Normal Slack.';
+    $('reply-placeholder-message').textContent=ready?'':failed?reply.reason:'Loading conversation…';
     $('reply-retry').hidden=reply?.state!=='error';renderQuick(reply,ready);
   }
   const quickCard=document.createElement('section');quickCard.id='quick-card';quickCard.hidden=true;
@@ -554,7 +565,7 @@
       if(!stage&&!passive){
         if (next === 'queue') $('search').focus({preventScroll:true});
         if (next === 'reading') $('back').focus({preventScroll:true});
-        if (next === 'reply'&&!window.__PME_REPLY__?.status().ready) $('reply-queue').focus({preventScroll:true});
+        if (next === 'reply'&&!window.__PME_REPLY__?.status().ready) $(quickReply?'quick-close':'inbox-back').focus({preventScroll:true});
         if (next === 'strip') $('edge-tab').focus({preventScroll:true});
         if (next === 'cluster') (shadow.querySelector('.pill-item')||(!$('pill-empty').hidden?$('pill-empty'):$('restore'))).focus({preventScroll:true});
         if (next === 'stock') previousFocus?.focus?.({preventScroll:true});

@@ -245,7 +245,7 @@ export class ActivityStore {
       id: ws.id, name: ws.name, observedAt: ws.observedAt,clientState:{at:ws.clientStateAt||0,truncated:ws.clientStateTruncated===true}, methods: [...ws.methods],
       items: [...ws.items.values()].filter(i => !i.archived).map(item => ({
         key: item.key, workspaceId: ws.id, channelId: item.channelId, threadTs: item.threadTs,
-        name: itemName(item),
+        name: itemName(item), peer: (item.threadTs?ws.items.get(`${ws.id}:${item.channelId}:`)||item:item).peer,
         kind: item.kind, mentionObserved:item.mentionObserved, unread: item.unread, unreadCount: item.unreadCount, mentions: item.mentions,
         countsStale: !item.countsAt || now - item.countsAt > 60000,
         observedAt: item.observedAt, stale: now - item.observedAt > 60000, latest: item.latest,lastRead:item.lastRead||null,
