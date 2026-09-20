@@ -6,7 +6,7 @@
   const abort = new AbortController();
   let settings={edge:'right',rest:'strip',display:'main',idleSeconds:60},lastInteraction=Date.now(),displayInfo=[],displaySignature='',hoverTimer,hoverIntent=null;
   let compactBounds=null,cursorCheckPending=false,stagedDetail=false,pillIdleTimer,pillPointerInside=false;
-  let pillPreview=null;
+  let pillPreview=null,nativeStripRequest=null,nativeStripHidden=false,stripSyncPending=false,stripSequence=0;
   let lastHostUpdate=0,hostDisconnected=false;
   const connected=()=>Date.now()-lastHostUpdate<7000;
   const restMode=()=>settings.rest||'strip';
@@ -21,6 +21,7 @@
       button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #b7a8ec;outline-offset:2px}button:disabled{opacity:.4;cursor:default}
       [hidden]{display:none!important}#opener{position:fixed;right:18px;bottom:18px;pointer-events:auto;padding:10px 15px;background:#262337;border:1px solid #827097;border-radius:24px;box-shadow:0 4px 20px #0006;display:flex;gap:9px;align-items:center;font-weight:600}
       .signal{width:7px;height:7px;border-radius:50%;background:#99d3b9}.shell{pointer-events:auto;position:fixed;inset:0;background:#141925;display:flex;box-shadow:0 0 60px #0007}
+      .shell,#edge-tab,#quick-card{-webkit-app-region:no-drag}
       .rail{width:44px;flex-shrink:0;background:#10141f;border-right:1px solid #ffffff0c;display:flex;flex-direction:column;align-items:center;gap:9px;padding:12px 0}.rail button{width:32px;height:32px;font-size:13px;background:#ffffff07;color:#a4adc0}.rail .brand{background:#b6a5e8;color:#20182b;font-weight:800}.spacer{flex:1}
       .queue{width:420px;max-width:100vw;flex-shrink:0;display:flex;flex-direction:column;padding:22px 16px 12px;border-right:1px solid #ffffff10;min-height:0}.eyebrow{font-size:10px;font-weight:600;letter-spacing:1.7px;color:#b3a4d5;text-transform:uppercase}h1{font-size:25px;line-height:1.2;letter-spacing:-.6px;margin:8px 0}
       .queue-heading{display:flex;align-items:center;gap:6px}.inbox-icon{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:5px;flex-shrink:0;color:#a4adc0;font-size:16px}.control-icon{display:block;width:20px;height:20px;flex-shrink:0;pointer-events:none}.slack-icon{width:18px;height:18px}.close-icon{width:18px;height:18px}#inbox-stock{color:#8792a6}#inbox-stock:hover{color:#c4cada}.rail #restore{display:flex;align-items:center;justify-content:center}.filter-row{display:flex;align-items:center;gap:4px}.filter-row .filters{flex:1}.shell:not(.cluster)>.rail{display:none}.queue-heading h1{min-width:0;flex:1;position:relative}#compose{padding:5px;background:#ab8cdd20;color:#d6c8ef;flex-shrink:0}#compose:hover{background:#ab8cdd35}#search{margin-top:12px;width:100%;border:1px solid #ffffff12;border-radius:8px;background:#ffffff05;padding:9px 11px;outline-offset:0;font-size:12px}#search::placeholder{color:#758196}
@@ -32,8 +33,8 @@
       #edge-tab{position:fixed;inset:0;pointer-events:auto;background:#18171c;border-radius:0;color:#d7ccef;padding:8px 1px;font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;overflow:hidden;box-shadow:inset 0 0 0 1px #ffffff0c}#edge-tab:hover{background:#28232f;box-shadow:inset 0 0 0 1px #cbb5f133}
       :host([data-edge="left"]) #edge-tab,:host([data-edge="left"]) .shell.cluster{border-radius:0 12px 12px 0}:host([data-edge="right"]) #edge-tab,:host([data-edge="right"]) .shell.cluster{border-radius:12px 0 0 12px}
       #edge-dots{display:flex;flex-direction:column;align-items:center;gap:4px}.edge-dot{width:3px;height:3px;background:currentColor;border-radius:50%;flex:none}#edge-overflow{font-size:8px;writing-mode:vertical-rl;line-height:9px}#edge-tab.empty::after{content:'';width:2px;height:28px;border-radius:2px;background:#a69bae99}
-      .shell.cluster{overflow:hidden;background:#18171c}.shell.cluster .rail{border:0;width:44px;padding:7px 0;gap:6px;background:#18171c}.shell.cluster #rail-unread,.shell.cluster #collapse,.shell.cluster .rail>.spacer{display:none}.shell:not(.cluster) #pill-items,.shell:not(.cluster) #pill-empty{display:none}.shell.cluster #home{flex-shrink:0;width:30px;height:27px;font-size:11px}.shell.cluster #restore{flex-shrink:0;height:25px;width:30px;margin-top:auto;font-size:12px;color:#a99bbb}
-      #pill-items{display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0;padding:2px 4px;scrollbar-width:none}#pill-items::-webkit-scrollbar{display:none}#pill-items .pill-item{position:relative;display:flex;align-items:center;justify-content:center;width:32px;height:32px;min-height:32px;padding:0;background:hsl(var(--pill-hue) 26% 25%);border:1px solid hsl(var(--pill-hue) 25% 39%);border-radius:10px;color:#f1eafc;font-size:11px;font-weight:650}#pill-items .pill-item:hover,#pill-items .pill-item:focus-visible{background:hsl(var(--pill-hue) 28% 36%);border-color:#cebbf5}#pill-items .pill-kind{position:absolute;bottom:-1px;right:-1px;font-size:8px;line-height:11px;min-width:11px;border-radius:4px;background:#11131d;color:#cebdf4}#pill-empty{flex-shrink:0;width:32px;height:40px;font-size:14px;color:#acbda9;padding:0}#pill-empty:hover{background:#ffffff14}
+      .shell.cluster{overflow:hidden;background:#18171c}.shell.cluster .rail{border:0;width:44px;padding:7px 0;gap:6px;background:#18171c}.shell.cluster #home,.shell.cluster #collapse,.shell.cluster .rail>.spacer{display:none}.shell:not(.cluster) #pill-items,.shell:not(.cluster) #pill-empty{display:none}.shell.cluster #pill-settings,.shell.cluster #pill-empty{display:flex;align-items:center;justify-content:center;flex-shrink:0;height:25px;width:30px;color:#a99bbb}.shell.cluster #restore{flex-shrink:0;height:25px;width:30px;margin-top:auto;font-size:12px;color:#a99bbb}
+      #pill-items{display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0;padding:2px 4px;scrollbar-width:none}#pill-items::-webkit-scrollbar{display:none}#pill-items .pill-item{position:relative;display:flex;align-items:center;justify-content:center;width:32px;height:32px;min-height:32px;padding:0;background:hsl(var(--pill-hue) 26% 25%);border:1px solid hsl(var(--pill-hue) 25% 39%);border-radius:10px;color:#f1eafc;font-size:11px;font-weight:650}#pill-items .pill-item:hover,#pill-items .pill-item:focus-visible{background:hsl(var(--pill-hue) 28% 36%);border-color:#cebbf5}#pill-items .pill-kind{position:absolute;bottom:-1px;right:-1px;font-size:8px;line-height:11px;min-width:11px;border-radius:4px;background:#11131d;color:#cebdf4}#pill-empty{padding:0}#pill-empty:hover{background:#ffffff14}
 
       #workspace-picker{display:block;width:100%;min-width:0;background:transparent;color:inherit;border:0;border-radius:5px;padding:0;text-align:left;font:inherit;font-weight:inherit;letter-spacing:inherit;line-height:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#workspace-picker:hover{color:#d0bdf5}
       #workspace-dialog{position:fixed;inset:68px auto auto 16px;margin:0;width:320px;max-width:calc(100vw - 32px);max-height:calc(100vh - 90px);padding:12px;background:#202331;color:#edf0f7;border:1px solid #ffffff20;border-radius:12px;box-shadow:0 16px 48px #0008;font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;pointer-events:auto}#workspace-dialog::backdrop{background:#0003}.workspace-dialog-heading{display:flex;align-items:center;justify-content:space-between;margin:0 0 7px;padding-left:8px}.workspace-dialog-heading h2{font-size:12px;font-weight:600;color:#aab2c4;margin:0}.workspace-dialog-heading button{width:28px;height:28px;font-size:18px;color:#aab2c4}#workspace-options{display:flex;flex-direction:column;gap:3px;max-height:calc(100vh - 160px);overflow:auto}.workspace-option{display:flex;align-items:center;gap:10px;min-height:38px;padding:8px;text-align:left;font-size:13px}.workspace-option[aria-pressed="true"]{background:#ab8cdd20;color:#d9c9f5}.workspace-option .workspace-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.workspace-check{width:15px;color:#c7b3ef}
@@ -41,16 +42,22 @@
       .shell.reply{width:420px;right:auto}.reply-chrome{position:fixed;left:420px;right:0;top:0;height:144px;pointer-events:auto;background:#191f2c;border-bottom:1px solid #ffffff16;padding:12px 16px;color:#cdd4e4;display:flex;flex-direction:column;gap:5px}.reply-chrome strong{font-size:13px}.reply-chrome small{font-size:10px;color:#a3adc0}.reply-chrome nav{display:flex;gap:8px}.reply-chrome button{font-size:11px;padding:3px 7px;background:#ffffff0a}.reply-placeholder{position:fixed;left:420px;right:0;top:144px;bottom:0;pointer-events:auto;background:#191f2c;padding:24px;color:#a3adc0;font-size:13px}
       @media(max-width:650px){.shell.reply>.rail,.shell.reading>.rail{display:flex}.shell.reply{width:44px}.shell.reply .queue{display:none}.reply-chrome,.reply-placeholder{left:44px}}
       @media(prefers-reduced-motion:no-preference){.row{transition:background .12s}#edge-tab{transition:background .16s,box-shadow .16s}.shell.cluster .rail{animation:pill-reveal .18s ease-out}@keyframes pill-reveal{from{opacity:.5}to{opacity:1}}}@media(max-width:650px){.shell.reading .queue{display:none}.reader{width:calc(100vw - 44px)}}
-      :host([data-detail-motion]) .shell.reply{width:420px!important;right:auto}
+      :host([data-detail-motion]) .shell.reply{width:420px!important;right:auto;z-index:2}
+      :host([data-detail-motion]) .reply-chrome,:host([data-detail-motion]) .reply-placeholder{z-index:1}
       :host([data-detail-motion]) .shell .queue{display:flex!important;position:relative;z-index:2;background:#141925}
       :host([data-detail-motion]) .shell>.rail{display:none}
       :host([data-detail-motion]) .reader,:host([data-detail-motion]) .reply-chrome,:host([data-detail-motion]) .reply-placeholder{position:fixed;left:420px;right:auto;width:var(--pme-detail-width,400px);transform:translateX(calc(100vw - 420px - var(--pme-detail-width,400px)))}
       :host([data-detail-motion]) .reader{top:0;bottom:0;z-index:1}
+      :host([data-quick]) .shell{display:none!important}
+      #quick-card{pointer-events:auto;position:fixed;inset:0;background:#191f2c;color:#cdd4e4;padding:16px;border:1px solid #343c50;border-radius:12px;display:flex;flex-direction:column}
+      #quick-card header{display:flex;align-items:start;gap:8px}#quick-card header>div{flex:1;min-width:0}#quick-title{font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#quick-subtitle{display:block;font-size:11px;color:#94a2b8;margin-top:3px}#quick-close{color:#94a2b8;width:24px;height:24px;padding:0;font-size:20px}
+      #quick-messages{overflow:auto;max-height:165px;margin-top:12px}#quick-messages article{margin-bottom:12px;font-size:12px}#quick-messages strong{color:#94a2b8;font-size:11px}#quick-messages p{margin:3px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+      #quick-card footer{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;margin-top:auto;color:#94a2b8}#quick-inbox{color:#94a2b8;font-size:11px;text-decoration:underline;white-space:nowrap;padding:4px}
     </style>
     <button id="edge-tab" hidden aria-label="Reveal triage" title="Reveal triage"><span id="edge-dots" aria-hidden="true"></span><span id="edge-overflow" hidden aria-hidden="true"></span></button>
     <button id="opener" aria-label="Open triage"><span class="signal"></span>Triage</button>
     <section class="shell" hidden aria-label="Slack triage">
-      <nav class="rail" aria-label="Triage views"><button class="brand" id="home" aria-label="Show queue">T</button><button id="rail-unread" aria-label="Unread observed conversations">●</button><button id="reply-latest" hidden aria-label="Jump to latest messages" title="Jump to latest messages">↓</button><div id="pill-items" aria-label="Unread conversations and threads"></div><button id="pill-empty" type="button" hidden aria-label="Open triage inbox" title="All caught up · Open triage inbox">✓</button><div class="spacer"></div><button id="restore" aria-label="Return to normal Slack" title="Normal Slack"><svg class="control-icon slack-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><g transform="rotate(0 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(90 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(180 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(270 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g></svg></button><button id="collapse" aria-label="Collapse to rail" title="Collapse">›</button></nav>
+      <nav class="rail" aria-label="Triage views"><button class="brand" id="home" aria-label="Show queue">T</button><button id="reply-latest" hidden aria-label="Jump to latest messages" title="Jump to latest messages">↓</button><div id="pill-items" aria-label="Unread conversations and threads"></div><button id="pill-empty" type="button" hidden aria-label="Open triage inbox" title="All caught up · Open triage inbox"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4h16l2 10v6H2v-6L4 4Z"/><path d="M2 14h6l2 3h4l2-3h6"/></svg></button><div class="spacer"></div><button id="restore" aria-label="Return to normal Slack" title="Normal Slack"><svg class="control-icon slack-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><g transform="rotate(0 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(90 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(180 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(270 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g></svg></button><button id="collapse" aria-label="Collapse to rail" title="Collapse">›</button></nav>
       <section class="queue"><div class="queue-heading"><h1><button id="workspace-picker" type="button" aria-label="Choose workspace" aria-haspopup="dialog" aria-expanded="false" aria-controls="workspace-dialog">Workspace</button></h1><button class="inbox-icon" id="compose" type="button" title="Compose new message" aria-label="Compose new message"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-7"/><path d="m16 3 5 5M10 14l1-5 7-7a2.1 2.1 0 0 1 3 3l-7 7-4 2Z"/></svg></button><button class="inbox-icon" id="inbox-stock" title="Normal Slack" aria-label="Return to normal Slack"><svg class="control-icon slack-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><g transform="rotate(0 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(90 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(180 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(270 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g></svg></button><button class="inbox-icon" id="inbox-collapse" title="Close inbox to pill" aria-label="Close inbox to pill"><svg class="control-icon close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m7 7 10 10M17 7 7 17"/></svg></button></div><input id="search" type="search" placeholder="Filter conversations…" aria-label="Filter observed conversations" autocomplete="off">
         <div class="activity-controls"><button id="activity-refresh">Refresh activity</button><button id="activity-more" hidden>More conversations</button></div><div id="activity-status" role="status"></div><div class="filter-row"><div class="filters" role="group" aria-label="Filter activity"><button data-filter="all" aria-pressed="true">All</button><button data-filter="unread" aria-pressed="false">Unread</button><button data-filter="mentions" aria-pressed="false">Mentions</button><button data-filter="dms" aria-pressed="false">DMs</button><button data-filter="threads" aria-pressed="false">Threads</button></div><button class="inbox-icon" id="inbox-latest" hidden title="Jump to latest messages" aria-label="Jump to latest messages">↓</button><button class="inbox-icon" id="inbox-back" hidden title="Close conversation" aria-label="Close conversation and return to inbox">←</button></div><div id="list" aria-label="Observed conversations"></div>
         <div id="notice" role="status"></div>
@@ -63,8 +70,14 @@
   let workspacePickerPurpose='switch';
   document.body.append(host);
   const $ = id => shadow.getElementById(id);
+  const settingsIcon='<svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m9 3-.6 2.2-2 .9-2-.6-2.1 3.6 1.5 1.6v2.6l-1.5 1.6 2.1 3.6 2-.6 2 .9L9 21h6l.6-2.2 2-.9 2 .6 2.1-3.6-1.5-1.6v-2.6l1.5-1.6-2.1-3.6-2 .6-2-.9L15 3Z"/><circle cx="12" cy="12" r="3"/></svg>';
+  for(const id of ['inbox-settings','pill-settings']){
+    const button=document.createElement('button');button.id=id;button.type='button';button.className='inbox-icon';button.title='Settings';button.setAttribute('aria-label','Open triage settings');button.innerHTML=settingsIcon;
+    if(id==='inbox-settings')$('inbox-collapse').before(button);else $('restore').after(button);
+  }
+
   let snapshot = { workspaces: [] }, mode = 'stock', edge = 'right', filter = 'all', selection = null;
-  let resumeReply=false,openSequence=0,openingKey=null,heldRow=null;
+  let resumeReply=false,openSequence=0,openingKey=null,heldRow=null,quickReply=null,pillReadPending=null,pillReadRun=0;
   const detailMode=()=>['reading','reply'].includes(mode);
   let original = null, disposed = false, nativeQueue = Promise.resolve(), previousFocus = null, spacesApplied = false;
   const viewKey='__pme_triage_view_v1';
@@ -127,12 +140,13 @@
       if(next)openItem(next,{reader:mode==='reading'});else {void transition('queue');$('notice').textContent='Saved · end of this queue.';}
     }
   }
-  async function startReply(item=items().find(i=>i.key===selection)||window.__PME_REPLY__?.status().target){
+  async function startReply(item=items().find(i=>i.key===selection)||window.__PME_REPLY__?.status().target,{quick=null}={}){
     if(!item)return;
     if(!window.__PME_REPLY__){openReader(item.key);$('notice').textContent='Native chat is unavailable · opened the read-only view.';return;}
     const run=++openSequence;
     await nativeQueue.catch(()=>{});if(run!==openSequence||disposed)return;
-    const stage=mode==='queue';
+    quickReply=quick;
+    const stage=mode==='queue'&&!quickReply;
     heldRow=filtered().some(i=>i.key===item.key)?{key:item.key,filter}:null;
     selection=item.key;resumeReply=false;openingKey=item.key;
     // Mask and cancel the previous editor before waiting for window geometry.
@@ -140,9 +154,12 @@
     const destination={...item,workspaceName:item.workspaceName||snapshot.workspaceDirectory?.find(w=>w.id===item.workspaceId)?.name||item.workspaceId};
     await transition('reply',{stage});if(run!==openSequence||mode!=='reply'||disposed)return;
     openingKey=null;
-    await window.__PME_REPLY__?.open(destination,{focusEditor:!stage});
+    // Reveal the loading pane immediately; Slack can finish mounting while it
+    // slides out. Keep focus in the inbox until both operations have finished.
+    const opening=window.__PME_REPLY__?.open(destination,{focusEditor:!stage&&!quickReply?.readOnly});
+    if(stage)await Promise.all([opening,transition('reply')]);else await opening;
     if(run!==openSequence||disposed||mode!=='reply')return;
-    if(stage){await transition('reply');if(run!==openSequence||disposed||mode!=='reply')return;window.__PME_REPLY__?.focus();}
+    if(stage)window.__PME_REPLY__?.focus();
     render();
   }
   function startCompose(chosenWorkspace=null){
@@ -162,30 +179,131 @@
     $('inbox-back').hidden=!detailMode();
     $('reply-back').hidden=reply?.target?.kind==='compose';
     controls.hidden=mode==='reply'&&reply?.target?.kind==='compose';
-    $('reply-chrome').hidden=mode!=='reply'||ready;$('reply-placeholder').hidden=mode!=='reply'||ready;
+    $('reply-chrome').hidden=mode!=='reply'||ready||!!quickReply;$('reply-placeholder').hidden=mode!=='reply'||ready||!!quickReply;
     const destination=openingKey?items().find(i=>i.key===openingKey):reply?.target;
     $('reply-destination').textContent=destination?`${destination.workspaceName||snapshot.workspaceDirectory?.find(w=>w.id===destination.workspaceId)?.name||destination.workspaceId} · ${destination.name}${destination.threadTs?' · Thread':''}`:'Native Slack conversation';
     $('reply-state').textContent=openingKey?'Opening native conversation…':ready?'Slack’s editor · ⌘⇧Y collapses and keeps your draft':reply?.reason||'Native reply is unavailable.';
     $('reply-placeholder').textContent=openingKey?'Opening native conversation…':reply?.reason||'Native chat is unavailable. Use Read-only view or Normal Slack.';
-    $('reply-retry').hidden=reply?.state!=='error';
+    $('reply-retry').hidden=reply?.state!=='error';renderQuick(reply,ready);
   }
+  const quickCard=document.createElement('section');quickCard.id='quick-card';quickCard.hidden=true;
+  quickCard.innerHTML='<header><div><strong id="quick-title"></strong><small id="quick-subtitle"></small></div><button id="quick-close" aria-label="Close quick reply" title="Close">×</button></header><footer><span id="quick-status" role="status"></span><button id="quick-inbox">Open inbox</button></footer>';
+  shadow.append(quickCard);
+  function renderQuick(reply,ready){
+    quickCard.hidden=mode!=='reply'||!quickReply;if(quickCard.hidden)return;
+    $('quick-title').textContent=quickReply.preview.title;$('quick-subtitle').textContent=quickReply.preview.subtitle;
+    $('quick-status').textContent=ready?'':reply?.reason||'Opening Slack’s conversation…';
+    if(reply?.send?.confirmed)$('quick-status').textContent='Sent';
+  }
+  function paintPillDismissal(){
+    // Native navigation can synchronously render a large Slack tree. Give the
+    // removed badge a paint first; background frame throttling must not stall read.
+    return new Promise(resolve=>{
+      let done=false;const finish=()=>{if(done)return;done=true;clearTimeout(timer);resolve();};
+      const timer=setTimeout(finish,100);
+      requestAnimationFrame(()=>requestAnimationFrame(finish));
+    });
+  }
+  async function readFromPill(request){
+    if(mode!=='cluster'||!connected()||pillReadPending||!window.__PME_REPLY__)return {ok:false};
+    const item=notificationItems().find(i=>i.key===request?.key&&i.unread===true);
+    if(!item)return {ok:false};
+    const run=++pillReadRun;pillReadPending={key:item.key,latest:Number(item.latest)||0};renderPill();schedulePillCollapse();
+    document.body.setAttribute('data-pme-background-read','');
+    try{
+      await paintPillDismissal();
+      if(run!==pillReadRun||disposed)return {cancelled:true};
+      const opened=await window.__PME_REPLY__.open(item,{focusEditor:false});
+      if(run!==pillReadRun||disposed)return {cancelled:true};
+      if(!opened?.ok)return {ok:false};
+      window.__PME_REPLY__.markReadNative();
+      const deadline=Date.now()+8000;
+      while(run===pillReadRun&&mode==='cluster'&&Date.now()<deadline){
+        if(notificationItems().find(i=>i.key===item.key)?.unread===false)return {ok:true};
+        await new Promise(resolve=>setTimeout(resolve,200));
+      }
+      return run!==pillReadRun?{cancelled:true}:{ok:false};
+    }finally{
+      if(run===pillReadRun){pillReadPending=null;window.__PME_REPLY__?.suspend();document.body.removeAttribute('data-pme-background-read');renderPill();touch();}
+    }
+  }
+  function quick(request){
+    if(mode!=='cluster'||!connected()||!['reply','inbox'].includes(request?.action))return {ok:false};
+    const item=notificationItems().find(i=>i.key===request.target?.key&&i.unread===true);
+    if(!item)return {ok:false};
+    if(request.action==='inbox')openItem(item.key);
+    else void startReply(item,{quick:{preview:request.preview,at:Date.now()}});
+    return {ok:true};
+  }
+  window.addEventListener('pme-native-quick-confirmed',event=>{
+    if(mode==='reply'&&quickReply&&event.detail?.key===window.__PME_REPLY__?.status().target?.key)dismissRepliedItem(event.detail);
+  },{signal:abort.signal});
+  window.addEventListener('pme-native-quick-sent',()=>{if(mode==='reply'&&quickReply)void transition('cluster');},{signal:abort.signal});
   window.addEventListener('pme-native-compose-closed',()=>{if(mode==='reply')void transition('queue');},{signal:abort.signal});
   window.addEventListener('pme-native-reply-state',renderReply,{signal:abort.signal});
   window.addEventListener('pme-native-reply-installed',()=>{const r=window.__PME_REPLY__?.status();if(r?.target&&(r.active||mode==='reply'))void startReply(r.target);},{signal:abort.signal});
   function openReader(key){++openSequence;openingKey=null;selection=key;void transition('reading');requestHistory();}
-  function openItem(key,{reader=false}={}){if(reader)openReader(key);else void startReply(items().find(i=>i.key===key));}
+  function openItem(key,{reader=false}={}){
+    const item=items().find(i=>i.key===key)||notificationItems().find(i=>i.key===key);if(!item)return;
+    if(viewTeam()!=='*'&&item.workspaceId!==viewTeam())window.__pmeTriageAction?.(JSON.stringify({workspaceId:viewTeam(),action:'switch',target:item.workspaceId}));
+    if(reader)openReader(key);else void startReply(item);
+  }
 
   // Count actionable unread destinations, never invent an exact message total.
-  const pillItems=()=>items().filter(i=>i.unread===true&&!['done','later'].includes(i.triage?.state));
+  const notificationWorkspaces=()=>snapshot.notificationWorkspaces||snapshot.workspaces;
+  const notificationItems=()=>notificationWorkspaces().flatMap(w=>w.items||[]);
+  const repliedPillItems=new Map();
+  function dismissRepliedItem({key,ts}){
+    if(!key||!/^\d+\.\d+$/.test(ts))return;
+    repliedPillItems.set(key,{latest:Number(ts),until:Date.now()+25000});
+    while(repliedPillItems.size>100)repliedPillItems.delete(repliedPillItems.keys().next().value);
+    renderPill();
+  }
+  function replyDismissed(item){
+    const dismissed=repliedPillItems.get(item.key);if(!dismissed)return false;
+    if(item.unread===false||Date.now()>=dismissed.until||Number(item.latest||0)>dismissed.latest){repliedPillItems.delete(item.key);return false;}
+    return true;
+  }
+  const pillItems=()=>notificationItems().filter(i=>!replyDismissed(i)&&i.unread===true&&!i.pendingRead&&!(i.key===pillReadPending?.key&&Number(i.latest||0)<=pillReadPending.latest)&&!['done','later'].includes(i.triage?.state));
+  function createPillActivityTracker(){
+    let scope=null,seen=new Map(),workspaces=new Set(),since=0;
+    return (value,{reset=false,now=Date.now()}={})=>{
+      if(value.notificationWorkspaces)value={selectedWorkspace:value.notificationScope||'*',workspaces:value.notificationWorkspaces};
+      const changed=reset||scope!==value.selectedWorkspace;
+      if(changed){scope=value.selectedWorkspace;seen.clear();workspaces.clear();since=now/1000;}
+      let activity=false;
+      for(const workspace of value.workspaces){
+        const established=workspaces.has(workspace.id);workspaces.add(workspace.id);
+        for(const item of workspace.items){
+          const previous=seen.get(item.key),latest=Number(item.latest)||0;
+          const newer=latest>=(since-2)&&latest>(previous?.latest||0);
+          const becameUnread=!!previous&&previous.unread!==true&&item.unread===true&&(previous.unread===false||latest>=since-2);
+          const countIncreased=previous?.unread===true&&Number.isInteger(previous.count)&&Number.isInteger(item.unreadCount)&&item.unreadCount>previous.count;
+          if(established&&item.unread===true&&!['done','later'].includes(item.triage?.state)&&(newer||becameUnread||countIncreased))activity=true;
+          seen.set(item.key,{latest:Math.max(latest,previous?.latest||0),unread:item.unread,count:item.unreadCount});
+        }
+      }
+      // Observations are bounded too; retain a little history for transiently
+      // missing rows without accumulating every conversation ever visited.
+      while(seen.size>8000)seen.delete(seen.keys().next().value);
+      return !changed&&activity;
+    };
+  }
+  const detectPillActivity=createPillActivityTracker();
+  function revealPillActivity(){
+    if(disposed)return;
+    if(mode==='strip'&&nativeStripRequest)void transition('cluster',{passive:true});
+    else if(mode==='cluster')touch();
+  }
   let pillSignature='',pillHeightSignature='';
   function pillHeight(kind,count){return kind==='strip'?Math.max(88,16+Math.min(count,48)*7+(count>48?32:0)):Math.max(132,96+Math.min(count,12)*38);}
   function renderPill(){
     const unread=pillItems(),count=unread.length;
     const label=`${count} active unread ${count===1?'conversation or thread':'conversations and threads'}`;
-    const signature=JSON.stringify([selection,snapshot.workspaces.map(w=>[w.id,w.name]),unread.map(i=>[i.key,i.name,i.kind,i.messages.at(-1)?.text,i.messages.at(-1)?.author])]);
+    const signature=JSON.stringify([selection,notificationWorkspaces().map(w=>[w.id,w.name]),unread.map(i=>[i.key,i.name,i.kind,i.messages.at(-1)?.text,i.messages.at(-1)?.author])]);
     $('edge-tab').setAttribute('aria-label',`${label}. Reveal triage`);$('edge-tab').title=`${label} · Hover to preview · Click to open triage`;
     $('edge-tab').classList.toggle('empty',!count);
-    $('home').textContent=mode==='cluster'?String(count):'T';$('home').title=`${label} · Open queue`;
+    $('home').title='Open queue';
     $('pill-empty').hidden=!!count||mode!=='cluster';
     if(signature!==pillSignature){
       pillSignature=signature;
@@ -195,8 +313,8 @@
       const buttons=document.createDocumentFragment();
       for(const item of unread){
         const kind=item.kind==='thread'?'Thread':item.kind==='channel'?'Channel':item.kind==='groupDM'?'Group chat':'DM';
-        const workspace=snapshot.workspaces.find(w=>w.id===item.workspaceId)?.name||'';
-        const last=item.messages.at(-1),preview=last?.text?.replace(/\s+/g,' ').trim().slice(0,260)||'No message preview cached yet.';
+        const workspace=notificationWorkspaces().find(w=>w.id===item.workspaceId)?.name||'';
+        const last=item.messages.at(-1),preview=last?.text?.replace(/\s+/g,' ').trim().slice(0,260)||'Hover for a cached message preview.';
         const label=`${item.name} · ${kind}${workspace?' · '+workspace:''}\n${last?.author?last.author+': ':''}${preview}`;
         const button=el('button','pill-item');button.dataset.key=item.key;
         button.setAttribute('aria-label',label);button.setAttribute('aria-pressed',String(selection===item.key));
@@ -319,6 +437,9 @@
   function applyLayout() {
     closeWorkspacePicker(false);
     host.dataset.edge=edge;
+    host.toggleAttribute('data-quick',!!quickReply&&mode==='reply');
+    document.body.toggleAttribute('data-pme-quick',!!quickReply&&mode==='reply');
+    document.body.toggleAttribute('data-pme-quick-read',!!quickReply?.readOnly&&mode==='reply');
     $('opener').hidden = mode !== 'stock';$('edge-tab').hidden=mode!=='strip';
     shadow.querySelector('.shell').hidden = ['stock','hidden','strip'].includes(mode);
     shadow.querySelector('.shell').classList.toggle('cluster',mode === 'cluster');
@@ -337,13 +458,14 @@
   }
   async function geometry(next,{animate=false}={}) {
     compactBounds=null;
+    if(next!=='strip'){nativeStripRequest=null;nativeStripHidden=false;}
     const w = window.desktop?.window;
     if (!w?.callBrowserWindowMethod) { $('notice').textContent = 'Window controls unavailable; triage uses the current window.'; return; }
     const id = await w.getWindowId(); const call = (method,...args) => w.callBrowserWindowMethod(id,method,...args);
     await call('setWindowButtonVisibility',next==='stock').catch(()=>{});
     if(next==='hidden'){await call('hide');return;}
     if(await call('isMinimized'))await call('restore');
-    if(!await call('isVisible'))await call('showInactive');
+    if(!await call('isVisible')&&!(next==='strip'&&nativeStripHidden))await call('showInactive');
     if (next === 'stock') {
       if (original) {
         await call('setMinimumSize',...original.min); await call('setBounds',original.bounds); await call('setAlwaysOnTop',original.top);
@@ -360,15 +482,15 @@
     const main=typeof desktop.screen.getPrimaryDisplay==='function'?await desktop.screen.getPrimaryDisplay():displays[0];
     const display=(settings.display!=='main'?displays.find(d=>String(d.id)===settings.display):null)||main||displays[0];
     const area = display.workArea;
-    const width = Math.min({strip:12,cluster:44,queue:420,reading:820,reply:820}[next],area.width);
+    const width = Math.min(next==='reply'&&quickReply?460:{strip:12,cluster:44,queue:420,reading:820,reply:820}[next],area.width);
     await call('setMinimumSize',12,44);
     await call('setAlwaysOnTop',true);
     if(!spacesApplied&&typeof original.spaces==='boolean'){
       await call('setVisibleOnAllWorkspaces',true,{visibleOnFullScreen:true});spacesApplied=true;
     }
     const compact=['cluster','strip'].includes(next);
-    const height=compact?Math.min(pillHeight(next,pillItems().length),area.height):area.height;
-    const y=compact?area.y+Math.round((area.height-height)/2):area.y;
+    const height=next==='reply'&&quickReply?Math.min(660,area.height):compact?Math.min(pillHeight(next,pillItems().length),area.height):area.height;
+    const y=compact||next==='reply'&&quickReply?area.y+Math.round((area.height-height)/2):area.y;
     const bounds={x:edge==='right'?area.x+area.width-width:area.x,y,width,height};
     const sideWidth=Math.max(width,innerWidth)-420;
     const moving=animate&&sideWidth>230;
@@ -378,50 +500,60 @@
     // The native callback can precede the renderer's final resize frame.
     if(moving)await new Promise(resolve=>setTimeout(resolve,50));
     if(compact)compactBounds=bounds;
+    if(next==='strip'){
+      if(nativeStripRequest?.edge!==edge||JSON.stringify(nativeStripRequest?.bounds)!==JSON.stringify(bounds))
+        nativeStripRequest={id:`${Date.now()}-${++stripSequence}`,edge,bounds};
+      reportShell();syncNativeStrip();
+    }
   }
-  function transition(next,{stage=false}={}) {
+  function transition(next,{stage=false,passive=false}={}) {
     if (disposed || !['stock','hidden','strip','cluster','queue','reading','reply'].includes(next)) return Promise.resolve();
+    if(pillReadPending){++pillReadRun;pillReadPending=null;window.__PME_REPLY__?.suspend();document.body.removeAttribute('data-pme-background-read');}
     clearTimeout(hoverTimer);hoverIntent=null;clearTimeout(pillIdleTimer);
     setPillPreview(null);
-    if(next!=='reply'){++openSequence;openingKey=null;}
+    if(next!=='reply'&&!passive){++openSequence;openingKey=null;}
     nativeQueue = nativeQueue.catch(()=>{}).then(async()=>{
-      if(disposed)return;
+      if(disposed||passive&&(mode!=='strip'||!nativeStripRequest))return;
       const from=mode,isDetail=value=>['reading','reply'].includes(value);
-      const closing=isDetail(from)&&next==='queue'&&innerWidth>650;
+      const closing=isDetail(from)&&next==='queue'&&innerWidth>650&&!quickReply;
       const expanding=(from==='queue'||stagedDetail)&&isDetail(next);
       const animate=!stage&&(closing||expanding)&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       if (from === 'stock' && next !== 'stock') previousFocus = document.activeElement;
       try{
         // Keep the current pane mounted while it slides back under the queue.
         if(closing&&animate){setDetailMotion(innerWidth-420);await geometry(next,{animate:true});}
-        if(from==='reply'&&next!=='reply'){resumeReply=['strip','hidden','cluster'].includes(next);window.__PME_REPLY__?.suspend();}
+        if(from==='reply'&&next!=='reply'){resumeReply=!quickReply&&['strip','hidden','cluster'].includes(next);window.__PME_REPLY__?.suspend();}
         if(next==='stock')resumeReply=false;
         if(['stock','queue'].includes(next))heldRow=null;
         if(stage){stagedDetail=true;setDetailMotion();}
         else if(animate&&expanding)setDetailMotion();
+        if(next!=='reply')quickReply=null;
         mode=next;applyLayout();render();
         if(!stage&&!(closing&&animate))await geometry(next,{animate});
       }catch{$('notice').textContent='Window layout could not be applied. Normal Slack restores the saved layout.';}
       finally{if(!stage)clearDetailMotion();}
-      if(!stage){
+      if(!stage&&!passive){
         if (next === 'queue') $('search').focus({preventScroll:true});
         if (next === 'reading') $('back').focus({preventScroll:true});
         if (next === 'reply'&&!window.__PME_REPLY__?.status().ready) $('reply-queue').focus({preventScroll:true});
         if (next === 'strip') $('edge-tab').focus({preventScroll:true});
-        if (next === 'cluster') $('home').focus({preventScroll:true});
+        if (next === 'cluster') (shadow.querySelector('.pill-item')||(!$('pill-empty').hidden?$('pill-empty'):$('restore'))).focus({preventScroll:true});
         if (next === 'stock') previousFocus?.focus?.({preventScroll:true});
       }
       if(next!=='cluster')pillPointerInside=false;
       if(next==='cluster')touch();else schedulePillCollapse();
-      reportShell(['strip','hidden','cluster'].includes(next));
+      reportShell(!passive&&['strip','hidden','cluster'].includes(next));
     });return nativeQueue;
   }
   shadow.addEventListener('click',event=>{
     event.stopPropagation();const button=event.target.closest('button');if(!button)return;
     touch();clearTimeout(hoverTimer);hoverIntent=null;
-    if(button.id==='workspace-picker')openWorkspacePicker();
+    if(button.id==='quick-close'){resumeReply=false;void transition('cluster');}
+    else if(button.id==='quick-inbox'){const target=window.__PME_REPLY__?.status().target;if(target)void startReply(target);}
+    else if(button.id==='workspace-picker')openWorkspacePicker();
     else if(button.id==='workspace-close')closeWorkspacePicker();
     else if(button.dataset.workspace){const target=button.dataset.workspace,purpose=workspacePickerPurpose;closeWorkspacePicker();if(purpose==='compose')void startCompose(target);else window.__pmeTriageAction?.(JSON.stringify({workspaceId:viewTeam(),action:'switch',target}));}
+    else if(['inbox-settings','pill-settings'].includes(button.id))window.__pmeTriageAction?.(JSON.stringify({workspaceId:viewTeam(),action:'preferences'}));
     else if(button.id==='inbox-stock')void transition('stock');
     else if(button.id==='inbox-collapse')void transition(restMode());
     else if(button.id==='inbox-back')void transition('queue');
@@ -444,7 +576,6 @@
     else if(button.dataset.filter){filter=button.dataset.filter;render();}
     else if(button.id==='pill-empty'){resumeReply=false;void transition('queue');}
     else if(['opener','home','edge-tab'].includes(button.id)){if(resumeReply&&window.__PME_REPLY__?.status().target)void startReply(window.__PME_REPLY__.status().target);else void transition('queue');}
-    else if(button.id==='rail-unread'){filter='unread';void transition('queue');}
     else if(button.id==='restore')void transition('stock');
     else if(button.id==='collapse')void transition(mode==='cluster'?'queue':restMode());
     else if(button.id==='back')void transition('queue');
@@ -491,7 +622,7 @@
       // A held Escape must not blur the composer and immediately close its pane.
       if(event.repeat)return;
       if(composer){document.activeElement.blur();return;}
-      void transition('queue');return;
+      void transition(quickReply?'cluster':'queue');return;
     }
     // Other composition keys stay with Slack.
     if(mode==='reply'&&!fromTriage)return;
@@ -522,16 +653,28 @@
     }
   },{capture:true,signal:abort.signal});
 
-  function reportShell(returnFocus=false,resumed=false){window.__pmeShellState?.(JSON.stringify({workspaceId:team(),mode,focused:document.hasFocus(),returnFocus,resumed,online:navigator.onLine,displays:displayInfo,preview:pillPreview}));}
+  function reportShell(returnFocus=false,resumed=false){window.__pmeShellState?.(JSON.stringify({workspaceId:team(),mode,focused:document.hasFocus(),returnFocus,resumed,online:navigator.onLine,displays:displayInfo,edgeStrip:mode==='strip'?nativeStripRequest:null,preview:pillPreview}));}
+  function syncNativeStrip(){
+    const hide=mode==='strip'&&connected()&&!!nativeStripRequest&&snapshot.nativeStripReady===nativeStripRequest.id;
+    if(disposed||mode!=='strip'||stripSyncPending||hide===nativeStripHidden)return;
+    stripSyncPending=true;
+    nativeQueue=nativeQueue.catch(()=>{}).then(async()=>{
+      if(disposed||mode!=='strip')return;
+      const ready=connected()&&!!nativeStripRequest&&snapshot.nativeStripReady===nativeStripRequest.id;
+      const w=window.desktop?.window;if(!w?.callBrowserWindowMethod)return;
+      await w.callBrowserWindowMethod(await w.getWindowId(),ready?'hide':'showInactive');nativeStripHidden=ready;
+    }).catch(()=>{}).finally(()=>{stripSyncPending=false;});
+  }
   function setPillPreview(button){
     const rect=button?.getBoundingClientRect();
     const next=mode==='cluster'&&compactBounds&&rect?{key:button.dataset.key,edge,anchor:{x:compactBounds.x+rect.x,y:compactBounds.y+rect.y,width:rect.width,height:rect.height}}:null;
     if(JSON.stringify(next)!==JSON.stringify(pillPreview)){pillPreview=next;reportShell();}
   }
   async function command(op){
-    const next=op==='toggle'?(['reading','queue','reply'].includes(mode)?restMode():'queue'):op==='rest'?restMode():op==='hide'?'hidden':op;
+    if(op==='peek'&&mode!=='strip')return {mode};
+    const next=op==='peek'?'cluster':op==='toggle'?(['reading','queue','reply'].includes(mode)?restMode():'queue'):op==='rest'?restMode():op==='hide'?'hidden':op;
     if(op==='toggle'&&resumeReply&&['stock','strip','cluster','hidden'].includes(mode)&&window.__PME_REPLY__?.status().target){await startReply(window.__PME_REPLY__.status().target);const w=desktop.window;await w.callBrowserWindowMethod(await w.getWindowId(),'focus');return {mode};}
-    if(op==='minimize'){const w=desktop.window;await w.callBrowserWindowMethod(await w.getWindowId(),'minimize');reportShell(true);return {mode,returnFocus:true};}
+    if(op==='minimize'){nativeStripRequest=null;const w=desktop.window;await w.callBrowserWindowMethod(await w.getWindowId(),'minimize');reportShell(true);return {mode,returnFocus:true};}
     if(!['stock','hidden','strip','cluster','queue','reading','reply'].includes(next))return {mode};
     touch();await transition(next);
     if(['stock','queue','reading','reply'].includes(next)){const w=desktop.window;await w.callBrowserWindowMethod(await w.getWindowId(),'focus');}
@@ -539,10 +682,10 @@
   }
   function schedulePillCollapse(){
     clearTimeout(pillIdleTimer);
-    if(disposed||mode!=='cluster'||pillPointerInside||settings.idleSeconds<=0)return;
+    if(disposed||mode!=='cluster'||pillPointerInside||snapshot.previewHeld||pillReadPending||settings.idleSeconds<=0)return;
     const delay=Math.max(0,settings.idleSeconds*1000-(Date.now()-lastInteraction));
     pillIdleTimer=setTimeout(()=>{
-      if(disposed||mode!=='cluster'||pillPointerInside||settings.idleSeconds<=0)return;
+      if(disposed||mode!=='cluster'||pillPointerInside||snapshot.previewHeld||pillReadPending||settings.idleSeconds<=0)return;
       if(Date.now()-lastInteraction<settings.idleSeconds*1000){schedulePillCollapse();return;}
       void transition('strip');
     },delay);
@@ -572,6 +715,7 @@
   // local pointer, never Slack state/network, and never activates the window.
   const cursorTimer=setInterval(async()=>{
     const bounds=compactBounds,currentMode=mode;
+    if(currentMode==='strip'&&nativeStripHidden)return;
     if(disposed||cursorCheckPending||!bounds||!['strip','cluster'].includes(mode)||typeof window.desktop?.screen?.getCursorScreenPoint!=='function')return;
     cursorCheckPending=true;
     try{
@@ -592,8 +736,8 @@
   let lastPulse=Date.now();
   const shellTimer=setInterval(async()=>{
     if(disposed)return;
-    const pulse=Date.now();reportShell(false,pulse-lastPulse>15000);lastPulse=pulse;
-    if(hostDisconnected===connected()){hostDisconnected=!connected();render();}
+    const pulse=Date.now();reportShell(false,pulse-lastPulse>15000);lastPulse=pulse;syncNativeStrip();
+    if(hostDisconnected===connected()){hostDisconnected=!connected();if(hostDisconnected){snapshot.previewHeld=false;touch();}render();}
     try{const displays=await desktop.screen.getAllDisplays();const signature=JSON.stringify(displays.map(d=>[d.id,d.workArea]));
       if(displaySignature&&signature!==displaySignature&&!['stock','hidden'].includes(mode))void transition(mode);displaySignature=signature;
     }catch{}
@@ -629,10 +773,10 @@
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
   idle=setInterval(observe,10000);
-  window.__PME_TRIAGE__={version:'0.20.0',update:value=>{lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings);snapshot=value;acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);},transition,command,open:openItem,
+  window.__PME_TRIAGE__={version:'0.20.0',update:value=>{const activity=detectPillActivity(value,{reset:!connected()});lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings),previewWasHeld=snapshot.previewHeld;snapshot=value;if(value.previewHeld||previewWasHeld!==value.previewHeld)touch();syncNativeStrip();acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);if(activity)revealPillActivity();},transition,command,quick,readFromPill,open:openItem,
     status:()=>({mode,edge,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
     dispose:async()=>{if(disposed)return;setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);clearTimeout(pillIdleTimer);
-      window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});clearDetailMotion();await geometry('stock').catch(()=>{});host.remove();delete window.__PME_TRIAGE__;
+      window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});clearDetailMotion();document.body.removeAttribute('data-pme-quick');document.body.removeAttribute('data-pme-quick-read');document.body.removeAttribute('data-pme-background-read');++pillReadRun;await geometry('stock').catch(()=>{});host.remove();delete window.__PME_TRIAGE__;
     }};
   observe();render();
   if(window.__PME_REPLY__?.status().active&&window.__PME_REPLY__.status().target)void startReply(window.__PME_REPLY__.status().target);

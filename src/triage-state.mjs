@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {compareTs} from './activity-store.mjs';
 export const validKey=k=>typeof k==='string'&&/^[TE][A-Z0-9]+:[CDG][A-Z0-9]+:(?:\d+\.\d+)?$/.test(k);
-const defaults={edge:'right',rest:'strip',display:'main',idleSeconds:60,shortcut:'cmd-shift-y',reopenNew:true,workspace:null};
+const defaults={edge:'right',rest:'strip',display:'main',idleSeconds:60,shortcut:'cmd-shift-y',reopenNew:true,workspace:null,notificationMode:'all',notificationWorkspaces:[]};
 export class TriageState {
   records=new Map();settings={...defaults};undo=null;error=null;tail=Promise.resolve();
   constructor(file,{now=Date.now}={}){this.file=file;this.now=now;}
@@ -17,8 +17,10 @@ export class TriageState {
     ...(['left','right'].includes(patch.edge)?{edge:patch.edge}:{}),
     ...(['strip','cluster','hidden'].includes(patch.rest)?{rest:patch.rest}:{}),
     ...(typeof patch.display==='string'&&/^(main|\d+)$/.test(patch.display)?{display:patch.display}:{}),
-    ...([0,15,30,60,300].includes(patch.idleSeconds)?{idleSeconds:patch.idleSeconds}:{}),
+    ...([0,5,15,30,60,300].includes(patch.idleSeconds)?{idleSeconds:patch.idleSeconds}:{}),
     ...(['cmd-shift-y','ctrl-option-space','option-space'].includes(patch.shortcut)?{shortcut:patch.shortcut}:{}),
+    ...(['all','selected','inbox'].includes(patch.notificationMode)?{notificationMode:patch.notificationMode}:{}),
+    ...(Array.isArray(patch.notificationWorkspaces)&&patch.notificationWorkspaces.length<=12&&patch.notificationWorkspaces.every(id=>typeof id==='string'&&/^[TE][A-Z0-9]+$/.test(id))?{notificationWorkspaces:[...new Set(patch.notificationWorkspaces)]}:{}),
     ...((patch.workspace==='*'||typeof patch.workspace==='string'&&/^[TE][A-Z0-9]+$/.test(patch.workspace))?{workspace:patch.workspace}:{}),
     ...(typeof patch.reopenNew==='boolean'?{reopenNew:patch.reopenNew}:{})};}
   project(item){

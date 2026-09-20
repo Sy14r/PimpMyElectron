@@ -6,7 +6,7 @@ const source=await fs.readFile(new URL('../src/renderer/triage.js',import.meta.u
 function functionSource(startText,endText){const start=source.indexOf(startText)+startText.length,end=source.indexOf(endText,start);assert.ok(start>=startText.length&&end>start);return source.slice(start,end);}
 const transitionSource='function transition('+functionSource('function transition(',"  shadow.addEventListener('click'");
 function motionEnv(mode,{reduced=false,staged=false}={}){
- const calls=[],env={mode,disposed:false,stagedDetail:staged,innerWidth:mode==='queue'||staged?420:820,openSequence:0,openingKey:null,
+ const calls=[],env={mode,pillReadPending:null,quickReply:null,disposed:false,stagedDetail:staged,innerWidth:mode==='queue'||staged?420:820,openSequence:0,openingKey:null,
   hoverTimer:0,hoverIntent:null,pillIdleTimer:0,pillPointerInside:false,touch(){},schedulePillCollapse(){},clearTimeout(){},setPillPreview(){},nativeQueue:Promise.resolve(),document:{activeElement:null},
   window:{matchMedia:()=>({matches:reduced}),__PME_REPLY__:{suspend:()=>calls.push('suspend'),status:()=>({ready:true})}},
   setDetailMotion:()=>calls.push('mask'),clearDetailMotion:()=>{calls.push('unmask');env.stagedDetail=false;},
@@ -20,14 +20,50 @@ test('closing slides the mounted native pane before suspending it and changing q
  assert.ok(calls.indexOf('suspend')<calls.indexOf('layout:queue'));
  assert.equal(calls.at(-1),'unmask');
 });
-test('staging keeps the narrow window until the native pane is ready for reveal',async()=>{
+test('staging establishes the covered pane before starting its reveal',async()=>{
  const {env,calls}=motionEnv('queue');await env.transition('reply',{stage:true});
  assert.equal(calls.some(c=>c.startsWith('geometry:')),false);assert.equal(env.stagedDetail,true);
  await env.transition('reply');assert.ok(calls.includes('geometry:reply:true'));assert.equal(env.stagedDetail,false);
+});
+
+const startReplySource='async function startReply('+functionSource('async function startReply(','  function startCompose(');
+function openingEnv(){
+ const calls=[];let loaded,revealed;
+ const loading=new Promise(resolve=>{loaded=resolve;}),reveal=new Promise(resolve=>{revealed=resolve;});
+ const env={mode:'queue',openSequence:0,disposed:false,nativeQueue:Promise.resolve(),filtered:()=>[],filter:'all',snapshot:{},
+   window:{__PME_REPLY__:{suspend:()=>calls.push('suspend'),open:(_item,options)=>{calls.push(['open',options.focusEditor]);return loading;},focus:()=>calls.push('focus')}},
+   transition:async(next,{stage=false}={})=>{env.mode=next;calls.push(stage?'stage':'reveal');if(!stage)await reveal;},render:()=>calls.push('render')};
+ vm.runInNewContext(startReplySource,env);
+ return {env,calls,loaded,revealed};
+}
+const flush=()=>new Promise(resolve=>setImmediate(resolve));
+test('uncached conversations start revealing while still loading, with focus deferred until both finish',async()=>{
+ for(const first of ['loaded','revealed']){
+  const f=openingEnv(),pending=f.env.startReply({key:'TONE:CONE:',workspaceId:'TONE'});await flush();
+  assert.deepEqual(f.calls,['suspend','stage',['open',false],'reveal']);
+  f[first]();await flush();assert.equal(f.calls.includes('focus'),false);
+  f[first==='loaded'?'revealed':'loaded']();await pending;
+  assert.deepEqual(f.calls.slice(-2),['focus','render']);
+ }
+});
+test('finishing an obsolete load cannot steal focus or reopen the detail after dismissal',async()=>{
+ const f=openingEnv(),pending=f.env.startReply({key:'TONE:CONE:',workspaceId:'TONE'});await flush();
+ f.env.openSequence++;f.env.mode='queue';f.loaded();f.revealed();await pending;
+ assert.equal(f.calls.includes('focus'),false);assert.equal(f.calls.includes('render'),false);assert.equal(f.env.mode,'queue');
 });
 test('direct detail switches and Reduce Motion skip animated resizing',async()=>{
  for(const [from,next,reduced] of [['reply','reply',false],['reading','reply',false],['queue','reading',true],['reply','queue',true]]){
   const {env,calls}=motionEnv(from,{reduced});await env.transition(next);
   assert.ok(calls.includes(`geometry:${next}:false`));assert.equal(calls.includes(`geometry:${next}:true`),false);
  }
+});
+test('automatic pill reveal never focuses controls or requests app activation, and yields to a queued inbox opening',async()=>{
+ const {env,calls}=motionEnv('strip');env.nativeStripRequest={id:'strip'};
+ const focus=[],reports=[];env.$=()=>({focus:()=>focus.push(true)});env.reportShell=restore=>reports.push(restore);
+ await env.transition('cluster',{passive:true});
+ assert.equal(env.mode,'cluster');assert.ok(calls.includes('geometry:cluster:false'));
+ assert.deepEqual(focus,[]);assert.deepEqual(reports,[false]);
+ env.mode='strip';calls.length=0;
+ const pending=env.transition('cluster',{passive:true});env.mode='queue';await pending;
+ assert.equal(env.mode,'queue');assert.deepEqual(calls,[]);
 });

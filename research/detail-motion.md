@@ -13,10 +13,11 @@ resize driver; it is not exposed as a parameter on this bridge method.
 
 ## Behavior
 
-- Queue → native conversation/thread/Compose: keep the window narrow while Slack
-  prepares its real pane at full detail width behind the opaque inbox. Defer editor
-  focus, then animate the window and reveal the pane from under the inbox. Focus
-  enters the verified native editor/recipient picker only after reveal completes.
+- Queue → native conversation/thread/Compose: stage the loading pane at full
+  detail width behind the opaque inbox, then immediately animate the reveal while
+  Slack prepares its real pane. The inbox's stacking context stays above the
+  loading header and placeholder throughout the slide. Focus enters the verified
+  native editor/recipient picker only after both loading and reveal complete.
 - Queue → cached reader: reveal its existing content with the same geometry.
 - Detail → queue: keep the detail mounted, slide it beneath the queue while the
   window shrinks, then suspend the native framing and restore queue focus.

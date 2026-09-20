@@ -1,5 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {createSendConfirmation} from './send-confirmation.mjs';
+import {createPreviewSession} from './preview-session.mjs';
+const {nativeEdgeStrip,unreadItemCount,notificationSummaries,filterNotificationWorkspaces}=await import(`./native-edge.mjs?revision=${Date.now()}`);
 const {pillPreview}=await import(`./pill-preview.mjs?revision=${Date.now()}`);
 const { ActivityStore, READ_METHODS, requestMetadata, workspaceID } = await import(`./activity-store.mjs?revision=${Date.now()}`);
 const { createActivityRefresher } = await import(`./activity-refresh.mjs?revision=${Date.now()}`);
@@ -15,8 +18,9 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   if (!contextGuard) throw Error('A trusted CDP context guard is required');
   const store = new ActivityStore({maxMessagesPerItem:200,maxWorkspaces:12});
   const local=await new TriageState(path.join(runtimeDir,'triage-state.json')).load();
-  let actionError=null,returnEpoch=0,nativeHotkey=false;
+  let actionError=null,returnEpoch=0,settingsEpoch=0,nativeHotkey=false,edgeHelperAt=0,edgeHelperReady=null;
   const knownWorkspaces=new Map(),selectedWorkspaces=new Map();
+  const previewSession=createPreviewSession(),sendConfirmation=createSendConfirmation(),quickTargets=new Map(),previewReads=new Map();
   const uiStates=new Map(),actionResults=new Map();let lastSnapshot={workspaces:[]};
   const sessionInfo=JSON.parse(await fs.readFile(path.join(runtimeDir,'session.json'),'utf8').catch(()=>'{}'));
 
@@ -45,23 +49,54 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   function pickEntry(workspaceId){return [...sessions.values()].filter(e=>teamFromURL(e.url)&&(!workspaceId||teamFromURL(e.url)===workspaceId)).sort((a,b)=>(uiStates.get(b.sessionId)?.activeAt||0)-(uiStates.get(a.sessionId)?.activeAt||0))[0];}
   const scopeFor=entry=>selectedWorkspaces.get(entry.sessionId)||(local.settings.workspace==='*'||knownWorkspaces.has(local.settings.workspace)?local.settings.workspace:null)||teamFromURL(entry.url);
   const inScope=(entry,workspace)=>workspace===scopeFor(entry)||scopeFor(entry)==='*'&&knownWorkspaces.has(workspace);
+  const notificationWorkspaces=(entry=pickEntry())=>filterNotificationWorkspaces(lastSnapshot.workspaces.filter(w=>knownWorkspaces.has(w.id)||!!pickEntry(w.id)),local.settings,entry?scopeFor(entry):null).map(w=>({...w,items:w.items.map(i=>{const read=previewReads.get(i.key);return {...i,pendingRead:['pending','sent'].includes(read?.status)&&Date.now()-read.at<25000&&Number(i.latest||0)<=read.latest};})}));
   function shellPreview(){
+    const current=previewSession.get(),entry=current&&entryFor(current.sessionId);
+    if(!entry||!teamFromURL(entry.url)||uiStates.get(entry.sessionId)?.mode!=='cluster')return null;
+    const preview=pillPreview(notificationWorkspaces(entry),current.request);
+    if(!preview)previewSession.clear();
+    const read=preview&&previewReads.get(preview.key);
+    return preview&&{...preview,...(read&&Date.now()-read.at<30000?{readStatus:read.status}:{})};
+  }
+  async function previewAction(request){
+    const preview=shellPreview(),current=previewSession.get();
+    if(!preview||preview.key!==request.key||!['reply','read','inbox'].includes(request.action))throw Error('Preview expired');
+    const entry=entryFor(current.sessionId),item=notificationWorkspaces(entry).flatMap(w=>w.items).find(i=>i.key===preview.key);
+    if(!item)throw Error('Preview expired');
+    const target={key:item.key,workspaceId:item.workspaceId,channelId:item.channelId,threadTs:item.threadTs||null,name:item.name};
+    if(request.action==='read'){
+      if(previewReads.get(target.key)?.status==='pending')return {ok:true,activate:false};
+      previewReads.set(target.key,{status:'pending',at:Date.now(),latest:Number(item.latest)||0});
+      previewSession.clear();
+      while(previewReads.size>100)previewReads.delete(previewReads.keys().next().value);
+      void evaluate(entry,`window.__PME_TRIAGE__?.readFromPill(${JSON.stringify(target)})`).then(result=>{
+        previewReads.set(target.key,{status:result?.ok?'confirmed':result?.cancelled?'cancelled':'error',at:Date.now()});
+      }).catch(()=>previewReads.set(target.key,{status:'error',at:Date.now()}));
+      return {ok:true,activate:false};
+    }
+    previewSession.clear();
+    if(request.action==='reply')quickTargets.set(entry.sessionId,target);else quickTargets.delete(entry.sessionId);
+    return evaluate(entry,`window.__PME_TRIAGE__?.quick(${JSON.stringify({action:request.action,target,preview})})`);
+  }
+  function shellEdgeStrip(){
+    if(Date.now()-edgeHelperAt>3000)return null;
     for(const [sessionId,ui] of uiStates){
       const entry=entryFor(sessionId);
-      if(!entry||!teamFromURL(entry.url)||ui.mode!=='cluster'||Date.now()-ui.previewAt>3000)continue;
-      const preview=pillPreview(lastSnapshot.workspaces.filter(w=>inScope(entry,w.id)),ui.preview);
-      if(preview)return preview;
+      if(!entry||!teamFromURL(entry.url)||ui.mode!=='strip'||Date.now()-ui.previewAt>6000)continue;
+      const strip=nativeEdgeStrip(notificationWorkspaces(entry),ui.edgeStrip);
+      if(strip)return strip;
     }
     return null;
   }
-  async function shellCommand(op,workspaceId){const entry=pickEntry(workspaceId)||pickEntry();if(!entry)throw Error('No connected workspace');
+  async function shellCommand(op,workspaceId){if(op==='preferences'){settingsEpoch++;return {settingsRequested:true};}const entry=pickEntry(workspaceId)||pickEntry();if(!entry)throw Error('No connected workspace');
     if(op==='switch'&&knownWorkspaces.has(workspaceId)){selectedWorkspaces.set(entry.sessionId,workspaceId);await local.configure({workspace:workspaceId});}
     if(op==='stock'&&!await evaluate(entry,'!!window.__PME_TRIAGE__')){await evaluate(entry,`(async()=>{const w=desktop.window,id=await w.getWindowId();await w.callBrowserWindowMethod(id,'show');await w.callBrowserWindowMethod(id,'focus');})()`);return {mode:'stock'};}
     return evaluate(entry,`window.__PME_TRIAGE__?.command(${JSON.stringify(op==='switch'?'queue':op)})`);
   }
   const shell=await createShellServer({file:path.join(runtimeDir,'shell.sock'),
-    state:request=>{if(typeof request.hotKeyOK==='boolean')nativeHotkey=request.hotKeyOK;return {slackPID:slackPID||sessionInfo.slackPid||0,returnEpoch,settings:local.settings,
-      attention:lastSnapshot.workspaces.reduce((n,w)=>n+w.items.filter(i=>i.triage?.needsAction).length,0),preview:shellPreview(),
+    previewAction,
+    state:request=>{if(typeof request.previewHover==='string'&&shellPreview()?.key===request.previewHover)previewSession.hold(request.previewHover);if(request.edgeStripVersion===1){edgeHelperAt=Date.now();edgeHelperReady=typeof request.stripReady==='string'?request.stripReady:null;}if(typeof request.hotKeyOK==='boolean')nativeHotkey=request.hotKeyOK;return {slackPID:slackPID||sessionInfo.slackPid||0,returnEpoch,settingsEpoch,settings:local.settings,
+      attention:unreadItemCount(notificationWorkspaces()),inboxWorkspace:pickEntry()?scopeFor(pickEntry()):null,preview:shellPreview(),edgeStrip:shellEdgeStrip(),
       displays:[...uiStates.values()].find(s=>s.displays?.length)?.displays||[],
       workspaces:[...knownWorkspaces.values()].map(w=>({...w,connected:true}))};},
     configure:async patch=>{await local.configure(patch);return {settings:local.settings};},command:shellCommand});
@@ -135,8 +170,10 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
       if(typeof p.payload!=='string'||p.payload.length>4000)return;
       try{const r=JSON.parse(p.payload);if(r.workspaceId!==teamFromURL(entry.url))return;
         const previous=uiStates.get(entry.sessionId)||{};
-        uiStates.set(entry.sessionId,{...previous,mode:r.mode,preview:r.preview||null,previewAt:Date.now(),online:typeof r.online==='boolean'?r.online:previous.online,activeAt:r.focused?Date.now():previous.activeAt,
+        previewSession.update(entry.sessionId,r.mode,r.preview||null);
+        uiStates.set(entry.sessionId,{...previous,mode:r.mode,edgeStrip:r.edgeStrip||null,preview:r.preview||null,previewAt:Date.now(),online:typeof r.online==='boolean'?r.online:previous.online,activeAt:r.focused?Date.now():previous.activeAt,
           displays:Array.isArray(r.displays)?r.displays.filter(d=>typeof d.id==='string'&&/^\d+$/.test(d.id)&&typeof d.name==='string').slice(0,12):previous.displays});
+        if(r.mode!=='reply'&&r.mode!=='cluster'){quickTargets.delete(entry.sessionId);sendConfirmation.clear(entry.sessionId);}
         syncConnectivity();if(r.resumed===true)refreshes.resume();
         if(r.returnFocus===true)returnEpoch++;
       }catch{}return;
@@ -144,7 +181,13 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
     if(message.method==='Runtime.bindingCalled'&&p.name==='__pmeTriageAction'){
       if(typeof p.payload!=='string'||p.payload.length>2000)return;
       try{const r=JSON.parse(p.payload),workspace=teamFromURL(entry.url);
+        if(r.action==='quick-send-attempt'){
+          const target=quickTargets.get(entry.sessionId);
+          if(workspace===r.workspaceId&&target?.key===r.key&&target.workspaceId===r.workspaceId)sendConfirmation.begin(entry.sessionId,{...target,id:r.id});
+          return;
+        }
         if(!workspace||!inScope(entry,r.workspaceId))return;
+        if(r.action==='preferences'){settingsEpoch++;return;}
         if(r.action==='activity'){void refreshActivity(entry,r.more===true);return;}
         if(r.action==='switch'&&(r.target==='*'||knownWorkspaces.has(r.target))){selectedWorkspaces.set(entry.sessionId,r.target);void local.configure({workspace:r.target}).catch(()=>{actionError='Could not save workspace preference.';});return;}
         const item=store.workspaces.get(r.workspaceId)?.items.get(r.key);
@@ -182,6 +225,8 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
       if (!meta) return;
       observedMethods.set(meta.method, (observedMethods.get(meta.method) || 0) + 1);
       if (observedMethods.size > 150) observedMethods.delete(observedMethods.keys().next().value);
+      const send=sendConfirmation.request(entry.sessionId,meta);
+      if(send){requests.set(`${entry.sessionId}:${p.requestId}`,{meta,send,at:Date.now()});return;}
       if (READ_METHODS.has(meta.method) && teamFromURL(entry.url) && meta.workspaceId &&
           (meta.workspaceId===teamFromURL(entry.url)||knownWorkspaces.has(meta.workspaceId))) {
         requests.set(`${entry.sessionId}:${p.requestId}`, { meta, at: Date.now() });
@@ -199,6 +244,16 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
         if (disposed) return;
         if (result.body.length > 6 * 1024 * 1024) { stats.skippedBodies++; return; }
         const raw = JSON.parse(result.base64Encoded ? Buffer.from(result.body, 'base64').toString('utf8') : result.body);
+        if(request.send){
+          const confirmation=sendConfirmation.complete(entry.sessionId,request.send,raw);
+          if(confirmation){
+            const key=`${request.send.workspaceId}:${request.send.channelId}:${request.send.threadTs||''}`;
+            previewReads.set(key,{status:'sent',at:Date.now(),latest:Number(confirmation.ts)});
+            while(previewReads.size>100)previewReads.delete(previewReads.keys().next().value);
+            void evaluate(entry,`window.__PME_REPLY__?.confirmSend(${JSON.stringify(confirmation.id)},${JSON.stringify(confirmation.ts)})`).catch(()=>{});
+          }
+          return;
+        }
         // Only structural field names reach diagnostics. Bodies, headers, tokens,
         // IDs, names and messages are never written by the collector to disk.
         shapes.set(request.meta.method, { keys: Object.keys(raw).slice(0, 50),
@@ -238,9 +293,13 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
       for (const entry of sessions.values()) {
         const workspace = teamFromURL(entry.url);
         if (!workspace) continue;
-        // Deliver the explicitly selected scope only to a still-authorized Slack page.
+        // Message content stays scoped to the inbox. Notification destinations
+        // cover all known accounts without exporting their message bodies.
         const scope=scopeFor(entry);
-        const scoped = { ...snapshot, actionResult:actionResults.get(entry.sessionId)||null,selectedWorkspace:scope,workspaces: snapshot.workspaces.filter(w => scope==='*'?knownWorkspaces.has(w.id):w.id===scope) };
+        const nativeEdge=shellEdgeStrip();
+        const nativeStripReady=nativeEdge&&nativeEdge.id===edgeHelperReady&&nativeEdge.id===uiStates.get(entry.sessionId)?.edgeStrip?.id?nativeEdge.id:null;
+        const notificationScope=JSON.stringify([local.settings.notificationMode,local.settings.notificationMode==='inbox'?scope:local.settings.notificationWorkspaces]);
+        const scoped = { ...snapshot, nativeStripReady, previewHeld:!!shellPreview()&&previewSession.held(entry.sessionId), notificationScope, notificationWorkspaces:notificationSummaries(notificationWorkspaces(entry)), actionResult:actionResults.get(entry.sessionId)||null,selectedWorkspace:scope,workspaces: snapshot.workspaces.filter(w => scope==='*'?knownWorkspaces.has(w.id):w.id===scope) };
         await bindContext(entry);
         await mods.reconcile(entry);
         await evaluate(entry, `if(location.origin==='https://app.slack.com' && location.pathname.match(/^\\/client\\/([TE][A-Z0-9]+)(?:\\/|$)/)?.[1]===${JSON.stringify(workspace)})window.__PME_TRIAGE__?.update(${JSON.stringify(scoped)})`);
@@ -251,13 +310,13 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   }, 1500);
   return {
     attach,
-    async detach(entry) { attached.delete(entry.sessionId);boundContexts.delete(entry.sessionId);uiStates.delete(entry.sessionId);actionResults.delete(entry.sessionId);selectedWorkspaces.delete(entry.sessionId);mods.detach(entry);syncConnectivity(); },
-    status: () => ({ callbackSecurity:{rejected:rejectedCallbacks,ready:[...sessions.values()].filter(e=>contextGuard.current(e)).length}, ...store.status(), ...stats, customApi:{...customApi,methods:{...customApi.methods}}, methods: Object.fromEntries(observedMethods), shapes: Object.fromEntries(shapes), socketTypes: Object.fromEntries(socketTypes),
+    async detach(entry) {sendConfirmation.clear(entry.sessionId);quickTargets.delete(entry.sessionId);attached.delete(entry.sessionId);boundContexts.delete(entry.sessionId);uiStates.delete(entry.sessionId);actionResults.delete(entry.sessionId);selectedWorkspaces.delete(entry.sessionId);mods.detach(entry);syncConnectivity(); },
+    status: () => ({ quickSend:sendConfirmation.status(),callbackSecurity:{rejected:rejectedCallbacks,ready:[...sessions.values()].filter(e=>contextGuard.current(e)).length}, ...store.status(), ...stats, customApi:{...customApi,methods:{...customApi.methods}}, methods: Object.fromEntries(observedMethods), shapes: Object.fromEntries(shapes), socketTypes: Object.fromEntries(socketTypes),
       shell:{connected:shell.connected(),hotkeyRegistered:nativeHotkey},network:refreshes.status().online?'available':'offline',apiPolicy:'manual-only',refreshQueue:{active:refreshes.status().active,queued:refreshes.status().queued},activity:refreshes.status().workspaces.map(a=>({status:a.status,at:a.at,attemptAt:a.attemptAt,nextAt:a.nextAt,hasMore:a.hasMore,countsAvailable:a.countsAvailable,threadsAvailable:a.threadsAvailable})),history:history.status(),mode: 'triage-with-native-reply', mods:mods.status(),liveUI:mods.enabled('triage-surface'), partial: true }),
     async dispose() {
       if(disposed)return;
       disposed = true; clearInterval(timer); cdp.off('event', event);
-      history.dispose();readMarker.dispose();refreshes.dispose();await shell.close();await mods.dispose(sessions);
+      sendConfirmation.dispose();quickTargets.clear();history.dispose();readMarker.dispose();refreshes.dispose();await shell.close();await mods.dispose(sessions);
       for (const e of sessions.values()) {
         await cdp.send('Runtime.removeBinding', { name: '__pmeReadOnlySnapshot' }, e.sessionId).catch(() => {});
         await cdp.send('Runtime.removeBinding', { name: '__pmeLoadHistory' }, e.sessionId).catch(() => {});

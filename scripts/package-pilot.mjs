@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';import os from 'node:os';import path from 'nod
 const root=fileURLToPath(new URL('..',import.meta.url));
 const files=[
   'native/TriageController.swift','mods/runtime.json',
-  ...['context-guard','control-policy','activity-refresh','activity-store','history-loader','live-runtime','message-format','mod-loader','pill-preview','pipe','read-marker','shell-server','slack-installation','triage-state'].map(n=>`src/${n}.mjs`),
+  ...['native-edge','context-guard','control-policy','activity-refresh','activity-store','history-loader','live-runtime','message-format','mod-loader','pill-preview','preview-session','send-confirmation','pipe','read-marker','shell-server','slack-installation','triage-state'].map(n=>`src/${n}.mjs`),
   ...['mark-read','native-reply','read-api','state-observer','triage'].map(n=>`src/renderer/${n}.js`),
   ...['build-shell','control','dev','devctl','doctor','mods','shellctl'].map(n=>`scripts/${n}.mjs`),
   'pilot/Start Triage.command','pilot/Stop Triage.command','pilot/README.md'

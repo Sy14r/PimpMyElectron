@@ -6,7 +6,7 @@ export function pillPreview(workspaces,request){
     Math.abs(a.x)>100000||Math.abs(a.y)>100000||a.width<=0||a.width>64||a.height<=0||a.height>64)return null;
   for(const w of workspaces){
     const item=w.items.find(i=>i.key===request.key);
-    if(!item||item.unread!==true||['done','later'].includes(item.triage?.state))continue;
+    if(!item||item.pendingRead||item.unread!==true||['done','later'].includes(item.triage?.state))continue;
     const hasCursor=typeof item.lastRead==='string'&&/^\d+\.\d+$/.test(item.lastRead);
     const fresh=hasCursor?item.messages.filter(m=>compareTs(m.ts,item.lastRead)>0):[];
     const selected=hasCursor?fresh.slice(-3):item.messages.slice(-1);

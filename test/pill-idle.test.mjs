@@ -4,7 +4,7 @@ const start=source.indexOf('  function schedulePillCollapse()'),end=source.index
 assert.ok(start>0&&end>start);
 function setup({mode='cluster',seconds=15}={}){
  let now=0,id=0;const timers=new Map(),transitions=[];
- const env={mode,disposed:false,pillIdleTimer:null,pillPointerInside:false,hoverTimer:null,hoverIntent:null,settings:{idleSeconds:seconds},lastInteraction:0,
+ const env={pillReadPending:null,snapshot:{},mode,disposed:false,pillIdleTimer:null,pillPointerInside:false,hoverTimer:null,hoverIntent:null,settings:{idleSeconds:seconds},lastInteraction:0,
   Date:{now:()=>now},window:{},transition:next=>{transitions.push({next,at:now});env.mode=next;},
   setTimeout:(fn,delay)=>{timers.set(++id,{fn,at:now+delay});return id;},clearTimeout:key=>timers.delete(key)};
  vm.runInNewContext(source.slice(start,end),env);
@@ -42,4 +42,10 @@ test('a stale callback cannot collapse after the view changes or the module is d
  for(const update of [e=>e.mode='queue',e=>e.disposed=true,e=>e.settings.idleSeconds=0]){
   const {env,advance,transitions}=setup();env.touch();update(env);await advance(20000);assert.deepEqual(transitions,[]);
  }
+});
+test('hovering the native preview pauses a pending pill collapse',async()=>{
+ const {env,advance,transitions}=setup({seconds:5});env.touch();await advance(4500);env.snapshot.previewHeld=true;
+ await advance(10000);assert.deepEqual(transitions,[]);
+ env.snapshot.previewHeld=false;env.touch();await advance(4999);assert.deepEqual(transitions,[]);
+ await advance(1);assert.equal(transitions[0].next,'strip');
 });

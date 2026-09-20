@@ -101,20 +101,32 @@ test('cache snapshots hydrate authorized background workspaces and reject stale 
   assert.equal(cdp.evaluations.some(e=>e.expression.startsWith('window.__PME_READS__?.activity(')),false);
   assert.equal(runtime.status().customApi.requests,0);
 });
-test('native hover preview uses scoped cached unread content and clears outside compact mode',async t=>{
+test('notifications and hover previews cover background workspaces while inbox message content stays scoped',async t=>{
   const cdp=new FakeCDP(),entry={targetId:'one',sessionId:'s1',url:'https://app.slack.com/client/TONE/CONE'},sessions=new Map([['one',entry]]);
   const runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'preview-runtime-'));const runtime=await createRuntime({cdp,contextGuard:cdp.contextGuard,sessions,root,runtimeDir});
   t.after(async()=>{await runtime.dispose();await fs.rm(runtimeDir,{recursive:true,force:true});});await runtime.attach(entry);
   const emit=(name,value)=>cdp.emit('event',{sessionId:'s1',method:'Runtime.bindingCalled',params:{executionContextId:1,name,payload:JSON.stringify(value)}});
   emit('__pmeClientState',{rendererWorkspaceId:'TONE',workspaceId:'TTWO',knownWorkspaces:[{id:'TONE',name:'One'},{id:'TTWO',name:'Two'}],channels:[{id:'DTWO',is_im:true,has_unreads:true,last_read:'100.000001'}],messages:[{channel:'DTWO',ts:'100.000001',text:'old'},{channel:'DTWO',ts:'100.000002',text:'new'}]});
   await new Promise(r=>setTimeout(r,1600));
-  const state=()=>new Promise((resolve,reject)=>{let data='';const socket=net.createConnection(path.join(runtimeDir,'shell.sock'));socket.on('connect',()=>socket.write('{"op":"state"}\n'));socket.on('error',reject);socket.on('data',c=>data+=c);socket.on('end',()=>resolve(JSON.parse(data).result));});
+  const state=(extra={})=>new Promise((resolve,reject)=>{let data='';const socket=net.createConnection(path.join(runtimeDir,'shell.sock'));socket.on('connect',()=>socket.write(JSON.stringify({op:'state',...extra})+'\n'));socket.on('error',reject);socket.on('data',c=>data+=c);socket.on('end',()=>resolve(JSON.parse(data).result));});
+  const captured=cdp.captures.get('s1');assert.equal(captured.selectedWorkspace,'TONE');
+  assert.equal(captured.workspaces.some(w=>w.id==='TTWO'),false);
+  assert.equal(captured.notificationWorkspaces.find(w=>w.id==='TTWO').items[0].unread,true);
+  assert.equal(captured.notificationWorkspaces.find(w=>w.id==='TTWO').items[0].messages.length,0);
+  assert.equal((await state()).attention,1);
+  emit('__pmeShellState',{workspaceId:'TONE',mode:'strip',edgeStrip:{id:'123-1',edge:'left',bounds:{x:0,y:100,width:12,height:88}}});
+  assert.equal((await state({edgeStripVersion:1})).edgeStrip.count,1);
   const preview={key:'TTWO:DTWO:',edge:'left',anchor:{x:4,y:100,width:32,height:32},text:'UNTRUSTED PREVIEW'};
-  emit('__pmeShellState',{workspaceId:'TONE',mode:'cluster',preview});assert.equal((await state()).preview,null);
-  emit('__pmeTriageAction',{workspaceId:'TONE',action:'switch',target:'*'});
+  emit('__pmeShellState',{workspaceId:'TONE',mode:'cluster',preview});
   const shown=(await state()).preview;assert.equal(shown.label,'New message');assert.equal(shown.messages[0].text,'new');
   assert.equal(JSON.stringify(shown).includes('UNTRUSTED'),false);
   emit('__pmeShellState',{workspaceId:'TONE',mode:'queue',preview});assert.equal((await state()).preview,null);
+  await state({op:'settings',patch:{notificationMode:'inbox'}});assert.equal((await state()).attention,0);
+  emit('__pmeShellState',{workspaceId:'TONE',mode:'cluster',preview});assert.equal((await state()).preview,null);
+  await state({op:'settings',patch:{notificationMode:'selected',notificationWorkspaces:['TTWO']}});assert.equal((await state()).attention,1);
+  emit('__pmeShellState',{workspaceId:'TONE',mode:'cluster',preview});
+  assert.equal((await state()).preview.messages[0].text,'new');
+  await state({op:'settings',patch:{notificationMode:'selected',notificationWorkspaces:[]}});assert.equal((await state()).attention,0);assert.equal((await state()).preview,null);
   assert.equal(runtime.status().customApi.requests,0);
 });
 
@@ -135,4 +147,51 @@ test('a new main document rebinds callbacks while calls from its old context are
   callback(1);assert.equal(runtime.status().customApi.requests,1);
   callback(2);assert.equal(runtime.status().customApi.requests,2);
   assert.equal(runtime.status().callbackSecurity.rejected,2);
+});
+
+test('optimistic preview reads hide immediately, preserve raw unread state and roll back on failure',async t=>{
+ const cdp=new FakeCDP(),entry={targetId:'one',sessionId:'s1',url:'https://app.slack.com/client/TONE/CONE'},sessions=new Map([['one',entry]]);
+ const runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'optimistic-read-'));
+ const runtime=await createRuntime({cdp,contextGuard:cdp.contextGuard,sessions,root,runtimeDir});
+ t.after(async()=>{await runtime.dispose();await fs.rm(runtimeDir,{recursive:true,force:true});});await runtime.attach(entry);
+ let resolveRead;const evaluate=cdp.evaluate.bind(cdp);cdp.evaluate=(expression,id)=>expression.includes('__PME_TRIAGE__?.readFromPill(')?new Promise(r=>resolveRead=r):evaluate(expression,id);
+ const emit=(name,value)=>cdp.emit('event',{sessionId:'s1',method:'Runtime.bindingCalled',params:{executionContextId:1,name,payload:JSON.stringify(value)}});
+ emit('__pmeClientState',{rendererWorkspaceId:'TONE',workspaceId:'TONE',knownWorkspaces:[{id:'TONE',name:'One'}],channels:[{id:'CONE',has_unreads:true,last_read:'100.000001'}],messages:[{channel:'CONE',ts:'100.000002',text:'new'}]});
+ await new Promise(r=>setTimeout(r,1600));
+ const call=request=>new Promise((resolve,reject)=>{let data='';const socket=net.createConnection(path.join(runtimeDir,'shell.sock'));socket.on('connect',()=>socket.write(JSON.stringify(request)+'\n'));socket.on('error',reject);socket.on('data',c=>data+=c);socket.on('end',()=>resolve(JSON.parse(data)));});
+ const state=async()=> (await call({op:'state'})).result;
+ const preview={key:'TONE:CONE:',edge:'left',anchor:{x:4,y:100,width:32,height:32}};
+ emit('__pmeShellState',{workspaceId:'TONE',mode:'cluster',preview});assert.equal((await state()).attention,1);
+ const action=await call({op:'preview-action',action:'read',key:preview.key});assert.equal(action.result.activate,false);
+ assert.equal((await state()).attention,0);assert.equal((await state()).preview,null);
+ // A late hover report must not reopen an optimistically dismissed item.
+ emit('__pmeShellState',{workspaceId:'TONE',mode:'cluster',preview});assert.equal((await state()).preview,null);
+ await new Promise(r=>setTimeout(r,1600));
+ const observed=cdp.captures.get('s1').notificationWorkspaces[0].items[0];assert.equal(observed.unread,true);assert.equal(observed.pendingRead,true);
+ resolveRead({ok:false});await new Promise(r=>setImmediate(r));assert.equal((await state()).attention,1);
+ assert.equal(runtime.status().customApi.requests,0);
+});
+
+test('a confirmed native quick reply immediately suppresses its pill count without waiting for cache refresh',async t=>{
+ const cdp=new FakeCDP(),entry={targetId:'one',sessionId:'s1',url:'https://app.slack.com/client/TONE/CONE'},sessions=new Map([['one',entry]]);
+ const runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'reply-dismiss-'));
+ const runtime=await createRuntime({cdp,contextGuard:cdp.contextGuard,sessions,root,runtimeDir});
+ t.after(async()=>{await runtime.dispose();await fs.rm(runtimeDir,{recursive:true,force:true});});await runtime.attach(entry);
+ const emit=(method,params)=>cdp.emit('event',{sessionId:'s1',method,params:{executionContextId:1,...params}});
+ const binding=(name,value)=>emit('Runtime.bindingCalled',{name,payload:JSON.stringify(value)});
+ const cache={rendererWorkspaceId:'TONE',workspaceId:'TONE',knownWorkspaces:[{id:'TONE',name:'One'}],channels:[{id:'CONE',has_unreads:true,last_read:'100.000001'}],messages:[{channel:'CONE',ts:'100.000002',text:'new'}]};
+ binding('__pmeClientState',cache);await new Promise(r=>setTimeout(r,1600));
+ const call=request=>new Promise((resolve,reject)=>{let data='';const socket=net.createConnection(path.join(runtimeDir,'shell.sock'));socket.on('connect',()=>socket.write(JSON.stringify(request)+'\n'));socket.on('error',reject);socket.on('data',c=>data+=c);socket.on('end',()=>resolve(JSON.parse(data)));});
+ const state=async()=> (await call({op:'state'})).result;
+ const key='TONE:CONE:';binding('__pmeShellState',{workspaceId:'TONE',mode:'cluster',preview:{key,edge:'left',anchor:{x:4,y:100,width:32,height:32}}});
+ await call({op:'preview-action',action:'reply',key});binding('__pmeShellState',{workspaceId:'TONE',mode:'reply'});
+ binding('__pmeTriageAction',{action:'quick-send-attempt',workspaceId:'TONE',key,id:'attempt-1'});
+ assert.equal((await state()).attention,1);
+ const send=cdp.send.bind(cdp);cdp.send=async(method,params,sessionId)=>method==='Network.getResponseBody'?{body:JSON.stringify({ok:true,channel:'CONE',ts:'100.000003',message:{team:'TONE'}})}:send(method,params,sessionId);
+ emit('Network.requestWillBeSent',{requestId:'native-send',request:{url:'https://app.slack.com/api/chat.postMessage',postData:'channel=CONE'}});
+ emit('Network.loadingFinished',{requestId:'native-send',encodedDataLength:100});await new Promise(r=>setImmediate(r));
+ assert.equal((await state()).attention,0);assert.equal(runtime.status().quickSend.confirmed,1);
+ assert.equal(cdp.captures.get('s1').notificationWorkspaces[0].items[0].unread,true);
+ binding('__pmeClientState',{...cache,messages:[...cache.messages,{channel:'CONE',ts:'100.000004',text:'newer than reply'}]});await new Promise(r=>setTimeout(r,1600));
+ assert.equal((await state()).attention,1);assert.equal(runtime.status().customApi.requests,0);
 });

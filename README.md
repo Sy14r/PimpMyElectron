@@ -103,6 +103,25 @@ Quit Slack normally, then run `npm run dev`. The launcher starts official Slack 
 
 `npm run dev:reload` reapplies edited source; `npm run dev:status` reports health; `npm run dev:stop` stops the owned helper/client while retaining sign-ins and local state. `npm run mods -- disable triage-surface` removes the UI and restores Slack. The mod does not patch the app bundle or implement a send API. Slack owns composing, sending and drafts. Mark read is an explicit, timestamp-bounded conversation action; thread marking is not yet supported. Production-profile migration and login items are not implemented.
 
+The menu-bar controller's **Settings…** window contains docking, display, resting
+view, pill idle delay (including 5 seconds), shortcut, and local Done behavior.
+Changes save automatically on this Mac. **Notify me about** controls the menu
+count, pill destinations, cached hover previews, and expansion from strip to pill:
+
+- **All connected workspaces** includes every observed signed-in workspace,
+  independently of the inbox filter (the default).
+- **Choose workspaces…** includes only checked workspaces. Selecting none disables
+  these notification surfaces without changing the inbox.
+- **Follow the inbox filter** uses the currently selected inbox workspace;
+  selecting All workspaces includes them all.
+
+New unread activity reveals only the pill, without activating Slack; additional
+activity resets the pill's idle timer. Startup hydration and preference changes
+do not announce existing unread items. Clicking a background workspace's pill
+item selects that workspace in the inbox and opens its native conversation.
+Notification awareness uses Slack's existing client cache and observed traffic;
+it adds no Slack API calls and cannot cover data the client has not loaded.
+
 See [usage, architecture, recovery, validation and limitations](research/live-prototype.md) and [phase-by-phase delivery status](research/implementation-plan.md). Apple Command Line Tools are needed to compile the native helper. The persistent signed-in dev session and disposable synthetic experiments below must be run separately.
 
 Experiment screenshots and raw reports stay on the development Mac; see [local evidence notes](evidence/README.md).
