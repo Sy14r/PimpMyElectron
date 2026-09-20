@@ -58,6 +58,8 @@ All actions reuse mounted Slack controls; this adds no direct Slack API calls or
 
 The thread header’s back chevron opens its parent DM or channel inside triage, selecting the parent inbox item when present. Escape still closes the detail pane to the queue (or first blurs the composer). Parent navigation uses the same verified native-open path and also works when the parent is absent from the observed inbox snapshot.
 
+Native message reply bars and “Reply in thread” buttons now explicitly request a triage thread destination before Slack replaces the parent composer. The request must come from the verified pane, with a message channel matching that pane and a valid root timestamp; stale requests and unrelated controls are ignored. The normal thread-opening path handles the new selection even if no inbox thread row has been observed yet. Full Slack keeps its original behavior. The native Back control is invoked on the next task so Chromium's protection against reentrant clicks does not swallow it. Live checks covered opening an existing DM thread, returning to the DM, and opening the thread composer for a message without replies; nothing was sent.
+
 
 ## Switching latency (September 20, 2026)
 

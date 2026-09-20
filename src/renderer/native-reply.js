@@ -382,7 +382,12 @@
       // Never dismiss a thread after its navigation has already started.
       if(inConversation()&&!auxClosed&&!threadClicked&&!locate()){
         const close=document.querySelector('[data-qa="quip_close_thread"]')||document.querySelector('[data-qa="threads_flexpane"] button[aria-label="Close"]');
-        if(close){close.click();auxClosed=true;lastChannelClick=Date.now();await waitForNativeChange();continue;}
+        if(close){
+          // A triage Back click can be on this very button. Let its original
+          // activation finish before invoking it, or Chromium ignores .click().
+          await pause(0);if(disposed||run!==generation||!active)return {cancelled:true};
+          close.click();auxClosed=true;lastChannelClick=Date.now();await waitForNativeChange();continue;
+        }
       }
       if(target.kind!=='compose'&&inWorkspace()&&channelClicks<3&&!threadClicked&&Date.now()-lastChannelClick>=750&&!locate()&&!(target.threadTs&&locate(null))){
         const row=[...document.querySelectorAll('[data-qa="channel-sidebar-channel"]')].find(n=>n.getAttribute('data-qa-channel-sidebar-channel-id')===target.channelId);
@@ -417,10 +422,23 @@
     return {ok:false,error:reason};
   }
   function suspend({forget=false}={}){generation++;active=false;state='idle';reason='';unframe();if(forget)target=null;save();notify();}
+  function threadAction(event){
+    if(event.type!=='click'||event.defaultPrevented||event.metaKey||event.ctrlKey||event.altKey||event.shiftKey||
+      !active||state!=='ready'||target?.kind==='compose'||target?.threadTs||auxiliary||window.__PME_TRIAGE__?.status().mode!=='reply')return false;
+    const control=event.target.closest?.('[data-qa="reply_bar"],[data-qa="start_thread"]');
+    if(!control||!pane?.contains(control)||!verifiedPane())return false;
+    const message=control.closest('[data-qa="message_container"][data-msg-ts]');
+    const threadTs=message?.getAttribute('data-msg-ts');
+    if(message?.getAttribute('data-msg-channel-id')!==target.channelId||!/^\d+\.\d+$/.test(threadTs||''))return false;
+    // Treat this as an explicit destination change before Slack replaces the DM
+    // editor. Keep the normal destination/send guards intact during navigation.
+    event.preventDefault();event.stopImmediatePropagation();
+    window.dispatchEvent(new CustomEvent('pme-native-thread-action',{detail:{sourceKey:target.key,threadTs}}));return true;
+  }
   // A route/editor replacement must never leave a stale destination label over
   // a different composer. Recheck on input as well as during DOM reconciliation.
   function guard(event){if(!active)return;
-    if(headerAction(event))return;
+    if(headerAction(event)||threadAction(event))return;
     const sending=event.type==='click'&&event.target.closest?.('[data-qa="texty_send_button"]')||event.type==='keydown'&&event.key==='Enter'&&event.target.closest?.('[data-qa="message_input"]');
     if(sending&&(state!=='ready'||!verified())){event.preventDefault();event.stopImmediatePropagation();fail('The Slack destination changed. Reopen the conversation to continue.');return;}
     if(sending&&document.body.hasAttribute('data-pme-quick')&&!document.body.hasAttribute('data-pme-quick-read')&&!event.isComposing){

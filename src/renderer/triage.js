@@ -270,6 +270,15 @@
     if(action==='stock'&&mode==='stock'&&editor?.isConnected)editor.focus({preventScroll:true});
   }
   window.addEventListener('pme-native-header-action',nativeHeaderAction,{signal:abort.signal});
+  async function nativeThreadAction(event){
+    const reply=window.__PME_REPLY__?.status(),target=reply?.target,threadTs=event.detail?.threadTs;
+    if(mode!=='reply'||!reply?.ready||reply.auxiliary||!target||target.kind==='compose'||target.threadTs||
+      event.detail?.sourceKey!==target.key||!/^\d+\.\d+$/.test(threadTs||''))return;
+    const key=`${target.workspaceId}:${target.channelId}:${threadTs}`;
+    const cached=items().find(item=>item.key===key)||notificationItems().find(item=>item.key===key);
+    await startReply(cached||{...target,key,threadTs});
+  }
+  window.addEventListener('pme-native-thread-action',nativeThreadAction,{signal:abort.signal});
   window.addEventListener('pme-native-reply-state',renderReply,{signal:abort.signal});
   window.addEventListener('pme-native-reply-installed',()=>{const r=window.__PME_REPLY__?.status();if(r?.target&&(r.active||mode==='reply'))void startReply(r.target);},{signal:abort.signal});
   function openReader(key){++openSequence;openingKey=null;selection=key;void transition('reading');requestHistory();}

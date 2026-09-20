@@ -120,6 +120,14 @@ test('opening a thread waits for its editor instead of closing its loading pane'
   assert.equal(result.ok,true);assert.equal(env.box.thread,'100.000001');assert.equal(env.api.status().ready,true);env.api.dispose();
 });
 
+test('native back waits for the originating click to finish and cancelled navigation cannot close its thread',async()=>{
+  const env=setup({thread:'100.000001',returningThread:true});
+  const pending=env.api.open({workspaceId:'TONE',channelId:'CONE'});
+  assert.equal(env.native.threadCloses,0);env.api.suspend();
+  assert.equal((await pending).cancelled,true);assert.equal(env.native.threadCloses,0);
+  assert.equal(env.box.thread,'100.000001');env.api.dispose();
+});
+
 
 test('native navigation opens a thread whose parent is absent from the DOM',async()=>{
   const env=setup({openingThread:'100.000001',nativeCallbacks:true,missingRoot:true});
