@@ -30,7 +30,7 @@ const startReplySource='async function startReply('+functionSource('async functi
 function openingEnv(){
  const calls=[];let loaded,revealed;
  const loading=new Promise(resolve=>{loaded=resolve;}),reveal=new Promise(resolve=>{revealed=resolve;});
- const env={mode:'queue',openSequence:0,disposed:false,nativeQueue:Promise.resolve(),filtered:()=>[],filter:'all',snapshot:{},
+ const env={mode:'queue',quickReply:null,stagedDetail:false,openSequence:0,disposed:false,nativeQueue:Promise.resolve(),filtered:()=>[],filter:'all',snapshot:{},
    window:{__PME_REPLY__:{suspend:()=>calls.push('suspend'),open:(_item,options)=>{calls.push(['open',options.focusEditor]);return loading;},focus:()=>calls.push('focus')}},
    transition:async(next,{stage=false}={})=>{env.mode=next;calls.push(stage?'stage':'reveal');if(!stage)await reveal;},render:()=>calls.push('render')};
  vm.runInNewContext(startReplySource,env);
@@ -66,4 +66,22 @@ test('automatic pill reveal never focuses controls or requests app activation, a
  env.mode='strip';calls.length=0;
  const pending=env.transition('cluster',{passive:true});env.mode='queue';await pending;
  assert.equal(env.mode,'queue');assert.deepEqual(calls,[]);
+});
+
+
+test('stable reply navigation skips window IPC but normal transitions still apply geometry',async()=>{
+ const {env,calls}=motionEnv('reply');await env.transition('reply',{reuseLayout:true});
+ assert.ok(calls.includes('layout:reply'));assert.equal(calls.some(c=>c.startsWith('geometry:')),false);
+ calls.length=0;await env.transition('reply');assert.ok(calls.includes('geometry:reply:false'));
+ const staged=motionEnv('reply',{staged:true});await staged.env.transition('reply',{reuseLayout:true});assert.ok(staged.calls.includes('geometry:reply:true'));
+});
+
+
+test('reply switching reuses geometry only when compact/full size is unchanged',async()=>{
+ for(const [previous,quick,reuseLayout] of [[null,null,true],[{},null,false],[null,{},false],[{},{},true]]){
+  const f=openingEnv(),options=[];f.env.mode='reply';f.env.quickReply=previous;
+  f.env.transition=async(_next,value)=>options.push(value);
+  const pending=f.env.startReply({key:'TONE:CONE:',workspaceId:'TONE'},{quick});await flush();f.loaded();await pending;
+  assert.equal(options[0].reuseLayout,reuseLayout);
+ }
 });

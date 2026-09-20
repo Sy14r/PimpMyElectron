@@ -44,3 +44,45 @@ Validation:
   scrollable without sending messages; their original styles were restored.
 - Automatic scroll and reopen-to-bottom passed in a scrollable native thread.
 - Native draft contents remained unchanged. Custom API request delta was zero.
+
+
+## Conversation header controls (September 20, 2026)
+
+In triage, DM and channel headers retain Slack's star/classification and name/details controls. A compact hamburger delegates Huddle, conversation search, and notifications to the existing native buttons. For DMs, the mute label follows `aria-pressed` (Slack keeps the same accessible label even when muted); channels expose their native notification menu. The Huddle dropdown must target the actual button because its wrapper shares the same `data-qa` identifier.
+
+Native details dialogs now sit above the inbox, fit within the window, and use the triage colors. Profile and compact conversation-search views can replace the composer without becoming a destination error. Back/Escape returns to the original conversation; Escape first belongs to any open native modal or menu. These auxiliary views never qualify as a verified message editor for sending.
+
+Slack's full search application is a separate layout. When a native search routes there (including “View full search”), triage hands off to full Slack at that exact search. Reopening a conversation from triage first returns through Slack's native Home control so its conversation navigation is available again.
+
+All actions reuse mounted Slack controls; this adds no direct Slack API calls or polling. Full Slack restores the original controls and styling. Live checks covered DM and channel menus, native Huddle options (no call initiated), mute/unmute with original state restored, profile navigation, compact search results, full-search handoff, and reopening a DM from full search.
+
+The thread header’s back chevron opens its parent DM or channel inside triage, selecting the parent inbox item when present. Escape still closes the detail pane to the queue (or first blurs the composer). Parent navigation uses the same verified native-open path and also works when the parent is absent from the observed inbox snapshot.
+
+
+## Switching latency (September 20, 2026)
+
+Three local rounds through the already loaded Personal Test DM, social channel, DM thread and parent DM measured time from triage's open request to verified editor readiness. These are warm-client measurements, not network-independent guarantees or compositor paint timings. The repeated same-DM samples were excluded because that destination was already ready.
+
+| Route | Before (median) | After (median) |
+| --- | ---: | ---: |
+| DM → channel | 211 ms | 80 ms |
+| Channel → DM thread | 349 ms | 168 ms |
+| Thread → parent DM | 967 ms | 99 ms |
+
+Changes:
+
+- Close an existing thread before selecting its parent. The old order could restore the thread and wait for the 750 ms sidebar retry.
+- Skip redundant native window geometry calls when switching destinations within an already expanded view. Changes between compact/full reply sizes and settings-driven layout updates still apply geometry normally.
+- Observe native DOM mounting only while navigation is waiting, coalescing changes for 16 ms and retaining a 150 ms fallback for route-only changes. Each temporary observer disconnects on wake; the 10-second navigation deadline and destination/send validation remain intact.
+- Wait for two animation frames before final scroll/focus instead of always delaying 80 ms; retain the bounded timer fallback for background windows.
+
+No prefetching, extra Slack API calls, cached editor clones or hidden duplicate conversations were introduced. Cold destinations still depend on Slack's normal fetch/render latency.
+
+
+## Notifications-only app conversations
+
+The built-in Slack app is a native DM with a message list and a `message-input-system-notification-roadblock` footer, but no editable composer. Previously, triage waited for a message input until navigation timed out. It now frames this native view as read-only after checking the current workspace/channel route and the mounted list's matching workspace/channel identity.
+
+Display readiness is separate from editor/send verification: notification content can scroll, open native header menus and hand off to full Slack, while it cannot authorize sending or take composer focus. Regular app/bot conversations that have a standard composer continue through the existing editor path. Custom App Home pages and arbitrary agent layouts are not covered by this detection.
+
+Live validation opened the Personal Test Slack app notification card, switched to a normal DM with its composer, and returned to the read-only app view. No app actions or invitations were submitted, and no additional Slack API calls were introduced.

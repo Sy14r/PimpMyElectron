@@ -1,11 +1,11 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import fs from 'node:fs/promises';
 const source=await fs.readFile(new URL('../src/renderer/native-reply.js',import.meta.url),'utf8');
-function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeCallbacks=false,missingRoot=false,callbackTeam='TONE',selectionThrows=false,scrollThrows=false}={}){
+function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeCallbacks=false,missingRoot=false,callbackTeam='TONE',selectionThrows=false,scrollThrows=false,headerControls=false,menuControls=false,returningThread=false,notificationOnly=false}={}){
   let clockOffset=0;
   const attributes=new Map(),bodyAttributes=new Map(),listeners=new Map(),storage=new Map(),navigations=[];let focused=false,removed=false,tick;const events=[];
   let threadPending=false,threadClosed=false;
   const readButton={disabled:false,clicks:0,click(){this.clicks++;}};
-  const native={team:'TONE',switches:0,selects:0,composeClicks:0,threadNavigations:[],latestJumps:0,replyJumps:[]};
+  const native={team:'TONE',threadCloses:0,switches:0,selects:0,composeClicks:0,threadNavigations:[],latestJumps:0,replyJumps:[]};
   const teamButton={getAttribute:()=> 'TTWO',click(){native.switches++;native.team='TTWO';location.pathname='/client/TTWO/COLD';}};
   const channelRow={getAttribute:()=> 'CTWO',click(){if(selectionThrows)throw Error('native navigation failed');native.selects++;if(!delayFirstSelection||native.selects>1)box.channel='CTWO';location.pathname='/client/TTWO/CTWO';}};
   const box={channel:'CONE',thread,getAttribute(name){return name==='data-channel-id'?this.channel:name==='data-thread-ts'?this.thread:null;},querySelector:()=>editor};
@@ -16,7 +16,23 @@ function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeC
   const listNode=nativeCallbacks?{__reactFiber$test:{memoizedProps:callbacks,stateNode:{props:callbacks,scrollToMostRecentMessage(){if(scrollThrows)throw Error('scroll unavailable');native.latestJumps++;}}}}:{};
   const threadNode=nativeCallbacks?{__reactFiber$test:{memoizedProps:callbacks}}:{};
   const nativeMessage={getAttribute:k=>k==='data-msg-ts'?'100.000002':box.channel,getBoundingClientRect:()=>({top:120,bottom:160,width:400,height:40})};
-  const pane={querySelectorAll:()=>[nativeMessage],isConnected:true,contains:n=>n===editor||n===composer,setAttribute:(k,v)=>attributes.set(k,v),removeAttribute:k=>attributes.delete(k),querySelector:s=>s==='button.p-message_pane__unread_banner__close_icon'?readButton:s==='[data-qa="threads_flexpane"]'&&(thread||openingThread)?threadNode:s==='.c-virtual_list'?listNode:s==='.c-virtual_list [data-qa="slack_kit_scrollbar"]'?scroller:null};
+  const headerAttributes=new Map(),headerChildren=[],headerEvents=[],bodyChildren=[];
+  const makeNode=()=>({attributes:new Map(),children:[],handlers:new Map(),style:{},offsetWidth:220,offsetHeight:120,isConnected:true,
+    setAttribute(k,v){this.attributes.set(k,v);},getAttribute(k){return this.attributes.get(k)??null;},hasAttribute(k){return this.attributes.has(k);},removeAttribute(k){this.attributes.delete(k);},
+    matches:()=>false,focus(){document.activeElement=this;},getBoundingClientRect:()=>({right:700,bottom:48,width:30,height:30}),
+    append(n){this.children.push(n);n.parentElement=this;},addEventListener(k,fn){this.handlers.set(k,fn);},showPopover(){},
+    querySelector(){return this.children.find(n=>!n.disabled);},querySelectorAll(){return this.children.filter(n=>!n.disabled);},
+    remove(){for(const list of [headerChildren,bodyChildren]){const i=list.indexOf(this);if(i>=0)list.splice(i,1);}this.parentElement=null;this.isConnected=false;}});
+  const controlSelectors=['button[data-qa="huddle_channel_header_button"]','[data-qa="search_in_channel_button"]','[data-feat="view-header:notifications"]'];
+  const controls=controlSelectors.map(()=>({...makeNode(),clicks:0,click(){this.clicks++;}}));
+  controls[2].setAttribute('aria-label','Mute conversation');controls[2].setAttribute('aria-pressed','false');
+  const auxAttributes=new Map(),auxView={isConnected:false,setAttribute:(k,v)=>auxAttributes.set(k,v),removeAttribute:k=>auxAttributes.delete(k),querySelector:()=>null};
+  let auxiliaryKind=null;
+
+  const back={matches:()=>true},otherHeaderControl={matches:()=>false};
+  const header={querySelector:s=>s.startsWith('.p-flexpane_header__primary,')?header:menuControls?controls[controlSelectors.indexOf(s)]||null:null,contains:n=>n===back||n===otherHeaderControl||headerChildren.includes(n)||controls.includes(n),setAttribute:(k,v)=>headerAttributes.set(k,v),removeAttribute:k=>headerAttributes.delete(k),append(n){headerChildren.push(n);n.parentElement=header;},insertBefore(n,before){headerChildren.splice(headerChildren.indexOf(before),0,n);n.parentElement=header;}};
+  for(const control of controls)control.parentElement=header;
+  const pane={querySelectorAll:()=>[nativeMessage],isConnected:true,contains:n=>n===editor||n===composer,setAttribute:(k,v)=>attributes.set(k,v),removeAttribute:k=>attributes.delete(k),querySelector:s=>s.startsWith('.p-flexpane_header,')||s.startsWith('.p-view_header,')?(headerControls?header:null):s==='button.p-message_pane__unread_banner__close_icon'?readButton:s==='[data-qa="threads_flexpane"]'&&(thread||openingThread)?threadNode:s==='.c-virtual_list'?listNode:s==='.c-virtual_list [data-qa="slack_kit_scrollbar"]'?scroller:null};
   const editor={contains:n=>n===editor,isConnected:true,textContent:'untouched user draft',closest:s=>s==='.p-view_contents'?pane:box,focus:()=>{focused=true;}};
   const composerAttributes=new Map(),sendButton={disabled:false};
   const composer={parentElement:pane,querySelector:s=>s==='[data-qa="texty_send_button"]'?sendButton:s==='[role="toolbar"]'?{}:null,setAttribute:(k,v)=>composerAttributes.set(k,v),removeAttribute:k=>composerAttributes.delete(k)};
@@ -25,16 +41,40 @@ function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeC
   const composePage={mounted:false,closest:()=>pane,querySelector:s=>s.includes('destination-input')?recipient:editor};
   const composeButton={click(){native.composeClicks++;composePage.mounted=true;location.pathname='/client/'+native.team;}};
   const rootMessage={getAttribute:n=>n==='data-msg-ts'?openingThread:'CONE',querySelector:()=>({click(){threadPending=true;setTimeout(()=>{if(!threadClosed)box.thread=openingThread;},230);}})};
-  const document={head:{append(){}},body:{hasAttribute:k=>bodyAttributes.has(k),setAttribute:(k,v)=>bodyAttributes.set(k,v),removeAttribute:k=>bodyAttributes.delete(k)},createElement:()=>({remove(){removed=true;}}),
-    querySelectorAll:s=>s==='[data-qa="composer_page"]'?(composePage.mounted?[composePage]:[]):s==='[data-pme-native-reply-pane]'?(attributes.has('data-pme-native-reply-pane')?[pane]:[]):s==='[data-qa="message_input"][data-channel-id]'?[box]:s==='[data-qa="message_container"][data-msg-ts]'&&openingThread&&!missingRoot?[rootMessage]:s==='[data-qa="team_sidebar_item"]'?[teamButton]:s==='[data-qa="channel-sidebar-channel"]'?[channelRow]:[],
-    querySelector:s=>s==='[data-qa="composer_button"]'?composeButton:s==='[data-qa="composer_page"]'?(composePage.mounted?composePage:null):s==='[data-qa="team_sidebar_item"][data-team-active="true"]'?{getAttribute:()=>native.team}:s==='[data-qa="threads_flexpane"] button[aria-label="Close"]'&&threadPending?{click(){threadClosed=true;threadPending=false;}}:null,
+  const document={head:{append(){}},body:{append:n=>bodyChildren.push(n),hasAttribute:k=>bodyAttributes.has(k),setAttribute:(k,v)=>bodyAttributes.set(k,v),removeAttribute:k=>bodyAttributes.delete(k)},createElement:tag=>tag==='style'?{remove(){removed=true;}}:makeNode(),
+    querySelectorAll:s=>s==='[data-qa="message-input-system-notification-roadblock"]'?(notificationOnly?[{closest:()=>pane}]:[]):s==='[data-qa="composer_page"]'?(composePage.mounted?[composePage]:[]):s==='[data-pme-native-reply-pane]'?[...(attributes.has('data-pme-native-reply-pane')?[pane]:[]),...(auxAttributes.has('data-pme-native-reply-pane')?[auxView]:[])]:s==='[data-qa="message_input"][data-channel-id]'?(notificationOnly?[]:[box]):s==='[data-qa="message_container"][data-msg-ts]'&&openingThread&&!missingRoot?[rootMessage]:s==='[data-qa="team_sidebar_item"]'?[teamButton]:s==='[data-qa="channel-sidebar-channel"]'?[channelRow]:[],
+    querySelector:s=>(auxiliaryKind==='profile'&&s==='[data-qa="member_profile_pane"]'||auxiliaryKind==='search'&&s==='[data-qa="search_in_channel_title"]'||auxiliaryKind==='full search'&&s==='[data-qa="search_view"]')?{closest:()=>auxView}:s==='[data-qa="quip_close_thread"]'&&returningThread&&box.thread?{click(){native.threadCloses++;box.thread=null;}}:s==='[data-qa="composer_button"]'?composeButton:s==='[data-qa="composer_page"]'?(composePage.mounted?composePage:null):s==='[data-qa="team_sidebar_item"][data-team-active="true"]'?{getAttribute:()=>native.team}:s==='[data-qa="threads_flexpane"] button[aria-label="Close"]'&&threadPending?{click(){threadClosed=true;threadPending=false;}}:null,
     addEventListener:(name,fn)=>listeners.set(name,fn)};
-  const window={dispatchEvent(event){events.push(event.type);}};window.top=window;
+  const window={__PME_TRIAGE__:{status:()=>({mode:'reply'})},dispatchEvent(event){events.push(event.type);if(event.type==='pme-native-header-action')headerEvents.push(event.detail.action);}};window.top=window;
   const location={origin:'https://app.slack.com',pathname:'/client/TONE/CONE',assign:url=>navigations.push(url)};
-  vm.runInNewContext(source,{window,document,location,AbortController,CustomEvent:class{constructor(type){this.type=type;}},Date:{now:()=>Date.now()+clockOffset},innerHeight:660,setTimeout,clearInterval(){},setInterval:fn=>{tick=fn;return 1;},
+  vm.runInNewContext(source,{window,document,location,AbortController,CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},Date:{now:()=>Date.now()+clockOffset},innerWidth:820,innerHeight:660,setTimeout,clearInterval(){},setInterval:fn=>{tick=fn;return 1;},
     sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}});
-  return {advance:ms=>clockOffset+=ms,readButton,sendButton,window,api:window.__PME_REPLY__,tick:()=>tick(),events,composePage,recipient,scroller,box,pane,editor,composerAttributes,location,native,listeners,storage,navigations,attributes,bodyAttributes,focused:()=>focused,removed:()=>removed};
+  return {setNotificationOnly(value){notificationOnly=value;},callbacks,controls,bodyChildren,document,auxAttributes,setAuxiliary(kind){auxiliaryKind=kind;auxView.isConnected=!!kind;editor.isConnected=!kind;},header,headerChildren,headerEvents,headerAttributes,back,otherHeaderControl,advance:ms=>clockOffset+=ms,readButton,sendButton,window,api:window.__PME_REPLY__,tick:()=>tick(),events,composePage,recipient,scroller,box,pane,editor,composerAttributes,location,native,listeners,storage,navigations,attributes,bodyAttributes,focused:()=>focused,removed:()=>removed};
 }
+function clickHeader(env,button){
+ const result={prevented:false,stopped:false};env.listeners.get('click')({type:'click',target:{closest:selector=>selector==='button'?button:null},preventDefault(){result.prevented=true;},stopImmediatePropagation(){result.stopped=true;}});return result;
+}
+test('native header actions intercept back and handoff without navigation or draft changes',async()=>{
+ const env=setup({thread:'100.000001',headerControls:true});await env.api.open({workspaceId:'TONE',channelId:'CONE',threadTs:'100.000001'});
+ assert.equal(env.headerChildren.length,1);assert.ok(env.headerAttributes.has('data-pme-native-header'));
+ for(let i=0;i<3;i++)env.tick();assert.equal(env.headerChildren.length,1);
+ assert.deepEqual(clickHeader(env,env.back),{prevented:true,stopped:true});assert.deepEqual(env.headerEvents,['conversation']);
+ assert.deepEqual(clickHeader(env,env.headerChildren[0]),{prevented:true,stopped:true});assert.deepEqual(env.headerEvents,['conversation','stock']);
+ assert.equal(env.editor.textContent,'untouched user draft');assert.deepEqual(env.navigations,[]);
+ env.api.suspend();assert.equal(env.headerChildren.length,0);assert.equal(env.headerAttributes.size,0);env.api.dispose();
+});
+test('native header leaves unrelated controls and full Slack alone and rejects stale destinations',async()=>{
+ const env=setup({headerControls:true});await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+ assert.equal(clickHeader(env,env.otherHeaderControl).prevented,false);
+ assert.equal(clickHeader(env,{matches:()=>true}).prevented,false);
+ env.window.__PME_TRIAGE__.status=()=>({mode:'stock'});assert.equal(clickHeader(env,env.back).prevented,false);
+ env.window.__PME_TRIAGE__.status=()=>({mode:'reply'});env.box.channel='COTHER';
+ assert.equal(clickHeader(env,env.headerChildren[0]).prevented,true);assert.deepEqual(env.headerEvents,[]);env.api.dispose();
+});
+test('native header controls recover after Slack removes the injected button',async()=>{
+ const env=setup({headerControls:true});await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+ env.headerChildren[0].remove();env.tick();assert.equal(env.headerChildren.length,1);env.api.dispose();assert.equal(env.headerChildren.length,0);
+});
 test('native reply frames the verified editor, preserves its draft and removes all layout changes',async()=>{
   const env=setup();assert.equal((await env.api.open({workspaceId:'TONE',channelId:'CONE'})).ok,true);
   assert.equal(env.api.status().ready,true);assert.equal(env.focused(),true);assert.equal(env.editor.textContent,'untouched user draft');assert.ok(env.attributes.has('data-pme-native-reply-pane'));
@@ -166,4 +206,69 @@ test('native Mark read only invokes the verified conversation banner button',asy
  e.native.team='TTWO';assert.equal(e.api.markReadNative().ok,false);assert.equal(e.readButton.clicks,1);e.api.dispose();
  const thread=setup({thread:'1.0'});await thread.api.open({workspaceId:'TONE',channelId:'CONE',threadTs:'1.0'});
  assert.equal(thread.api.markReadNative().ok,false);assert.equal(thread.readButton.clicks,0);thread.api.dispose();
+});
+
+
+test('conversation menu delegates to current native controls, uses pressed mute state and restores originals',async()=>{
+ const env=setup({headerControls:true,menuControls:true});await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+ assert.equal(env.headerChildren.length,2);assert.ok(env.controls.every(n=>n.hasAttribute('data-pme-menu-native')));
+ clickHeader(env,env.headerChildren[0]);let menu=env.bodyChildren[0];assert.equal(env.api.overlayOpen(),true);
+ assert.deepEqual(menu.children.map(n=>n.textContent),['Huddle…','Search this conversation…','Mute conversation']);
+ const old=env.controls[0];env.controls[0]={...old,clicks:0};menu.children[0].handlers.get('click')();
+ assert.equal(old.clicks,0);assert.equal(env.controls[0].clicks,1);assert.equal(env.api.overlayOpen(),false);
+ env.controls[2].setAttribute('aria-pressed','true');clickHeader(env,env.headerChildren[0]);menu=env.bodyChildren[0];assert.equal(menu.children[2].textContent,'Unmute conversation');
+ env.box.channel='COTHER';menu.children[2].handlers.get('click')();assert.equal(env.controls[2].clicks,0);
+ env.api.suspend();assert.equal(env.bodyChildren.length,0);assert.equal(env.headerChildren.length,0);assert.ok(env.controls.every(n=>!n.hasAttribute('data-pme-menu-native')));env.api.dispose();
+});
+test('native profile and search replace the editor, restore it without moving scroll and never authorize sending',async()=>{
+ for(const kind of ['profile','search']){
+  const env=setup({nativeCallbacks:true});await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+  env.setAuxiliary(kind);env.tick();assert.equal(env.api.status().auxiliary,kind);assert.equal(env.api.status().ready,true);
+  assert.equal(env.attributes.has('data-pme-native-reply-pane'),false);assert.equal(env.auxAttributes.get('data-pme-native-auxiliary'),kind);
+  assert.equal(env.api.focus(),false);assert.equal(env.api.jumpToLatest().ok,false);
+  env.setAuxiliary(null);env.tick();assert.equal(env.api.status().auxiliary,null);assert.equal(env.api.status().ready,true);assert.equal(env.native.latestJumps,1);assert.equal(env.auxAttributes.size,0);
+  env.setAuxiliary(kind);env.tick();let blocked=false;
+  env.listeners.get('keydown')({type:'keydown',key:'Enter',target:{closest:()=>({})},preventDefault(){blocked=true;},stopImmediatePropagation(){}});
+  assert.equal(blocked,true);assert.equal(env.api.status().state,'error');assert.equal(env.auxAttributes.size,0);env.api.dispose();
+ }
+});
+
+
+test('native full search hands its existing route to Slack and removes all triage framing',async()=>{
+ const env=setup({headerControls:true,menuControls:true});await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+ env.setAuxiliary('full search');env.location.pathname='/client/TONE/search';env.tick();
+ assert.deepEqual(env.headerEvents,['stock']);assert.equal(env.api.status().ready,true);
+ env.api.suspend();assert.equal(env.attributes.size,0);assert.equal(env.auxAttributes.size,0);assert.equal(env.headerChildren.length,0);env.api.dispose();
+});
+
+
+test('returning from a thread closes it before any redundant parent sidebar navigation',async()=>{
+ const env=setup({thread:'100.000001',returningThread:true});
+ await env.api.open({workspaceId:'TONE',channelId:'CONE',threadTs:'100.000001'});
+ assert.equal((await env.api.open({workspaceId:'TONE',channelId:'CONE'})).ok,true);
+ assert.equal(env.native.threadCloses,1);assert.equal(env.native.selects,0);assert.equal(env.box.thread,null);assert.equal(env.api.status().ready,true);env.api.dispose();
+});
+
+
+test('notifications-only app conversations frame native content without requiring or authorizing a composer',async()=>{
+ const env=setup({notificationOnly:true,nativeCallbacks:true,headerControls:true,menuControls:true});
+ assert.equal((await env.api.open({workspaceId:'TONE',channelId:'CONE'})).ok,true);
+ assert.equal(env.api.status().ready,true);assert.equal(env.api.status().readOnly,true);assert.equal(env.focused(),false);assert.equal(env.api.focus(),false);assert.equal(env.composerAttributes.size,0);
+ assert.equal(env.api.jumpToLatest().ok,true);clickHeader(env,env.headerChildren[0]);assert.equal(env.api.overlayOpen(),true);
+ env.bodyChildren[0].children[1].handlers.get('click')();assert.equal(env.controls[1].clicks,1);
+ clickHeader(env,env.headerChildren.at(-1));assert.deepEqual(env.headerEvents,['stock']);
+ let blocked=false;env.listeners.get('keydown')({type:'keydown',key:'Enter',target:{closest:()=>({})},preventDefault(){blocked=true;},stopImmediatePropagation(){}});
+ assert.equal(blocked,true);assert.equal(env.api.status().state,'error');env.api.dispose();
+});
+test('notifications-only content must keep matching the workspace, channel and native list identity',async()=>{
+ for(const change of [e=>e.native.team='TOTHER',e=>e.location.pathname='/client/TONE/COTHER',e=>e.callbacks.channelId='COTHER',e=>e.callbacks.teamId='TOTHER']){
+  const env=setup({notificationOnly:true,nativeCallbacks:true});await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+  change(env);assert.equal(env.api.status().ready,false);env.tick();assert.equal(env.api.status().state,'error');assert.equal(env.attributes.size,0);env.api.dispose();
+ }
+});
+test('opening a normal editor after read-only app content restores normal composer verification',async()=>{
+ const env=setup({notificationOnly:true,nativeCallbacks:true});await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+ env.setNotificationOnly(false);await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+ assert.equal(env.api.status().ready,true);assert.equal(env.api.status().readOnly,false);assert.equal(env.focused(),true);assert.ok(env.composerAttributes.has('data-pme-native-composer'));
+ env.api.suspend();assert.equal(env.attributes.size,0);env.api.dispose();
 });

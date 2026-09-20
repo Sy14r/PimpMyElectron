@@ -145,6 +145,7 @@
     if(!window.__PME_REPLY__){openReader(item.key);$('notice').textContent='Native chat is unavailable · opened the read-only view.';return;}
     const run=++openSequence;
     await nativeQueue.catch(()=>{});if(run!==openSequence||disposed)return;
+    const reuseLayout=mode==='reply'&&!!quickReply===!!quick&&!stagedDetail;
     quickReply=quick;
     const stage=mode==='queue'&&!quickReply;
     heldRow=filtered().some(i=>i.key===item.key)?{key:item.key,filter}:null;
@@ -152,7 +153,7 @@
     // Mask and cancel the previous editor before waiting for window geometry.
     window.__PME_REPLY__.suspend();
     const destination={...item,workspaceName:item.workspaceName||snapshot.workspaceDirectory?.find(w=>w.id===item.workspaceId)?.name||item.workspaceId};
-    await transition('reply',{stage});if(run!==openSequence||mode!=='reply'||disposed)return;
+    await transition('reply',{stage,reuseLayout});if(run!==openSequence||mode!=='reply'||disposed)return;
     openingKey=null;
     // Reveal the loading pane immediately; Slack can finish mounting while it
     // slides out. Keep focus in the inbox until both operations have finished.
@@ -174,7 +175,7 @@
     const controls=shadow.querySelector('.triage-controls'),container=mode==='reply'?$('reply-chrome'):shadow.querySelector('.reader-header');
     if(controls.parentElement!==container){if(mode==='reply')container.append(controls);else container.insertBefore(controls,$('mark-status'));}
     $('mark-read').hidden=mode==='reply';
-    $('reply-latest').hidden=mode!=='reply'||!ready||reply?.target?.kind==='compose';
+    $('reply-latest').hidden=mode!=='reply'||!ready||!!reply?.auxiliary||reply?.target?.kind==='compose';
     $('inbox-latest').hidden=$('reply-latest').hidden;
     $('inbox-back').hidden=!detailMode();
     $('reply-back').hidden=reply?.target?.kind==='compose';
@@ -240,6 +241,24 @@
   },{signal:abort.signal});
   window.addEventListener('pme-native-quick-sent',()=>{if(mode==='reply'&&quickReply)void transition('cluster');},{signal:abort.signal});
   window.addEventListener('pme-native-compose-closed',()=>{if(mode==='reply')void transition('queue');},{signal:abort.signal});
+  async function nativeHeaderAction(event){
+    const reply=window.__PME_REPLY__?.status();
+    if(mode!=='reply'||!reply?.ready)return;
+    const action=event.detail?.action;if(!['stock','queue','conversation'].includes(action))return;
+    if(action==='conversation'){
+      const target=reply.target;if(!target?.threadTs||reply.auxiliary)return;
+      const key=`${target.workspaceId}:${target.channelId}:`;
+      const parent=items().find(item=>item.key===key)||notificationItems().find(item=>item.key===key);
+      await startReply(parent||{workspaceId:target.workspaceId,channelId:target.channelId,workspaceName:target.workspaceName,name:target.name,key,threadTs:null});
+      return;
+    }
+    const editor=action==='stock'?document.querySelector('[data-pme-native-reply-pane] [data-qa="texty_input"][contenteditable="true"]'):null;
+    // Keep Slack's mounted destination and draft. Do not navigate to its parent
+    // channel or invoke the native Close button when restoring the full window.
+    await transition(action==='queue'&&quickReply?'cluster':action);
+    if(action==='stock'&&mode==='stock'&&editor?.isConnected)editor.focus({preventScroll:true});
+  }
+  window.addEventListener('pme-native-header-action',nativeHeaderAction,{signal:abort.signal});
   window.addEventListener('pme-native-reply-state',renderReply,{signal:abort.signal});
   window.addEventListener('pme-native-reply-installed',()=>{const r=window.__PME_REPLY__?.status();if(r?.target&&(r.active||mode==='reply'))void startReply(r.target);},{signal:abort.signal});
   function openReader(key){++openSequence;openingKey=null;selection=key;void transition('reading');requestHistory();}
@@ -506,7 +525,7 @@
       reportShell();syncNativeStrip();
     }
   }
-  function transition(next,{stage=false,passive=false}={}) {
+  function transition(next,{stage=false,passive=false,reuseLayout=false}={}) {
     if (disposed || !['stock','hidden','strip','cluster','queue','reading','reply'].includes(next)) return Promise.resolve();
     if(pillReadPending){++pillReadRun;pillReadPending=null;window.__PME_REPLY__?.suspend();document.body.removeAttribute('data-pme-background-read');}
     clearTimeout(hoverTimer);hoverIntent=null;clearTimeout(pillIdleTimer);
@@ -529,7 +548,7 @@
         else if(animate&&expanding)setDetailMotion();
         if(next!=='reply')quickReply=null;
         mode=next;applyLayout();render();
-        if(!stage&&!(closing&&animate))await geometry(next,{animate});
+        if(!stage&&!(closing&&animate)&&!(reuseLayout&&from==='reply'&&next==='reply'&&!expanding))await geometry(next,{animate});
       }catch{$('notice').textContent='Window layout could not be applied. Normal Slack restores the saved layout.';}
       finally{if(!stage)clearDetailMotion();}
       if(!stage&&!passive){
@@ -610,6 +629,11 @@
       return;
     }
     if (mode==='stock')return;
+    if(mode==='reply'&&window.__PME_REPLY__?.overlayOpen?.())return;
+    if(mode==='reply'&&event.key==='Escape'&&window.__PME_REPLY__?.status().auxiliary){
+      if(event.defaultPrevented||event.isComposing)return;
+      event.preventDefault();event.stopImmediatePropagation();if(!event.repeat)window.__PME_REPLY__.closeAuxiliary();return;
+    }
     const fromTriage=event.composedPath().includes(host);
     const editable='input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]';
     const nativeTyping=document.activeElement!==host&&document.activeElement?.closest?.(editable)||
