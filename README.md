@@ -173,6 +173,11 @@ The socket-based experiments use a temporary loopback debugging port and verify 
 
 ## Repository contents
 
+The [portability assessment](research/framework-portability.md) reviews which parts
+can form a general Electron modification framework and which remain Slack-specific.
+It records research and deferred architectural options; no broader application
+support is currently claimed.
+
 `scripts/inspect_slack.py` reads the application bundle, fuses, archive metadata, and signature. `scripts/cdp.mjs` supplies a small bounded CDP client. `scripts/experiment.mjs` tests mod behavior. `scripts/native-window-experiment.mjs` tests reversible window changes. `scripts/pipe-experiment.mjs` verifies the preferred transport. `mods/runtime.json` is the live versioned manifest; `src/mod-loader.mjs` implements capability checks, independent installation/removal and a compatibility ledger. Other files in `mods/` support the older synthetic experiments. The loader is not a sandbox for untrusted code or a guarantee of future Slack compatibility.
 
 `.lab/` contains disposable profiles, logs, temporary extracted application code, and the patched archive copy. It is ignored and should not be committed or shared. `evidence/` contains local experiment results and screenshots; these artifacts are also ignored. Only its explanatory README is tracked.
