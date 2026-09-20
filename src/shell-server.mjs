@@ -9,7 +9,7 @@ export async function createShellServer({file,state,command,configure,previewAct
     if(request.op==='state'){lastSeen=Date.now();result=await state(request);}
     else if(request.op==='preview-action'&&previewAction)result=await previewAction({key:request.key,action:request.action});
     else if(request.op==='settings')result=await configure(request.patch||{});
-    else if(['toggle','rest','hide','stock','minimize','queue','switch','peek','preferences'].includes(request.op))result=await command(request.op,request.workspaceId);
+    else if(['toggle','stock-toggle','rest','hide','stock','minimize','queue','switch','peek','preferences'].includes(request.op))result=await command(request.op,request.workspaceId);
     else throw Error('Unsupported shell operation');
     socket.end(JSON.stringify({ok:true,result})+'\n');
    }catch{socket.end(JSON.stringify({ok:false,error:'Shell operation unavailable'})+'\n');}

@@ -34,3 +34,8 @@ test('invalid native anchor coordinates are rejected',()=>{
  for(const patch of [{x:Infinity},{width:0},{height:500},{y:100001}])assert.equal(preview({}, {...request,anchor:{...request.anchor,...patch}}),null);
  assert.equal(preview({}, {...request,edge:'top'}),null);
 });
+
+test('personal alias titles preserve conversation context and new-message content',()=>{
+ const p=preview({kind:'thread',triage:{state:'active',alias:'Launch blockers'}});
+ assert.equal(p.title,'Launch blockers');assert.equal(p.subtitle,'One · Thread · Alex');assert.equal(p.messages[0].text,'New content');
+});

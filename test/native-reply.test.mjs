@@ -12,7 +12,7 @@ function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeC
   const scroller={scrollTop:0,scrollHeight:1200};
   const callbacks={teamId:callbackTeam,channelId:'CONE',threadTs:openingThread||thread,latest:'200.000001',
     dispatchNavigateToThread(request){native.threadNavigations.push(request);threadPending=true;setTimeout(()=>{if(!threadClosed)box.thread=request.ts;},230);},
-    jumpToReply(ts){native.replyJumps.push(ts);}};
+    jumpToReply(ts){native.replyJumps.push(ts);},jumpToMessageInChannel({messageTs}){native.messageJump=messageTs;}};
   const listNode=nativeCallbacks?{__reactFiber$test:{memoizedProps:callbacks,stateNode:{props:callbacks,scrollToMostRecentMessage(){if(scrollThrows)throw Error('scroll unavailable');native.latestJumps++;}}}}:{};
   const threadNode=nativeCallbacks?{__reactFiber$test:{memoizedProps:callbacks}}:{};
   const nativeMessage={getAttribute:k=>k==='data-msg-ts'?'100.000002':box.channel,getBoundingClientRect:()=>({top:120,bottom:160,width:400,height:40})};
@@ -26,13 +26,14 @@ function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeC
   const controlSelectors=['button[data-qa="huddle_channel_header_button"]','[data-qa="search_in_channel_button"]','[data-feat="view-header:notifications"]'];
   const controls=controlSelectors.map(()=>({...makeNode(),clicks:0,click(){this.clicks++;}}));
   controls[2].setAttribute('aria-label','Mute conversation');controls[2].setAttribute('aria-pressed','false');
-  const auxAttributes=new Map(),auxView={isConnected:false,setAttribute:(k,v)=>auxAttributes.set(k,v),removeAttribute:k=>auxAttributes.delete(k),querySelector:()=>null};
+  const auxAttributes=new Map(),auxView={hasAttribute:k=>auxAttributes.has(k),focus:()=>{document.activeElement=auxView;},isConnected:false,setAttribute:(k,v)=>auxAttributes.set(k,v),removeAttribute:k=>auxAttributes.delete(k),querySelector:()=>null};
   let auxiliaryKind=null;
 
+  const nativeLinkButton={closest:s=>s==='a,button,[role="button"]'?nativeLinkButton:null};
   const back={matches:()=>true},otherHeaderControl={matches:()=>false};
-  const header={querySelector:s=>s.startsWith('.p-flexpane_header__primary,')?header:menuControls?controls[controlSelectors.indexOf(s)]||null:null,contains:n=>n===back||n===otherHeaderControl||headerChildren.includes(n)||controls.includes(n),setAttribute:(k,v)=>headerAttributes.set(k,v),removeAttribute:k=>headerAttributes.delete(k),append(n){headerChildren.push(n);n.parentElement=header;},insertBefore(n,before){headerChildren.splice(headerChildren.indexOf(before),0,n);n.parentElement=header;}};
+  const header={querySelector:s=>s.startsWith('.p-flexpane_header__primary,')?header:menuControls?controls[controlSelectors.indexOf(s)]||null:null,contains:n=>n===back||n===otherHeaderControl||headerChildren.includes(n)||controls.includes(n),setAttribute:(k,v)=>headerAttributes.set(k,v),removeAttribute:k=>headerAttributes.delete(k),prepend(n){headerChildren.unshift(n);n.parentElement=header;},append(n){headerChildren.push(n);n.parentElement=header;},insertBefore(n,before){headerChildren.splice(headerChildren.indexOf(before),0,n);n.parentElement=header;}};
   for(const control of controls)control.parentElement=header;
-  const pane={querySelectorAll:()=>[nativeMessage],isConnected:true,contains:n=>n===editor||n===composer,setAttribute:(k,v)=>attributes.set(k,v),removeAttribute:k=>attributes.delete(k),querySelector:s=>s.startsWith('.p-flexpane_header,')||s.startsWith('.p-view_header,')?(headerControls?header:null):s==='button.p-message_pane__unread_banner__close_icon'?readButton:s==='[data-qa="threads_flexpane"]'&&(thread||openingThread)?threadNode:s==='.c-virtual_list'?listNode:s==='.c-virtual_list [data-qa="slack_kit_scrollbar"]'?scroller:null};
+  const pane={hasAttribute:k=>attributes.has(k),focus:()=>{document.activeElement=pane;},querySelectorAll:()=>[nativeMessage],isConnected:true,contains:n=>n===editor||n===composer||n===nativeLinkButton,setAttribute:(k,v)=>attributes.set(k,v),removeAttribute:k=>attributes.delete(k),querySelector:s=>s.startsWith('.p-flexpane_header,')||s.startsWith('.p-view_header,')?(headerControls?header:null):s==='button.p-message_pane__unread_banner__close_icon'?readButton:s==='[data-qa="threads_flexpane"]'&&(thread||openingThread)?threadNode:s==='.c-virtual_list'?listNode:s==='.c-virtual_list [data-qa="slack_kit_scrollbar"]'?scroller:null};
   const editor={contains:n=>n===editor,isConnected:true,textContent:'untouched user draft',closest:s=>s==='.p-view_contents'?pane:box,focus:()=>{focused=true;}};
   const composerAttributes=new Map(),sendButton={disabled:false};
   const composer={parentElement:pane,querySelector:s=>s==='[data-qa="texty_send_button"]'?sendButton:s==='[role="toolbar"]'?{}:null,setAttribute:(k,v)=>composerAttributes.set(k,v),removeAttribute:k=>composerAttributes.delete(k)};
@@ -42,24 +43,25 @@ function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeC
   const composeButton={click(){native.composeClicks++;composePage.mounted=true;location.pathname='/client/'+native.team;}};
   const rootMessage={getAttribute:n=>n==='data-msg-ts'?openingThread:'CONE',querySelector:()=>({click(){threadPending=true;setTimeout(()=>{if(!threadClosed)box.thread=openingThread;},230);}})};
   const document={head:{append(){}},body:{append:n=>bodyChildren.push(n),hasAttribute:k=>bodyAttributes.has(k),setAttribute:(k,v)=>bodyAttributes.set(k,v),removeAttribute:k=>bodyAttributes.delete(k)},createElement:tag=>tag==='style'?{remove(){removed=true;}}:makeNode(),
-    querySelectorAll:s=>s==='[data-qa="message-input-system-notification-roadblock"]'?(notificationOnly?[{closest:()=>pane}]:[]):s==='[data-qa="composer_page"]'?(composePage.mounted?[composePage]:[]):s==='[data-pme-native-reply-pane]'?[...(attributes.has('data-pme-native-reply-pane')?[pane]:[]),...(auxAttributes.has('data-pme-native-reply-pane')?[auxView]:[])]:s==='[data-qa="message_input"][data-channel-id]'?(notificationOnly?[]:[box]):s==='[data-qa="message_container"][data-msg-ts]'&&openingThread&&!missingRoot?[rootMessage]:s==='[data-qa="team_sidebar_item"]'?[teamButton]:s==='[data-qa="channel-sidebar-channel"]'?[channelRow]:[],
+    querySelectorAll:s=>s==='[data-qa="search_view"]'?(auxiliaryKind==='full search'?[{closest:()=>auxView}]:[]):s==='[data-pme-message-focus]'?[...(attributes.has('data-pme-message-focus')?[pane]:[]),...(auxAttributes.has('data-pme-message-focus')?[auxView]:[])]:s==='[data-qa="message-input-system-notification-roadblock"]'?(notificationOnly?[{closest:()=>pane}]:[]):s==='[data-qa="composer_page"]'?(composePage.mounted?[composePage]:[]):s==='[data-pme-native-reply-pane]'?[...(attributes.has('data-pme-native-reply-pane')?[pane]:[]),...(auxAttributes.has('data-pme-native-reply-pane')?[auxView]:[])]:s==='[data-qa="message_input"][data-channel-id]'?(notificationOnly?[]:[box]):s==='[data-qa="message_container"][data-msg-ts]'&&openingThread&&!missingRoot?[rootMessage]:s==='[data-qa="team_sidebar_item"]'?[teamButton]:s==='[data-qa="channel-sidebar-channel"]'?[channelRow]:[],
     querySelector:s=>(auxiliaryKind==='profile'&&s==='[data-qa="member_profile_pane"]'||auxiliaryKind==='search'&&s==='[data-qa="search_in_channel_title"]'||auxiliaryKind==='full search'&&s==='[data-qa="search_view"]')?{closest:()=>auxView}:s==='[data-qa="quip_close_thread"]'&&returningThread&&box.thread?{click(){native.threadCloses++;box.thread=null;}}:s==='[data-qa="composer_button"]'?composeButton:s==='[data-qa="composer_page"]'?(composePage.mounted?composePage:null):s==='[data-qa="team_sidebar_item"][data-team-active="true"]'?{getAttribute:()=>native.team}:s==='[data-qa="threads_flexpane"] button[aria-label="Close"]'&&threadPending?{click(){threadClosed=true;threadPending=false;}}:null,
     addEventListener:(name,fn)=>listeners.set(name,fn)};
   const window={__PME_TRIAGE__:{status:()=>({mode:'reply'})},dispatchEvent(event){events.push(event.type);if(event.type==='pme-native-header-action')headerEvents.push(event.detail.action);}};window.top=window;
   const location={origin:'https://app.slack.com',pathname:'/client/TONE/CONE',assign:url=>navigations.push(url)};
   vm.runInNewContext(source,{window,document,location,AbortController,CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},Date:{now:()=>Date.now()+clockOffset},innerWidth:820,innerHeight:660,setTimeout,clearInterval(){},setInterval:fn=>{tick=fn;return 1;},
     sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}});
-  return {setNotificationOnly(value){notificationOnly=value;},callbacks,controls,bodyChildren,document,auxAttributes,setAuxiliary(kind){auxiliaryKind=kind;auxView.isConnected=!!kind;editor.isConnected=!kind;},header,headerChildren,headerEvents,headerAttributes,back,otherHeaderControl,advance:ms=>clockOffset+=ms,readButton,sendButton,window,api:window.__PME_REPLY__,tick:()=>tick(),events,composePage,recipient,scroller,box,pane,editor,composerAttributes,location,native,listeners,storage,navigations,attributes,bodyAttributes,focused:()=>focused,removed:()=>removed};
+  return {nativeLinkButton,setNotificationOnly(value){notificationOnly=value;},callbacks,controls,bodyChildren,document,auxAttributes,setAuxiliary(kind){auxiliaryKind=kind;auxView.isConnected=!!kind;editor.isConnected=!kind;},header,headerChildren,headerEvents,headerAttributes,back,otherHeaderControl,advance:ms=>clockOffset+=ms,readButton,sendButton,window,api:window.__PME_REPLY__,tick:()=>tick(),events,composePage,recipient,scroller,box,pane,editor,composerAttributes,location,native,listeners,storage,navigations,attributes,bodyAttributes,focused:()=>focused,removed:()=>removed};
 }
 function clickHeader(env,button){
  const result={prevented:false,stopped:false};env.listeners.get('click')({type:'click',target:{closest:selector=>selector==='button'?button:null},preventDefault(){result.prevented=true;},stopImmediatePropagation(){result.stopped=true;}});return result;
 }
 test('native header actions intercept back and handoff without navigation or draft changes',async()=>{
  const env=setup({thread:'100.000001',headerControls:true});await env.api.open({workspaceId:'TONE',channelId:'CONE',threadTs:'100.000001'});
- assert.equal(env.headerChildren.length,1);assert.ok(env.headerAttributes.has('data-pme-native-header'));
- for(let i=0;i<3;i++)env.tick();assert.equal(env.headerChildren.length,1);
+ assert.equal(env.headerChildren.length,2);assert.ok(env.headerAttributes.has('data-pme-native-header'));
+ for(let i=0;i<3;i++)env.tick();assert.equal(env.headerChildren.length,2);
  assert.deepEqual(clickHeader(env,env.back),{prevented:true,stopped:true});assert.deepEqual(env.headerEvents,['conversation']);
- assert.deepEqual(clickHeader(env,env.headerChildren[0]),{prevented:true,stopped:true});assert.deepEqual(env.headerEvents,['conversation','stock']);
+ assert.deepEqual(clickHeader(env,env.headerChildren.find(b=>b.className==='pme-open-slack')),{prevented:true,stopped:true});assert.deepEqual(env.headerEvents,['conversation','stock']);
+ assert.deepEqual(clickHeader(env,env.headerChildren.find(b=>b.className==='pme-thread-alias')),{prevented:true,stopped:true});assert.ok(env.events.includes('pme-thread-alias'));
  assert.equal(env.editor.textContent,'untouched user draft');assert.deepEqual(env.navigations,[]);
  env.api.suspend();assert.equal(env.headerChildren.length,0);assert.equal(env.headerAttributes.size,0);env.api.dispose();
 });
@@ -83,6 +85,39 @@ test('native reply frames the verified editor, preserves its draft and removes a
   assert.equal(env.composerAttributes.size,0);
   assert.equal(JSON.stringify([...env.storage.values()]).includes('untouched user draft'),false);
   env.api.dispose();assert.equal(env.removed(),true);
+});
+
+test('linked message navigation uses Slack’s exact jump callback instead of jumping to latest',async()=>{
+  const env=setup({nativeCallbacks:true});
+  await env.api.open({workspaceId:'TONE',channelId:'CONE',messageTs:'100.000001'},{preservePosition:true});
+  assert.equal(env.api.status().ready,true);assert.equal(env.native.messageJump,'100.000001');assert.equal(env.native.latestJumps,0);
+  assert.equal(env.api.status().scrollMethod,'native-message');env.api.dispose();
+});
+test('replayed native links preserve position and cancelled requests never activate their link',async()=>{
+  const env=setup({nativeCallbacks:true});let clicks=0;
+  const request={workspaceId:'TONE',channelId:'CONE'};
+  const options={nativeNavigate:()=>clicks++,preservePosition:true,focusEditor:false};
+  const pending=env.api.open(request,options);env.api.suspend();assert.equal((await pending).cancelled,true);assert.equal(clicks,0);
+  assert.equal((await env.api.open(request,options)).ok,true);assert.equal(clicks,1);assert.equal(env.native.latestJumps,0);assert.equal(env.focused(),false);env.api.dispose();
+});
+test('message focus preserves drafts and removes only its own temporary tabindex when suspended',async()=>{
+  const env=setup();await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+  assert.equal(env.api.focusMessages(),true);assert.equal(env.attributes.get('tabindex'),'-1');assert.equal(env.editor.textContent,'untouched user draft');
+  env.setAuxiliary('profile');env.tick();assert.equal(env.attributes.has('data-pme-native-reply-pane'),false);
+  env.api.suspend();assert.equal(env.attributes.has('tabindex'),false);assert.equal(env.api.focusMessages(),false);env.api.dispose();
+});
+test('composer interaction does not authorize adopting a changed native destination',async()=>{
+  const env=setup();await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+  env.listeners.get('click')({type:'click',isTrusted:true,target:env.editor});
+  // The editor is deliberately excluded from navigation intent.
+  env.location.pathname='/client/TONE/COTHER';env.tick();assert.equal(env.events.includes('pme-native-fallback'),false);env.api.dispose();
+});
+test('an unsupported user-initiated native view hands off only after allowing time to mount',async()=>{
+  const env=setup();await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+  env.listeners.get('click')({type:'click',isTrusted:true,target:env.nativeLinkButton});
+  env.location.pathname='/client/TONE/COTHER';env.tick();assert.equal(env.events.includes('pme-native-fallback'),false);
+  env.advance(1600);env.tick();assert.equal(env.events.includes('pme-native-fallback'),true);assert.equal(env.api.status().ready,false);
+  env.api.dispose();
 });
 test('thread destination changes block native sending before clearing the reply layout',async()=>{
   const env=setup({thread:'100.000001'});await env.api.open({workspaceId:'TONE',channelId:'CONE',threadTs:'100.000001'});
@@ -242,10 +277,10 @@ test('native profile and search replace the editor, restore it without moving sc
 });
 
 
-test('native full search hands its existing route to Slack and removes all triage framing',async()=>{
+test('native full search requests a first-class search pane instead of full Slack',async()=>{
  const env=setup({headerControls:true,menuControls:true});await env.api.open({workspaceId:'TONE',channelId:'CONE'});
  env.setAuxiliary('full search');env.location.pathname='/client/TONE/search';env.tick();
- assert.deepEqual(env.headerEvents,['stock']);assert.equal(env.api.status().ready,true);
+ assert.deepEqual(env.headerEvents,[]);assert.ok(env.events.includes('pme-native-search-open'));
  env.api.suspend();assert.equal(env.attributes.size,0);assert.equal(env.auxAttributes.size,0);assert.equal(env.headerChildren.length,0);env.api.dispose();
 });
 
@@ -279,4 +314,19 @@ test('opening a normal editor after read-only app content restores normal compos
  env.setNotificationOnly(false);await env.api.open({workspaceId:'TONE',channelId:'CONE'});
  assert.equal(env.api.status().ready,true);assert.equal(env.api.status().readOnly,false);assert.equal(env.focused(),true);assert.ok(env.composerAttributes.has('data-pme-native-composer'));
  env.api.suspend();assert.equal(env.attributes.size,0);env.api.dispose();
+});
+
+test('search is an independent read-only destination that frames only its own workspace and never sends',async()=>{
+ const env=setup();env.setAuxiliary('full search');env.location.pathname='/client/TONE/search';
+ const opened=await env.api.open({kind:'search',workspaceId:'TONE'},{preservePosition:true});assert.equal(opened.ok,true);
+ assert.equal(env.api.status().target.kind,'search');assert.equal(env.api.status().readOnly,true);assert.equal(env.api.status().ready,true);assert.equal(env.api.status().auxiliary,null);
+ assert.equal(env.api.jumpToLatest().ok,false);assert.equal(env.api.markReadNative().ok,false);assert.equal(env.native.selects,0);assert.equal(env.native.composeClicks,0);
+ env.tick();assert.equal(env.api.status().ready,true);assert.deepEqual(env.headerEvents,[]);
+ assert.equal((await env.api.open({kind:'search',workspaceId:'TONE',channelId:'CONE'})).ok,false);
+ env.native.team='TTWO';assert.equal(env.api.status().ready,false);env.api.dispose();assert.equal(env.auxAttributes.size,0);
+});
+test('a search pane cannot authorize a native send even if a composer appears beneath it',async()=>{
+ const env=setup();env.setAuxiliary('full search');env.location.pathname='/client/TONE/search';await env.api.open({kind:'search',workspaceId:'TONE'});
+ let prevented=false;env.listeners.get('keydown')({type:'keydown',key:'Enter',target:{closest:s=>s==='[data-qa="message_input"]'?{}:null},preventDefault(){prevented=true;},stopImmediatePropagation(){}});
+ assert.equal(prevented,true);assert.equal(env.api.status().ready,false);env.api.dispose();
 });

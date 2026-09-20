@@ -65,6 +65,9 @@ final class EdgeStripView: NSView {
 final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let socketPath: String
     var item: NSStatusItem!
+    var stockHotKey: EventHotKeyRef?
+    var stockHotKeyOK = false
+    var stockToggleBusy = false
     var hotKey: EventHotKeyRef?
     var handler: EventHandlerRef?
     var shortcut = ""
@@ -111,10 +114,12 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let controller = Unmanaged<Controller>.fromOpaque(pointer).takeUnretainedValue()
             var identifier = EventHotKeyID()
             guard GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &identifier) == noErr,
-                  identifier.signature == 0x504D4554 else { return OSStatus(eventNotHandledErr) }
-            DispatchQueue.main.async { controller.perform("toggle") }
+                  identifier.signature == 0x504D4554, [1, 2].contains(identifier.id) else { return OSStatus(eventNotHandledErr) }
+            let op = identifier.id == 2 ? "stock-toggle" : "toggle"
+            DispatchQueue.main.async { controller.perform(op) }
             return noErr
         }, 1, &type, Unmanaged.passUnretained(self).toOpaque(), &handler)
+        stockHotKeyOK = RegisterEventHotKey(UInt32(kVK_ANSI_U), UInt32(cmdKey | shiftKey), EventHotKeyID(signature: 0x504D4554, id: 2), GetApplicationEventTarget(), 0, &stockHotKey) == noErr
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.refresh() }
     }
@@ -152,7 +157,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     func refresh() {
         guard !polling else { return }; polling = true
-        call(["op": "state", "hotKeyOK": hotKeyOK, "edgeStripVersion": 1, "stripReady": stripReady ?? "", "previewHover": previewPanel?.isVisible == true && (previewPanel!.frame.contains(NSEvent.mouseLocation) || Date().timeIntervalSince(previewLastInside) < 0.9) ? previewKey ?? "" : ""]) { [weak self] state in
+        call(["op": "state", "hotKeyOK": hotKeyOK, "stockHotKeyOK": stockHotKeyOK, "edgeStripVersion": 1, "stripReady": stripReady ?? "", "previewHover": previewPanel?.isVisible == true && (previewPanel!.frame.contains(NSEvent.mouseLocation) || Date().timeIntervalSince(previewLastInside) < 0.9) ? previewKey ?? "" : ""]) { [weak self] state in
             guard let self else { return }; self.polling = false
             guard let state else { self.shellOnline = false; self.renderSettings(); self.showPreview(nil); self.showEdgeStrip(nil); self.item.button?.title = "!"; self.item.button?.toolTip = "Triage controller disconnected — normal Slack remains available"; self.menu(connected: false); return }
             self.shellOnline = true
@@ -304,6 +309,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         shortcut = value
     }
     func perform(_ op: String, workspace: String? = nil) {
+        if op == "stock-toggle" { if stockToggleBusy { return }; stockToggleBusy = true }
         let visible = visibleApplications()
         if let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != slackPID, front.processIdentifier != getpid(), visible.contains(front.processIdentifier) {
             previousApp = front
@@ -312,7 +318,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         var request: [String: Any] = ["op": op]; if let workspace { request["workspaceId"] = workspace }
         call(request) { [weak self] result in
-            guard let self, let result else { return }
+            guard let self else { return }
+            if op == "stock-toggle" { self.stockToggleBusy = false }
+            guard let result else { return }
             if result["returnFocus"] as? Bool == true { self.returnFocus() }
             else if let mode = result["mode"] as? String, ["queue", "reading", "reply", "stock"].contains(mode), self.slackPID > 0 {
                 NSRunningApplication(processIdentifier: self.slackPID)?.activate(options: [])
@@ -381,6 +389,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             row.addArrangedSubview(name);row.addArrangedSubview(control);stack.addArrangedSubview(row)
         }
         stack.addArrangedSubview(label("Appearance & behavior",heading:true))
+        popup("Inbox density",key:"inboxDensity",choices:[("Expanded","expanded"),("Cozy","cozy"),("Compact","compact")])
         popup("Screen edge",key:"edge",choices:[("Left","left"),("Right","right")])
         var screens:[(String,Any)]=[("Main display","main")]
         for display in displays { if let id=display["id"] as? String { screens.append((display["name"] as? String ?? id,id)) } }
@@ -431,7 +440,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if trackingMenu { return }
         let menu = NSMenu();menu.delegate=self
         if !connected { let row = NSMenuItem(title:"Controller disconnected",action:nil,keyEquivalent:"");row.isEnabled=false;menu.addItem(row) }
-        for (title,op) in [("Show attention queue", "queue"),("Toggle triage", "toggle"),("Return to work", "rest"),("Hide triage", "hide"),("Minimize", "minimize"),("Normal Slack", "stock")] {
+        for (title,op) in [("Show attention queue", "queue"),("Toggle triage", "toggle"),("Return to work", "rest"),("Hide triage", "hide"),("Minimize", "minimize"),("Normal Slack", "stock"),("Toggle normal Slack (⌘⇧U)", "stock-toggle")] {
             let row = entry(title,data:["op":op]); row.isEnabled=connected; menu.addItem(row)
         }
         menu.addItem(.separator())
@@ -441,7 +450,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     func menuWillOpen(_ menu: NSMenu) { trackingMenu=true }
     func menuDidClose(_ menu: NSMenu) { trackingMenu=false }
-    func applicationWillTerminate(_ notification: Notification) { timer?.invalidate();edgeView?.cancelHover();edgePanel?.orderOut(nil);if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) };if let hotKey { UnregisterEventHotKey(hotKey) };if let handler { RemoveEventHandler(handler) } }
+    func applicationWillTerminate(_ notification: Notification) { timer?.invalidate();edgeView?.cancelHover();edgePanel?.orderOut(nil);if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) };if let hotKey { UnregisterEventHotKey(hotKey) };if let stockHotKey { UnregisterEventHotKey(stockHotKey) };if let handler { RemoveEventHandler(handler) } }
 }
 let app=NSApplication.shared
 let controller=Controller(CommandLine.arguments.dropFirst().first ?? "")

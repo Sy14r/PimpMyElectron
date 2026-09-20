@@ -8,7 +8,7 @@ export const filterNotificationWorkspaces = (workspaces,settings,inboxScope) => 
 export const notificationSummaries = workspaces => workspaces.map(w=>({id:w.id,name:w.name,items:w.items.map(i=>({
   key:i.key,workspaceId:w.id,workspaceName:w.name,channelId:i.channelId,threadTs:i.threadTs,
   name:i.name,kind:i.kind,pendingRead:i.pendingRead,unread:i.unread,unreadCount:i.unreadCount,latest:i.latest,
-  triage:{state:i.triage?.state},messages:[]
+  triage:{state:i.triage?.state,alias:i.triage?.alias},messages:[]
 }))}));
 export function nativeEdgeStrip(workspaces, request) {
   const b=request?.bounds;

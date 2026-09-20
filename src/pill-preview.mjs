@@ -13,7 +13,7 @@ export function pillPreview(workspaces,request){
     const clipped=(value,limit)=>{const s=String(value||'');return s.length>limit?s.slice(0,limit-1)+'…':s;};
     const messages=selected.map(m=>({author:clipped(m.author,160),text:clipped(m.parts?.map(p=>p.text).join('')||m.text||(m.hasAttachments?'Attachment':'Message content unavailable'),600)}));
     const kind={dm:'DM',groupDM:'Group chat',channel:'Channel',thread:'Thread'}[item.kind]||'Conversation';
-    return {key:item.key,title:String(item.name).slice(0,180),subtitle:`${w.name} · ${kind}`.slice(0,220),
+    return {key:item.key,title:String(item.triage?.alias||item.name).slice(0,180),subtitle:`${w.name} · ${kind}${item.triage?.alias?" · "+item.name:""}`.slice(0,220),
       label:hasCursor?(fresh.length>3?`Showing latest 3 of ${fresh.length} cached new messages`:fresh.length===1?'New message':'New messages'):'Latest cached message · unread boundary unknown',
       messages:messages.length?messages:[{author:'',text:hasCursor?'New message content is not cached yet.':'No message preview cached yet.'}],
       edge:request.edge,anchor:{x:a.x,y:a.y,width:a.width,height:a.height}};

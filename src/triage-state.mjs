@@ -2,19 +2,23 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {compareTs} from './activity-store.mjs';
 export const validKey=k=>typeof k==='string'&&/^[TE][A-Z0-9]+:[CDG][A-Z0-9]+:(?:\d+\.\d+)?$/.test(k);
-const defaults={edge:'right',rest:'strip',display:'main',idleSeconds:60,shortcut:'cmd-shift-y',reopenNew:true,workspace:null,notificationMode:'all',notificationWorkspaces:[]};
+export const validThreadKey=k=>validKey(k)&&/:[0-9]+\.[0-9]+$/.test(k);
+const validAlias=value=>typeof value==='string'&&value.length<=120&&!/[\u0000-\u001f\u007f]/.test(value);
+const defaults={edge:'right',rest:'strip',display:'main',inboxDensity:'expanded',idleSeconds:60,shortcut:'cmd-shift-y',reopenNew:true,workspace:null,notificationMode:'all',notificationWorkspaces:[]};
 export class TriageState {
-  records=new Map();settings={...defaults};undo=null;error=null;tail=Promise.resolve();
+  records=new Map();aliases=new Map();settings={...defaults};undo=null;error=null;tail=Promise.resolve();
   constructor(file,{now=Date.now}={}){this.file=file;this.now=now;}
   async load(){
     try{const raw=JSON.parse(await fs.readFile(this.file,'utf8'));if(raw.version!==1)throw Error('Unsupported state version');
       for(const [key,r] of Object.entries(raw.records||{}).slice(-5000))if(validKey(key)&&r&&['active','done','later'].includes(r.state))
         this.records.set(key,{state:r.state,pinned:r.pinned===true,until:Number.isFinite(r.until)?r.until:null,baseline:typeof r.baseline==='string'&&/^\d+\.\d+$/.test(r.baseline)?r.baseline:null,at:Number.isFinite(r.at)?r.at:0});
+      for(const [key,value] of Object.entries(raw.aliases||{}).slice(-5000))if(validThreadKey(key)&&validAlias(value)&&value.trim())this.aliases.set(key,value.trim());
       this.settings=this.validateSettings(raw.settings||{});
     }catch(e){if(e.code!=='ENOENT')this.error='Local state could not be read; the existing file has been preserved.';}return this;
   }
   validateSettings(patch){return {...defaults,...this.settings,
     ...(['left','right'].includes(patch.edge)?{edge:patch.edge}:{}),
+    ...(['expanded','cozy','compact'].includes(patch.inboxDensity)?{inboxDensity:patch.inboxDensity}:{}),
     ...(['strip','cluster','hidden'].includes(patch.rest)?{rest:patch.rest}:{}),
     ...(typeof patch.display==='string'&&/^(main|\d+)$/.test(patch.display)?{display:patch.display}:{}),
     ...([0,5,15,30,60,300].includes(patch.idleSeconds)?{idleSeconds:patch.idleSeconds}:{}),
@@ -27,19 +31,26 @@ export class TriageState {
     const r=this.records.get(item.key);let state=r?.state||'active';
     if(state==='later'&&r.until<=this.now())state='active';
     if(state==='done'&&this.settings.reopenNew&&r.baseline&&item.latest&&compareTs(item.latest,r.baseline)>0)state='active';
-    return {state,pinned:r?.pinned||false,until:state==='later'?r.until:null,
+    return {alias:this.aliases.get(item.key)||null,state,pinned:r?.pinned||false,until:state==='later'?r.until:null,
       needsAction:state==='active'&&(item.unread===true||r?.pinned===true||!!r),explicit:!!r};
   }
   async save(){
     if(this.error)throw Error(this.error);
     await fs.mkdir(path.dirname(this.file),{recursive:true,mode:0o700});
-    const temp=this.file+'.tmp';await fs.writeFile(temp,JSON.stringify({version:1,settings:this.settings,records:Object.fromEntries(this.records)},null,2)+'\n',{mode:0o600});
+    const temp=this.file+'.tmp';await fs.writeFile(temp,JSON.stringify({version:1,settings:this.settings,records:Object.fromEntries(this.records),aliases:Object.fromEntries(this.aliases)},null,2)+'\n',{mode:0o600});
     await fs.rename(temp,this.file);
   }
   transact(operation){const promise=this.tail.catch(()=>{}).then(async()=>{
-    const old={records:new Map(this.records),settings:{...this.settings},undo:this.undo};
+    const old={aliases:new Map(this.aliases),records:new Map(this.records),settings:{...this.settings},undo:this.undo};
     try{operation();await this.save();return true;}catch(e){Object.assign(this,old);throw e;}
   });this.tail=promise;return promise;}
+  setAlias(key,value){
+    if(!validThreadKey(key)||!validAlias(value))return Promise.resolve(false);
+    return this.transact(()=>{
+      this.aliases.delete(key);if(value.trim())this.aliases.set(key,value.trim());
+      while(this.aliases.size>5000)this.aliases.delete(this.aliases.keys().next().value);
+    });
+  }
   configure(patch){return this.transact(()=>{this.settings=this.validateSettings(patch);});}
   act(item,action,{minutes=60}={}){if(!item||!validKey(item.key)||!['done','later','pin','reopen','undo'].includes(action)||action==='later'&&![15,60,240,1440].includes(minutes))return Promise.resolve(false);
     return this.transact(()=>{

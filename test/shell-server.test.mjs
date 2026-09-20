@@ -9,4 +9,5 @@ test('native socket admits named operations only, supports UTF-8 and is private'
  assert.equal((await request({op:'state'})).result.label,'Triage ✓');assert.equal(server.connected(),true);
  assert.equal((await request({op:'inspect',expression:'arbitrary code'})).ok,false);assert.equal(calls.length,0);
  assert.equal((await request({op:'switch',workspaceId:'TONE'})).ok,true);assert.deepEqual(calls,[{op:'switch',workspaceId:'TONE'}]);
+ assert.equal((await request({op:'stock-toggle'})).ok,true);assert.equal(calls.at(-1).op,'stock-toggle');
 });

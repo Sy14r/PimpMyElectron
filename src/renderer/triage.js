@@ -4,7 +4,7 @@
   if (!team() || window.__PME_TRIAGE__) return;
   if (!document.body) { document.addEventListener('DOMContentLoaded', installTriage, { once: true }); return; }
   const abort = new AbortController();
-  let settings={edge:'right',rest:'strip',display:'main',idleSeconds:60},lastInteraction=Date.now(),displayInfo=[],displaySignature='',hoverTimer,hoverIntent=null;
+  let settings={edge:'right',rest:'strip',display:'main',inboxDensity:'expanded',idleSeconds:60},lastInteraction=Date.now(),displayInfo=[],displaySignature='',hoverTimer,hoverIntent=null;
   let compactBounds=null,cursorCheckPending=false,stagedDetail=false,pillIdleTimer,pillPointerInside=false;
   let pillPreview=null,nativeStripRequest=null,nativeStripHidden=false,stripSyncPending=false,stripSequence=0;
   let lastHostUpdate=0,hostDisconnected=false;
@@ -26,7 +26,20 @@
       .queue{width:420px;max-width:100vw;flex-shrink:0;display:flex;flex-direction:column;padding:22px 16px 12px;border-right:1px solid #ffffff10;min-height:0}.eyebrow{font-size:10px;font-weight:600;letter-spacing:1.7px;color:#b3a4d5;text-transform:uppercase}h1{font-size:25px;line-height:1.2;letter-spacing:-.6px;margin:8px 0}
       .queue-heading{display:flex;align-items:center;gap:6px}.inbox-icon{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:5px;flex-shrink:0;color:#a4adc0;font-size:16px}.control-icon{display:block;width:20px;height:20px;flex-shrink:0;pointer-events:none}.slack-icon{width:18px;height:18px}.close-icon{width:18px;height:18px}#inbox-stock{color:#8792a6}#inbox-stock:hover{color:#c4cada}.rail #restore{display:flex;align-items:center;justify-content:center}.filter-row{display:flex;align-items:center;gap:4px}.filter-row .filters{flex:1}.shell:not(.cluster)>.rail{display:none}.queue-heading h1{min-width:0;flex:1;position:relative}#compose{padding:5px;background:#ab8cdd20;color:#d6c8ef;flex-shrink:0}#compose:hover{background:#ab8cdd35}#search{margin-top:12px;width:100%;border:1px solid #ffffff12;border-radius:8px;background:#ffffff05;padding:9px 11px;outline-offset:0;font-size:12px}#search::placeholder{color:#758196}
       .filters{display:flex;gap:4px;flex-wrap:wrap;margin:12px 0}.filters button{padding:5px 9px;font-size:11px;color:#94a2b8}.filters button[aria-pressed="true"]{color:#d0bdf5;background:#ab8cdd20}
-      #list{overflow:auto;flex:1;min-height:60px;padding:2px;scrollbar-width:none}#list::-webkit-scrollbar{display:none}.row{display:block;width:100%;text-align:left;border:1px solid transparent;padding:12px 10px;margin-bottom:4px}.row.selected{background:#a492d017;border-color:#b6a1e940}.row-head{display:flex;gap:7px;align-items:center}.kind{color:#7787a0;font-size:15px;width:15px;flex-shrink:0}.name{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;flex:1}.unread{width:6px;height:6px;background:#bca9f0;border-radius:50%}.badge{font-size:10px;color:#c5b3ee}.preview{font-size:11.5px;line-height:1.5;color:#8796ae;margin:7px 0 0 22px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.meta{font-size:10px;color:#748299;margin:5px 0 0 22px}
+      #alias-dialog{pointer-events:auto;-webkit-app-region:no-drag;width:min(360px,calc(100vw - 40px));box-sizing:border-box;padding:22px;border:1px solid #ffffff20;border-radius:14px;background:#191f2c;color:#edf0f7;box-shadow:0 20px 80px #0008;font:13px/1.5 -apple-system,BlinkMacSystemFont,sans-serif}#alias-dialog::backdrop{background:#090d1680}#alias-dialog h2{font-size:17px;margin:0 0 5px}#alias-dialog p{color:#94a2b8;margin:0 0 16px;overflow-wrap:anywhere}#alias-dialog label{display:block;margin-bottom:5px}#alias-input{box-sizing:border-box;width:100%;padding:9px 10px;border:1px solid #ffffff25;border-radius:7px;background:#111723;color:#edf0f7;font:inherit}#alias-dialog .alias-hint{font-size:11px;margin:10px 0 16px}#alias-dialog #alias-error{color:#f4aaa9;font-size:12px;margin:0}.alias-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.alias-actions button{padding:7px 14px;background:#ffffff0b}#alias-save{background:#b6a1e929!important;color:#decfff}
+      #list{overflow:auto;flex:1;min-height:60px;padding:2px;scrollbar-width:none}#list::-webkit-scrollbar{display:none}.row{display:block;width:100%;text-align:left;border:1px solid transparent;padding:12px 10px;margin-bottom:4px}.row:focus-visible{background:#a492d022;outline:2px solid #b7a8ec;outline-offset:-2px}.row.selected{background:#a492d017;border-color:#b6a1e940}.row-head{display:flex;gap:7px;align-items:center}.kind{color:#7787a0;font-size:15px;width:15px;flex-shrink:0}.name{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;flex:1}.unread{width:6px;height:6px;background:#bca9f0;border-radius:50%}.badge{font-size:10px;color:#c5b3ee}.preview{font-size:11.5px;line-height:1.5;color:#8796ae;margin:7px 0 0 22px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.meta{font-size:10px;color:#748299;margin:5px 0 0 22px}
+      .list-toolbar{display:flex;align-items:center;gap:6px;margin-top:12px}.list-toolbar #search{margin-top:0;flex:1;min-width:0}.list-toolbar #density-picker{width:30px;height:32px;color:#8796ae;flex:none}
+      #density-menu{position:fixed;inset:auto;margin:0;width:224px;padding:6px;background:#202735;color:#cdd4e4;border:1px solid #ffffff20;border-radius:10px;box-shadow:0 10px 30px #0007;pointer-events:auto;font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+      #density-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:9px;text-align:left;border-radius:7px}#density-menu button[aria-pressed="true"]{background:#ab8cdd20;color:#ddcff5}#density-menu button>span{display:flex;flex-direction:column;gap:2px;flex:1}#density-menu small{font-size:11px;color:#94a2b8}#density-menu strong{font-size:12px;font-weight:600}#density-menu .density-check{display:inline;width:12px;flex:none}
+      .row-time,.row-workspace{display:none;font-size:10px;color:#748299;font-weight:400;white-space:nowrap}.row-workspace{max-width:80px;overflow:hidden;text-overflow:ellipsis}.row-time{flex:none;font-variant-numeric:tabular-nums}
+      :host([data-density="cozy"]) .row{padding:8px 9px;margin-bottom:2px;border-radius:7px}
+      :host([data-density="cozy"]) .preview{display:block;white-space:nowrap;text-overflow:ellipsis;margin-top:4px;line-height:17px}
+      :host(:is([data-density="cozy"],[data-density="compact"])) .meta{display:none}
+      :host(:is([data-density="cozy"],[data-density="compact"])) :is(.row-time,.row-workspace){display:block}
+      :host([data-density="compact"]) .row{padding:6px 9px;margin-bottom:1px;min-height:34px;border-radius:6px}
+      :host([data-density="compact"]) .preview{display:none}
+      :host([data-density="compact"]) .row-head{min-height:20px;gap:6px}
+      :host([data-density="compact"]) .name{font-size:12px}
       .empty{padding:24px 10px;color:#8796af;font-size:12px;line-height:1.6}#notice:empty{display:none}
       .reader{flex:1;min-width:0;display:flex;flex-direction:column;background:#191f2c}.reader-header{padding:22px 23px 16px;border-bottom:1px solid #ffffff0a}.reader-header h2{font-size:18px;margin:8px 0 4px;overflow-wrap:anywhere}#coverage{font-size:11px;color:#8494ab;line-height:1.6}.reader-header button{float:right;color:#94a2b8;padding:3px 7px}.messages{flex:1;overflow:auto;padding:8px 23px}.message{padding:17px 0;border-bottom:1px solid #ffffff07}.message-head{display:flex;align-items:baseline;gap:9px}.author{font-weight:650;font-size:12px;color:#cdd4e4}.time{color:#77869d;font-size:10px}.body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.65;color:#bcc6d8;margin-top:6px}.attachment{font-size:10px;color:#9a8eb5;margin-top:7px}.read-only{padding:12px 23px;border-top:1px solid #ffffff0c;color:#829690;font-size:11px;display:flex;gap:8px;align-items:center}#notice{font-size:11px;color:#dbbca1;margin-top:9px;white-space:normal}
       .triage-controls{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.triage-controls button{float:none;background:#ab8cdd20;color:#d6c8ef;padding:6px 9px;font-size:11px}.history-controls{display:flex;gap:8px;margin-top:12px}.reader-header .history-controls button{float:none;border:1px solid #ffffff18;padding:5px 10px;font-size:11px}#history-status{font-size:11px;color:#b5a6d5;margin-top:9px}.body a{color:#b8c7fa;text-decoration:underline}.body code,.body pre{background:#ffffff0a;border-radius:4px;padding:2px 4px;font-size:12px}.body pre{padding:10px;overflow:auto;white-space:pre-wrap}.mention{color:#c3b3ef}.thread-link{font-size:11px;margin-top:8px;padding:5px 8px;background:#ab8cdd16;color:#c5b3ee}
@@ -65,15 +78,61 @@
     <button id="opener" aria-label="Open triage"><span class="signal"></span>Triage</button>
     <section class="shell" hidden aria-label="Slack triage">
       <nav class="rail" aria-label="Triage views"><button class="brand" id="home" aria-label="Show queue">T</button><button id="reply-latest" hidden aria-label="Jump to latest messages" title="Jump to latest messages">↓</button><div id="pill-items" aria-label="Unread conversations and threads"></div><button id="pill-empty" type="button" hidden aria-label="Open triage inbox" title="All caught up · Open triage inbox"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4h16l2 10v6H2v-6L4 4Z"/><path d="M2 14h6l2 3h4l2-3h6"/></svg></button><div class="spacer"></div><button id="restore" aria-label="Return to normal Slack" title="Normal Slack"><svg class="control-icon slack-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><g transform="rotate(0 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(90 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(180 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(270 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g></svg></button><button id="collapse" aria-label="Collapse to rail" title="Collapse">›</button></nav>
-      <section class="queue"><div class="queue-heading"><h1><button id="workspace-picker" type="button" aria-label="Choose workspace" aria-haspopup="dialog" aria-expanded="false" aria-controls="workspace-dialog">Workspace</button></h1><button class="inbox-icon" id="compose" type="button" title="Compose new message" aria-label="Compose new message"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-7"/><path d="m16 3 5 5M10 14l1-5 7-7a2.1 2.1 0 0 1 3 3l-7 7-4 2Z"/></svg></button><button class="inbox-icon" id="inbox-stock" title="Normal Slack" aria-label="Return to normal Slack"><svg class="control-icon slack-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><g transform="rotate(0 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(90 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(180 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(270 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g></svg></button><button class="inbox-icon" id="inbox-collapse" title="Close inbox to pill" aria-label="Close inbox to pill"><svg class="control-icon close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m7 7 10 10M17 7 7 17"/></svg></button></div><input id="search" type="search" placeholder="Filter conversations…" aria-label="Filter observed conversations" autocomplete="off">
-        <div class="activity-controls"><button id="activity-refresh">Refresh activity</button><button id="activity-more" hidden>More conversations</button></div><div id="activity-status" role="status"></div><div class="filter-row"><div class="filters" role="group" aria-label="Filter activity"><button data-filter="all" aria-pressed="true">All</button><button data-filter="unread" aria-pressed="false">Unread</button><button data-filter="mentions" aria-pressed="false">Mentions</button><button data-filter="dms" aria-pressed="false">DMs</button><button data-filter="threads" aria-pressed="false">Threads</button></div><button class="inbox-icon" id="inbox-latest" hidden title="Jump to latest messages" aria-label="Jump to latest messages">↓</button><button class="inbox-icon" id="inbox-back" hidden title="Close conversation" aria-label="Close conversation and return to inbox">←</button></div><div id="list" aria-label="Observed conversations"></div>
+      <section class="queue"><div class="queue-heading"><h1><button id="workspace-picker" type="button" aria-label="Choose workspace" aria-haspopup="dialog" aria-expanded="false" aria-controls="workspace-dialog">Workspace</button></h1><button class="inbox-icon" id="inbox-switcher" type="button" title="Search Slack · ⌘K" aria-label="Search Slack" aria-keyshortcuts="Meta+K"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button><button class="inbox-icon" id="compose" type="button" title="Compose new message" aria-label="Compose new message" aria-keyshortcuts="n"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-7"/><path d="m16 3 5 5M10 14l1-5 7-7a2.1 2.1 0 0 1 3 3l-7 7-4 2Z"/></svg></button><button class="inbox-icon" id="inbox-stock" title="Normal Slack" aria-label="Return to normal Slack"><svg class="control-icon slack-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><g transform="rotate(0 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(90 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(180 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(270 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g></svg></button><button class="inbox-icon" id="inbox-collapse" title="Close inbox to pill" aria-label="Close inbox to pill"><svg class="control-icon close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m7 7 10 10M17 7 7 17"/></svg></button></div><div class="list-toolbar"><input id="search" type="search" placeholder="Filter conversations…" aria-label="Filter observed conversations" autocomplete="off"><button id="density-picker" class="inbox-icon" type="button" aria-label="Inbox density" title="Inbox density" aria-haspopup="dialog" aria-expanded="false" aria-controls="density-menu"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><path d="M4 8h10M4 15h10" opacity=".5"/></svg></button></div>
+        <div class="activity-controls"><button id="activity-refresh">Refresh activity</button><button id="activity-more" hidden>More conversations</button></div><div id="activity-status" role="status"></div><div class="filter-row"><div class="filters" role="group" aria-label="Filter activity"><button data-filter="all" aria-pressed="true">All</button><button data-filter="unread" aria-pressed="false">Unread</button><button data-filter="mentions" aria-pressed="false">Mentions</button><button data-filter="dms" aria-pressed="false">DMs</button><button data-filter="threads" aria-pressed="false">Threads</button></div><button class="inbox-icon" id="inbox-next-unread" title="Next unread · ⌥⇧↓ (previous: ⌥⇧↑) · F6 switches focus" aria-label="Next unread in this inbox view" aria-keyshortcuts="Alt+Shift+ArrowDown"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h9v14H5M10 12h11m-4-4 4 4-4 4"/></svg></button><button class="inbox-icon" id="inbox-latest" hidden title="Jump to latest messages" aria-label="Jump to latest messages">↓</button><button class="inbox-icon" id="inbox-back" hidden title="Close conversation" aria-label="Close conversation and return to inbox">←</button></div><div id="list" aria-label="Observed conversations"></div>
         <div id="notice" role="status"></div>
       </section>
       <section class="reader" hidden aria-label="Captured messages"><div class="reader-header"><button id="back" aria-label="Back to queue">←</button><div class="eyebrow">Message reader</div><h2 id="conversation"></h2><div id="coverage"></div><div class="triage-controls"><button id="done" title="E · Save Done locally, then open the next item">Done →</button><button id="mark-read" title="Mark Slack read through the latest message loaded here. Does not change local Done.">Mark read</button><button id="later" title="L · Snooze locally, then open the next item">Later →</button><select id="snooze" aria-label="Snooze duration" style="background:#202735;color:inherit;border:1px solid #ffffff15;border-radius:5px"><option value="15">15 min</option><option value="60" selected>1 hour</option><option value="240">4 hours</option><option value="1440">24 hours</option></select><button id="pin" title="P · Toggle local pin">Pin</button><button id="reopen" hidden>Bring back</button><button id="undo" hidden>Undo</button></div><div id="mark-status" role="status" style="font-size:11px;color:#b5a6d5;margin-top:8px"></div><div class="history-controls"><button id="refresh">Refresh</button><button id="reply" title="Use Slack’s native editor. Opening the conversation may mark it read.">Native chat</button><button id="handoff" title="Open this conversation in ordinary Slack. Slack may mark it read.">Open in Slack ↗</button><button id="older" hidden>Load older</button></div><div id="history-status" role="status" aria-live="polite"></div></div><div class="messages" id="messages"></div><div class="read-only"><span class="signal"></span>Reading alone does not mark read. Done is local; Mark read updates Slack.</div></section>
     </section><section id="reply-chrome" class="reply-chrome" hidden aria-label="Native Slack conversation"><strong id="reply-destination"></strong><small id="reply-state"></small><nav><button id="reply-queue">← Queue</button><button id="reply-back">Read-only view</button><button id="reply-retry" hidden>Retry</button><button id="reply-stock">Normal Slack ↗</button><button id="reply-collapse">Collapse</button></nav></section><div id="reply-placeholder" class="reply-placeholder" hidden role="status"><span id="reply-placeholder-message"></span></div>`;
+  const densityMenu=document.createElement('div');densityMenu.id='density-menu';densityMenu.setAttribute('popover','auto');densityMenu.setAttribute('role','dialog');densityMenu.setAttribute('aria-label','Inbox density');
+  densityMenu.innerHTML=[['expanded','Expanded','Two-line previews'],['cozy','Cozy','One-line previews'],['compact','Compact','Names and status']].map(([value,label,hint])=>`<button type="button" data-density="${value}" aria-pressed="false"><span><strong>${label}</strong><small>${hint}</small></span><span class="density-check" aria-hidden="true"></span></button>`).join('');shadow.append(densityMenu);
+  densityMenu.addEventListener('toggle',()=>{$('density-picker').setAttribute('aria-expanded',String(densityMenu.matches(':popover-open')));},{signal:abort.signal});
+  function closeDensityPicker(){if(densityMenu.matches(':popover-open'))densityMenu.hidePopover();$('density-picker').focus({preventScroll:true});}
+  function showDensityPicker(){
+    if(densityMenu.matches(':popover-open')){closeDensityPicker();return;}
+    const bounds=$('density-picker').getBoundingClientRect();densityMenu.style.left=`${Math.max(8,Math.min(innerWidth-232,bounds.right-224))}px`;densityMenu.style.top=`${bounds.bottom+6}px`;
+    densityMenu.showPopover();densityMenu.querySelector('[aria-pressed="true"]')?.focus({preventScroll:true});
+  }
+  function densityKey(event){
+    if(!densityMenu.matches(':popover-open'))return false;
+    event.stopImmediatePropagation();
+    if(event.key==='Escape'){event.preventDefault();closeDensityPicker();}
+    else if(['ArrowDown','ArrowUp','Home','End','Tab'].includes(event.key)){
+      event.preventDefault();const choices=[...densityMenu.querySelectorAll('button')],index=choices.indexOf(shadow.activeElement),delta=event.key==='ArrowUp'||event.key==='Tab'&&event.shiftKey?-1:1;
+      choices[event.key==='Home'?0:event.key==='End'?choices.length-1:(index+delta+choices.length)%choices.length]?.focus();
+    }
+    return true;
+  }
   const workspaceDialog=document.createElement('dialog');workspaceDialog.id='workspace-dialog';workspaceDialog.setAttribute('aria-labelledby','workspace-dialog-title');
   workspaceDialog.innerHTML='<div class="workspace-dialog-heading"><h2 id="workspace-dialog-title">Workspaces</h2><button id="workspace-close" type="button" aria-label="Close workspace picker">×</button></div><div id="workspace-options"></div>';
   shadow.append(workspaceDialog);
+  const aliasDialog=document.createElement('dialog');aliasDialog.id='alias-dialog';aliasDialog.setAttribute('aria-labelledby','alias-heading');
+  aliasDialog.innerHTML='<form><h2 id="alias-heading">Name this thread</h2><p id="alias-context"></p><label for="alias-input">Personal name</label><input id="alias-input" maxlength="120" autocomplete="off" placeholder="e.g. Launch blockers"><p class="alias-hint">Only in triage on this Mac. Leave blank to use the original label.</p><p id="alias-error" role="status"></p><div class="alias-actions"><button type="button" id="alias-cancel">Cancel</button><button type="submit" id="alias-save">Save</button></div></form>';
+  shadow.append(aliasDialog);let aliasEditing=null,aliasRequest=null,aliasFocus=null;
+  function threadAlias(key){return snapshot.workspaces.find(w=>key?.startsWith(w.id+':'))?.threadAliases?.[key]||items().find(i=>i.key===key)?.triage?.alias||'';}
+  const displayName=item=>threadAlias(item?.key)||item?.triage?.alias||item?.name||'';
+  function closeAlias(){aliasDialog.close();aliasEditing=null;aliasRequest=null;if(aliasFocus?.isConnected)aliasFocus.focus({preventScroll:true});aliasFocus=null;}
+  function showAlias(target){
+    if(!connected()||aliasDialog.open||!target?.threadTs||!target.key)return;
+    aliasEditing={key:target.key,workspaceId:target.workspaceId};aliasFocus=document.activeElement===host?shadow.activeElement:document.activeElement;
+    $('alias-context').textContent=[snapshot.workspaceDirectory?.find(w=>w.id===target.workspaceId)?.name,target.name].filter(Boolean).join(' · ');
+    $('alias-input').value=threadAlias(target.key);$('alias-error').textContent='';$('alias-save').disabled=false;
+    aliasDialog.showModal();$('alias-input').focus();$('alias-input').select();
+  }
+  aliasDialog.addEventListener('cancel',event=>{event.preventDefault();closeAlias();},{signal:abort.signal});
+  aliasDialog.addEventListener('keydown',event=>{event.stopImmediatePropagation();},{signal:abort.signal});
+  aliasDialog.querySelector('form').addEventListener('submit',event=>{
+    event.preventDefault();if(!aliasEditing||aliasRequest||!connected())return;
+    const alias=$('alias-input').value.trim();if(/[\u0000-\u001f\u007f]/.test(alias)){$('alias-error').textContent='Use a single-line name.';return;}
+    aliasRequest=`alias-${Date.now().toString(36)}-${++actionSequence}`;$('alias-save').disabled=true;
+    window.__pmeTriageAction?.(JSON.stringify({...aliasEditing,action:'alias',alias,requestId:aliasRequest}));
+  },{signal:abort.signal});
+  aliasDialog.querySelector('#alias-cancel').addEventListener('click',closeAlias,{signal:abort.signal});
+  function acceptAliasResult(){
+    if(!aliasRequest||snapshot.actionResult?.requestId!==aliasRequest)return;
+    if(snapshot.actionResult.ok)closeAlias();else {aliasRequest=null;$('alias-save').disabled=false;$('alias-error').textContent='Could not save the name. Try again.';}
+  }
+  window.addEventListener('pme-thread-alias',event=>{const reply=window.__PME_REPLY__?.status();if(mode==='reply'&&reply?.ready&&!reply.auxiliary&&event.detail?.key===reply.target?.key)showAlias(reply.target);},{signal:abort.signal});
   let workspacePickerPurpose='switch';
   document.body.append(host);
   const $ = id => shadow.getElementById(id);
@@ -102,8 +161,8 @@
   const items = () => snapshot.workspaces.flatMap(w => w.items || []);
   const filtered = () => items().filter(item => {
     const query = $('search').value.trim().toLocaleLowerCase();
-    return (!query || item.name.toLocaleLowerCase().includes(query)) &&
-      (filter === 'mentions' && (item.mentions>0||item.mentionObserved===true) || filter === 'all' || filter === 'unread' && (item.unread === true || heldRow?.key===item.key&&heldRow.filter===filter&&item.triage?.state==='active') || filter === 'dms' && ['dm','groupDM'].includes(item.kind) || filter === 'threads' && item.kind === 'thread');
+    return (!query || `${displayName(item)} ${item.name}`.toLocaleLowerCase().includes(query)) &&
+      (filter === 'mentions' && (item.mentions>0||item.mentionObserved===true) || filter === 'all' || filter === 'unread' && (inboxUnread(item) || heldRow?.key===item.key&&heldRow.filter===filter&&item.triage?.state==='active') || filter === 'dms' && ['dm','groupDM'].includes(item.kind) || filter === 'threads' && item.kind === 'thread');
   }).sort((a,b)=>Number(b.triage?.pinned)-Number(a.triage?.pinned));
   const el = (tag, className, content) => { const node = document.createElement(tag); if (className) node.className = className; if (content != null) node.textContent = content; return node; };
   const time = ts => { const date = new Date(Number(ts) * 1000); return Number.isFinite(date.getTime()) ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''; };
@@ -147,7 +206,7 @@
       if(next)openItem(next,{reader:mode==='reading'});else {void transition('queue');$('notice').textContent='Saved · end of this queue.';}
     }
   }
-  async function startReply(item=items().find(i=>i.key===selection)||window.__PME_REPLY__?.status().target,{quick=null}={}){
+  async function startReply(item=items().find(i=>i.key===selection)||window.__PME_REPLY__?.status().target,{quick=null,focusAfter='composer',nativeNavigate=null,preservePosition=false}={}){
     if(!item)return;
     if(!window.__PME_REPLY__){openReader(item.key);$('notice').textContent='Native chat is unavailable · opened the read-only view.';return;}
     const run=++openSequence;
@@ -164,11 +223,12 @@
     openingKey=null;
     // Reveal the loading pane immediately; Slack can finish mounting while it
     // slides out. Keep focus in the inbox until both operations have finished.
-    const opening=window.__PME_REPLY__?.open(destination,{focusEditor:!stage&&!quickReply?.readOnly});
+    const opening=window.__PME_REPLY__?.open(destination,{focusEditor:!stage&&!quickReply?.readOnly&&focusAfter==='composer',nativeNavigate,preservePosition});
     if(stage)await Promise.all([opening,transition('reply')]);else await opening;
     if(run!==openSequence||disposed||mode!=='reply')return;
-    if(stage)window.__PME_REPLY__?.focus();
+    if(stage&&focusAfter==='composer')window.__PME_REPLY__?.focus();
     render();
+    if(focusAfter==='messages')window.__PME_REPLY__?.focusMessages();
   }
   function startCompose(chosenWorkspace=null){
     if(!connected()||$('compose').disabled)return;
@@ -182,11 +242,13 @@
     const controls=shadow.querySelector('.triage-controls'),container=mode==='reply'?$('reply-chrome'):shadow.querySelector('.reader-header');
     if(controls.parentElement!==container){if(mode==='reply')container.append(controls);else container.insertBefore(controls,$('mark-status'));}
     $('mark-read').hidden=mode==='reply';
-    $('reply-latest').hidden=mode!=='reply'||!ready||!!reply?.auxiliary||reply?.target?.kind==='compose';
+    $('reply-latest').hidden=mode!=='reply'||!ready||!!reply?.auxiliary||['compose','search'].includes(reply?.target?.kind);
     $('inbox-latest').hidden=$('reply-latest').hidden;
     $('inbox-back').hidden=!detailMode();
-    $('reply-back').hidden=reply?.target?.kind==='compose';
-    controls.hidden=mode==='reply'&&reply?.target?.kind==='compose';
+    $('inbox-back').title=reply?.target?.kind==='search'?'Close search results':'Close conversation';
+    $('inbox-back').setAttribute('aria-label',reply?.target?.kind==='search'?'Close search results and return to inbox':'Close conversation and return to inbox');
+    $('reply-back').hidden=['compose','search'].includes(reply?.target?.kind);
+    controls.hidden=mode==='reply'&&['compose','search'].includes(reply?.target?.kind);
     const failed=!openingKey&&!ready&&reply?.state==='error';
     $('reply-chrome').hidden=mode!=='reply'||!failed||!!quickReply;
     const cover=$('reply-placeholder');cover.hidden=mode!=='reply'||!!quickReply;
@@ -216,11 +278,12 @@
       requestAnimationFrame(()=>requestAnimationFrame(finish));
     });
   }
-  async function readFromPill(request){
-    if(mode!=='cluster'||!connected()||pillReadPending||!window.__PME_REPLY__)return {ok:false};
-    const item=notificationItems().find(i=>i.key===request?.key&&i.unread===true);
+  async function readFromPill(request,{inbox=false}={}){
+    const readMode=inbox?'queue':'cluster',source=inbox?items:notificationItems,paint=inbox?render:renderPill;
+    if(mode!==readMode||!connected()||pillReadPending||!window.__PME_REPLY__)return {ok:false};
+    const item=source().find(i=>i.key===request?.key&&i.unread===true);
     if(!item)return {ok:false};
-    const run=++pillReadRun;pillReadPending={key:item.key,latest:Number(item.latest)||0};renderPill();schedulePillCollapse();
+    const run=++pillReadRun;pillReadPending={key:item.key,latest:Number(item.latest)||0};paint();schedulePillCollapse();
     document.body.setAttribute('data-pme-background-read','');
     try{
       await paintPillDismissal();
@@ -230,13 +293,13 @@
       if(!opened?.ok)return {ok:false};
       window.__PME_REPLY__.markReadNative();
       const deadline=Date.now()+8000;
-      while(run===pillReadRun&&mode==='cluster'&&Date.now()<deadline){
-        if(notificationItems().find(i=>i.key===item.key)?.unread===false)return {ok:true};
+      while(run===pillReadRun&&mode===readMode&&Date.now()<deadline){
+        if(source().find(i=>i.key===item.key)?.unread===false)return {ok:true};
         await new Promise(resolve=>setTimeout(resolve,200));
       }
       return run!==pillReadRun?{cancelled:true}:{ok:false};
     }finally{
-      if(run===pillReadRun){pillReadPending=null;window.__PME_REPLY__?.suspend();document.body.removeAttribute('data-pme-background-read');renderPill();touch();}
+      if(run===pillReadRun){pillReadPending=null;window.__PME_REPLY__?.suspend();document.body.removeAttribute('data-pme-background-read');paint();touch();}
     }
   }
   function quick(request){
@@ -276,9 +339,47 @@
       event.detail?.sourceKey!==target.key||!/^\d+\.\d+$/.test(threadTs||''))return;
     const key=`${target.workspaceId}:${target.channelId}:${threadTs}`;
     const cached=items().find(item=>item.key===key)||notificationItems().find(item=>item.key===key);
-    await startReply(cached||{...target,key,threadTs});
+    await startReply(cached||{...target,key,threadTs,messageTs:null});
   }
   window.addEventListener('pme-native-thread-action',nativeThreadAction,{signal:abort.signal});
+  async function nativeLinkAction(event){
+    const reply=window.__PME_REPLY__?.status(),request=event.detail,destination=request?.destination;
+    if(mode!=='reply'||!reply?.ready||request?.sourceKey!==reply.target?.key||typeof request.navigate!=='function'||
+      !destination||!/^[TE][A-Z0-9]+$/.test(destination.workspaceId)||!/^[CDG][A-Z0-9]+$/.test(destination.channelId)||
+      destination.threadTs&&!/^\d+\.\d+$/.test(destination.threadTs))return;
+    const key=`${destination.workspaceId}:${destination.channelId}:${destination.threadTs||''}`;
+    const cached=items().find(item=>item.key===key)||notificationItems().find(item=>item.key===key);
+    const parent=items().find(item=>item.workspaceId===destination.workspaceId&&item.channelId===destination.channelId&&!item.threadTs);
+    const known=cached||parent;
+    await startReply({...known,...destination,key,name:known?.name||destination.channelId},{nativeNavigate:known?null:request.navigate,preservePosition:true,focusAfter:'messages'});
+  }
+  window.addEventListener('pme-native-link-action',nativeLinkAction,{signal:abort.signal});
+  async function openNativeSwitcher(){
+    if(densityMenu.matches(':popover-open'))closeDensityPicker();
+    if(!connected()||mode==='stock'||workspaceDialog.open||!window.__PME_REPLY__?.openSwitcher)return;
+    if(['strip','cluster','hidden'].includes(mode)||quickReply)await transition('queue');
+    const workspaceId=mode==='reply'?window.__PME_REPLY__.status().target?.workspaceId:viewTeam()==='*'?team():viewTeam();
+    if(!await window.__PME_REPLY__.openSwitcher(workspaceId))$('notice').textContent='Close the current Slack popup before opening search.';
+  }
+  window.addEventListener('pme-native-switcher-action',async event=>{
+    if(!window.__PME_REPLY__?.switcherOpen()||!['queue','reading','reply'].includes(mode))return;
+    const {destination,navigate}=event.detail||{};if(typeof navigate!=='function')return;
+    if(!destination){
+      // Workflows and uncached destinations remain fully usable
+      // in Slack. Do not infer recipients from labels or assume the old route.
+      navigate();await transition('stock');return;
+    }
+    await startReply(destination,{nativeNavigate:navigate,preservePosition:true});
+  },{signal:abort.signal});
+  window.addEventListener('pme-native-search-open',event=>{
+    const reply=window.__PME_REPLY__?.status();
+    const workspaceId=event.detail?.workspaceId;
+    if(!['queue','reading','reply'].includes(mode)||!connected()||workspaceId!==team())return;
+    void startReply({kind:'search',workspaceId,key:`${workspaceId}:search`,name:'Search results'},{preservePosition:true,focusAfter:'messages'});
+  },{signal:abort.signal});
+  window.addEventListener('pme-native-fallback',event=>{
+    if(mode==='reply'&&event.detail?.key===selection&&event.detail.key===window.__PME_REPLY__?.status().target?.key)void transition('stock');
+  },{signal:abort.signal});
   window.addEventListener('pme-native-reply-state',renderReply,{signal:abort.signal});
   window.addEventListener('pme-native-reply-installed',()=>{const r=window.__PME_REPLY__?.status();if(r?.target&&(r.active||mode==='reply'))void startReply(r.target);},{signal:abort.signal});
   function openReader(key){++openSequence;openingKey=null;selection=key;void transition('reading');requestHistory();}
@@ -354,7 +455,7 @@
         const kind=item.kind==='thread'?'Thread':item.kind==='channel'?'Channel':item.kind==='groupDM'?'Group chat':'DM';
         const workspace=notificationWorkspaces().find(w=>w.id===item.workspaceId)?.name||'';
         const last=item.messages.at(-1),preview=last?.text?.replace(/\s+/g,' ').trim().slice(0,260)||'Hover for a cached message preview.';
-        const label=`${item.name} · ${kind}${workspace?' · '+workspace:''}\n${last?.author?last.author+': ':''}${preview}`;
+        const label=`${displayName(item)} · ${kind}${workspace?' · '+workspace:''}\n${last?.author?last.author+': ':''}${preview}`;
         const button=el('button','pill-item');button.dataset.key=item.key;
         button.setAttribute('aria-label',label);button.setAttribute('aria-pressed',String(selection===item.key));
         const words=item.name.replace(/^[@#]/,'').trim().split(/[\s_-]+/),initials=words.slice(0,2).map(w=>Array.from(w)[0]||'').join('').toLocaleUpperCase();
@@ -373,6 +474,10 @@
   function render() {
     if (disposed) return;
     renderReply();renderPill();
+    const density=settings.inboxDensity||'expanded';host.setAttribute('data-density',density);
+    $('density-picker').title=`Inbox density · ${density[0].toUpperCase()+density.slice(1)}`;$('density-picker').disabled=!connected();
+    for(const button of densityMenu.querySelectorAll('button')){const selected=button.dataset.density===density;button.setAttribute('aria-pressed',String(selected));button.querySelector('.density-check').textContent=selected?'✓':'';}
+
     try{sessionStorage.setItem(viewKey,JSON.stringify({selection,filter,resumeReply}));}catch{}
     for (const button of shadow.querySelectorAll('[data-filter]')) button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
     const activeWorkspace=snapshot.workspaces[0],activity=activeWorkspace?.activity;
@@ -387,7 +492,10 @@
     $('activity-status').hidden=!$('activity-status').textContent;
     const composeTeam=viewTeam(),composeChoices=(snapshot.workspaceDirectory||[]).filter(w=>w.connected);
     $('compose').disabled=!connected()||!window.__PME_REPLY__||!(composeTeam==='*'?composeChoices.length:composeChoices.some(w=>w.id===composeTeam));
-    $('compose').title=composeTeam==='*'?'Choose workspace to compose':`Compose in ${composeChoices.find(w=>w.id===composeTeam)?.name||'current workspace'}`;
+    $('inbox-switcher').disabled=!connected()||!window.__PME_REPLY__?.openSwitcher;
+    const searchTeam=mode==='reply'?window.__PME_REPLY__?.status().target?.workspaceId:composeTeam==='*'?team():composeTeam;
+    $('inbox-switcher').title=`Search ${snapshot.workspaceDirectory?.find(w=>w.id===searchTeam)?.name||'Slack'} · ⌘K`;
+    $('compose').title=(composeTeam==='*'?'Choose workspace to compose':`Compose in ${composeChoices.find(w=>w.id===composeTeam)?.name||'current workspace'}`)+' · N';
     if(composeTeam==='*'){$('compose').setAttribute('aria-haspopup','dialog');$('compose').setAttribute('aria-controls','workspace-dialog');}else{$('compose').removeAttribute('aria-haspopup');$('compose').removeAttribute('aria-controls');}
     const picker=$('workspace-picker'),selected=viewTeam()||'',directory=[...(snapshot.workspaceDirectory||[])];
     const name=selected==='*'?'All workspaces':directory.find(w=>w.id===selected)?.name||snapshot.workspaces.find(w=>w.id===selected)?.name||'Workspace';
@@ -404,6 +512,7 @@
       options.replaceChildren(...rows);options.dataset.signature=workspaceSignature;
       if(workspaceDialog.open&&focused)rows.find(b=>b.dataset.workspace===focused&&!b.disabled)?.focus();
     }
+    $('inbox-next-unread').disabled=!connected()||!nextUnreadItem(1);
     const rows = filtered();
     const listScroll = $('list').scrollTop;
     const focusKey = shadow.activeElement?.classList.contains('row')?shadow.activeElement.dataset.key:null;
@@ -412,20 +521,24 @@
     for (const item of rows) {
       const button = el('button', `row${item.key === selection ? ' selected' : ''}`); button.dataset.key = item.key;button.title='Open native Slack conversation · Option-click for read-only view';
       button.setAttribute('aria-pressed', String(item.key === selection));
-      const head = el('div','row-head'); head.append(el('span','kind',item.kind === 'thread' ? '↳' : item.kind === 'channel' ? '#' : '◌'),el('span','name',item.name));
+      const head = el('div','row-head'); head.append(el('span','kind',item.kind === 'thread' ? '↳' : item.kind === 'channel' ? '#' : '◌'),el('span','name',displayName(item)));
       if(item.triage?.pinned)head.append(el('span','badge','Pinned'));
-      if (item.unread === true) { const dot = el('span','unread'); dot.title = 'Observed unread'; head.append(dot); }
-      if (item.unreadCount !== null && item.unreadCount > 0) head.append(el('span','badge',String(item.unreadCount)));
+      if (inboxUnread(item)) { const dot = el('span','unread'); dot.title = 'Observed unread'; head.append(dot); }
+      if (inboxUnread(item) && item.unreadCount !== null && item.unreadCount > 0) head.append(el('span','badge',String(item.unreadCount)));
+      const last = item.messages.at(-1),workspace=snapshot.workspaces.length>1?snapshot.workspaces.find(w=>w.id===item.workspaceId)?.name:null;
+      if(workspace)head.append(el('span','row-workspace',workspace));
+      if(last)head.append(el('span','row-time',time(last.ts)));
       button.append(head);
-      const last = item.messages.at(-1);
       button.append(el('div','preview',last?.text || (['queued','loading'].includes(item.history?.status)?'Loading messages…':item.history?.status==='error'?'Could not load · open to retry':item.history?.status==='ready'?'No messages returned':'Open to load messages')));
-      button.append(el('div','meta',[snapshot.workspaces.length>1?snapshot.workspaces.find(w=>w.id===item.workspaceId)?.name:null,item.kind === 'thread' ? 'Thread' : item.kind === 'channel' ? 'Channel' : 'Direct message', item.unread === null ? 'Unread unknown' : item.countsStale ? 'Unread state may be stale' : item.unread ? 'Unread observed' : 'Read observed',last ? time(last.ts) : null].filter(Boolean).join(' · ')));
+      button.append(el('div','meta',[snapshot.workspaces.length>1?snapshot.workspaces.find(w=>w.id===item.workspaceId)?.name:null,item.kind === 'thread' ? 'Thread' : item.kind === 'channel' ? 'Channel' : 'Direct message', item.unread === null ? 'Unread unknown' : item.countsStale ? 'Unread state may be stale' : inboxUnread(item) ? 'Unread observed' : pendingInboxRead(item)?'Marking read…':'Read observed',last ? time(last.ts) : null].filter(Boolean).join(' · ')));
+      const summary=[displayName(item),threadAlias(item.key)?item.name:null,item.triage?.pinned?'Pinned':null,inboxUnread(item)?'Unread':null,inboxUnread(item)&&item.unreadCount>0?`${item.unreadCount} unread`:null,button.querySelector('.meta')?.textContent,last?.text].filter(Boolean).join(' · ');
+      button.setAttribute('aria-label',summary);button.title=`${summary.slice(0,400)}\nJ/K: move · H/L: filters · /: filter text · Enter: reply · X: mark read · Option-click: read-only`;button.setAttribute('aria-keyshortcuts','h j k l ArrowLeft ArrowRight ArrowDown ArrowUp Enter x');
       $('list').append(button);
     }
     $('list').scrollTop = listScroll;
     if (focusKey) [...$('list').children].find(e => e.dataset.key === focusKey)?.focus({ preventScroll: true });
     const item = items().find(i => i.key === selection);
-    $('conversation').textContent = item?.name || 'Choose a conversation';
+    $('conversation').textContent = displayName(item) || 'Choose a conversation';
     $('reply').disabled=!item||!window.__PME_REPLY__;$('handoff').disabled=!item;$('handoff').textContent=item?.threadTs?'Open conversation in Slack ↗':'Open in Slack ↗';
     for(const id of ['done','later','pin','reopen'])$(id).disabled=!item||!connected()||!!pendingLocal;
     const mark=item?.readMark;
@@ -547,7 +660,11 @@
   }
   function transition(next,{stage=false,passive=false,reuseLayout=false}={}) {
     if (disposed || !['stock','hidden','strip','cluster','queue','reading','reply'].includes(next)) return Promise.resolve();
+    if(aliasDialog.open)closeAlias();
+    if(workspaceDialog.open)closeWorkspacePicker(false);
+    if(densityMenu.matches(':popover-open'))densityMenu.hidePopover();
     if(pillReadPending){++pillReadRun;pillReadPending=null;window.__PME_REPLY__?.suspend();document.body.removeAttribute('data-pme-background-read');}
+    if(next!=='reply')window.__PME_REPLY__?.cancelSwitcher?.({restore:false});
     clearTimeout(hoverTimer);hoverIntent=null;clearTimeout(pillIdleTimer);
     setPillPreview(null);
     if(next!=='reply'&&!passive){++openSequence;openingKey=null;}
@@ -572,7 +689,7 @@
       }catch{$('notice').textContent='Window layout could not be applied. Normal Slack restores the saved layout.';}
       finally{if(!stage)clearDetailMotion();}
       if(!stage&&!passive){
-        if (next === 'queue') $('search').focus({preventScroll:true});
+        if (next === 'queue') focusInbox();
         if (next === 'reading') $('back').focus({preventScroll:true});
         if (next === 'reply'&&!window.__PME_REPLY__?.status().ready) $(quickReply?'quick-close':'inbox-back').focus({preventScroll:true});
         if (next === 'strip') $('edge-tab').focus({preventScroll:true});
@@ -596,6 +713,10 @@
     else if(button.id==='inbox-stock')void transition('stock');
     else if(button.id==='inbox-collapse')void transition(restMode());
     else if(button.id==='inbox-back')void transition('queue');
+    else if(button.id==='density-picker')showDensityPicker();
+    else if(button.dataset.density){window.__pmeTriageAction?.(JSON.stringify({workspaceId:viewTeam(),action:'settings',patch:{inboxDensity:button.dataset.density}}));closeDensityPicker();}
+    else if(button.id==='inbox-next-unread')void nextUnread(1);
+    else if(button.id==='inbox-switcher')void openNativeSwitcher();
     else if(button.id==='inbox-latest')window.__PME_REPLY__?.jumpToLatest();
     else if(button.dataset.key)openItem(button.dataset.key,{reader:event.altKey});
     else if(button.dataset.thread)openItem(button.dataset.thread);
@@ -619,6 +740,108 @@
     else if(button.id==='collapse')void transition(mode==='cluster'?'queue':restMode());
     else if(button.id==='back')void transition('queue');
   },{signal:abort.signal});
+  const pendingInboxRead=item=>item.key===pillReadPending?.key&&Number(item.latest||0)<=pillReadPending.latest;
+  const inboxUnread=item=>item.unread===true&&!pendingInboxRead(item);
+  function inboxKeyItem(){
+    const rows=filtered(),key=shadow.activeElement?.dataset?.key||selection;
+    return rows.find(item=>item.key===key)||rows[0];
+  }
+  function moveInboxCursor(direction){
+    const rows=filtered();if(!rows.length)return;
+    const key=shadow.activeElement?.dataset?.key||selection,index=rows.findIndex(item=>item.key===key);
+    const item=rows[index<0?(direction>0?0:rows.length-1):(index+direction+rows.length)%rows.length];
+    // Selecting a row must not navigate Slack or steal focus into its composer.
+    if(mode==='queue')selection=item.key;
+    render();const row=[...$('list').children].find(node=>node.dataset.key===item.key);
+    row?.focus({preventScroll:true});row?.scrollIntoView({block:'nearest'});
+  }
+  function moveInboxFilter(direction){
+    const filters=['all','unread','mentions','dms','threads'],index=filters.indexOf(filter);
+    filter=filters[(index+direction+filters.length)%filters.length];
+    render();focusInbox();
+  }
+  async function readInboxItem(){
+    const item=inboxKeyItem();if(!item||!inboxUnread(item)||!connected()||pillReadPending)return;
+    const rows=filtered(),at=rows.findIndex(row=>row.key===item.key),next=rows[at+1]||rows[at-1];
+    // Reuse the hidden native read flow. Closing the detail pane first keeps
+    // its old editor from appearing under a different conversation label.
+    if(mode!=='queue')await transition('queue');
+    if(mode!=='queue'||!connected())return;
+    heldRow=null;$('notice').textContent='';
+    const reading=readFromPill(item,{inbox:true});
+    if(next)selection=next.key;render();focusInbox();
+    try{const result=await reading;if(!result.ok&&!result.cancelled)$('notice').textContent='Slack has not confirmed this item as read. It is still shown as unread.';}
+    catch{$('notice').textContent='Could not mark read in Slack. Try opening the conversation.';}
+  }
+  function composeToggleKey(event){
+    if(!['queue','reading','reply'].includes(mode)||quickReply||event.defaultPrevented||event.isComposing||event.metaKey||event.ctrlKey||event.altKey||event.shiftKey||event.key.toLowerCase()!=='n')return false;
+    if(event.composedPath().some(node=>node?.matches?.('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]')))return false;
+    event.preventDefault();event.stopImmediatePropagation();touch();
+    if(!event.repeat){
+      if(mode==='reply'&&(openingKey?.endsWith(':compose')||window.__PME_REPLY__?.status().target?.kind==='compose'))void transition('queue');
+      else void startCompose();
+    }
+    return true;
+  }
+  function inboxNavigationKey(event){
+    if(!['queue','reading','reply'].includes(mode)||quickReply||event.defaultPrevented||event.isComposing||event.metaKey||event.ctrlKey||event.altKey||event.shiftKey||!event.composedPath().includes(host))return false;
+    const active=shadow.activeElement,key=event.key.toLowerCase();
+    const typing=event.composedPath().some(node=>node?.matches?.('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]'));
+    const horizontal=['ArrowLeft','ArrowRight'].includes(event.key),arrows=['ArrowDown','ArrowUp'].includes(event.key),enter=event.key==='Enter';
+    if(typing&&!(active===$('search')&&(arrows||enter)))return false;
+    if(!arrows&&!horizontal&&!['h','j','k','l','x','/'].includes(key)&&!enter)return false;
+    // Keep Enter's ordinary button activation on header and filter controls.
+    if(enter&&!active?.dataset?.key&&active!==$('search'))return false;
+    event.preventDefault();event.stopImmediatePropagation();touch();
+    if(key==='/'){$('search').focus({preventScroll:true});$('search').select();}
+    else if(horizontal||key==='h'||key==='l')moveInboxFilter(event.key==='ArrowLeft'||key==='h'?-1:1);
+    else if(arrows||key==='j'||key==='k')moveInboxCursor(event.key==='ArrowUp'||key==='k'?-1:1);
+    else if(!event.repeat&&key==='x')void readInboxItem();
+    else if(!event.repeat&&enter){
+      const item=inboxKeyItem(),reply=window.__PME_REPLY__;
+      if(item){if(mode==='reply'&&reply?.status().ready&&reply.status().target?.key===item.key&&!reply.status().auxiliary)reply.focus();else openItem(item.key);}
+    }
+    return true;
+  }
+  function nextUnreadItem(direction){
+    const rows=filtered(),at=rows.findIndex(item=>item.key===selection);
+    const start=at<0?(direction>0?-1:0):at;
+    for(let step=1;step<=rows.length;step++){
+      const item=rows[(start+direction*step+rows.length)%rows.length];
+      if(item.key!==selection&&inboxUnread(item)&&!item.pendingRead&&!replyDismissed(item)&&!['done','later'].includes(item.triage?.state))return item;
+    }
+    return null;
+  }
+  async function nextUnread(direction){
+    if(!connected()||!['queue','reading','reply'].includes(mode)||quickReply)return;
+    const item=nextUnreadItem(direction);
+    if(!item){$('notice').textContent='No other unread items in this view.';return;}
+    $('notice').textContent='';await startReply(item,{focusAfter:'messages'});
+  }
+  function focusInbox(){
+    const row=[...$('list').children].find(node=>node.dataset?.key===selection);
+    const next=row||$('list').children[0];
+    // Empty filters keep a non-editable focus target so H/L can continue.
+    (next?.dataset?.key?next:shadow.querySelector(`[data-filter="${filter}"]`))?.focus({preventScroll:true});next?.scrollIntoView?.({block:'nearest'});
+  }
+  function cycleTriageFocus(direction){
+    const reply=window.__PME_REPLY__;
+    if(mode!=='reply'||!reply?.status().ready||reply.status().auxiliary){focusInbox();return;}
+    const pane=document.querySelector('[data-pme-native-reply-pane]'),active=document.activeElement;
+    const area=active===host?0:active?.closest?.('[data-qa="message_input"],[data-qa="composer_page"]')?2:pane?.contains(active)?1:0;
+    const regions=reply.status().readOnly?[0,1]:[0,1,2];
+    const next=regions[(Math.max(0,regions.indexOf(area))+direction+regions.length)%regions.length];
+    if(next===0)focusInbox();else if(next===1)reply.focusMessages();else reply.focus();
+  }
+  function triageNavigationKey(event){
+    if(!['queue','reading','reply'].includes(mode)||quickReply||event.defaultPrevented||event.isComposing)return false;
+    const unread=event.altKey&&event.shiftKey&&!event.metaKey&&!event.ctrlKey&&['ArrowDown','ArrowUp'].includes(event.key);
+    const focus=event.key==='F6'&&!event.altKey&&!event.metaKey&&!event.ctrlKey;
+    if(!unread&&!focus)return false;
+    event.preventDefault();event.stopImmediatePropagation();
+    if(!event.repeat){if(unread)void nextUnread(event.key==='ArrowDown'?1:-1);else cycleTriageFocus(event.shiftKey?-1:1);}
+    return true;
+  }
   function closeWorkspacePicker(restoreFocus=true){
     if(!workspaceDialog.open)return;workspaceDialog.close();$('workspace-picker').setAttribute('aria-expanded','false');$('compose').setAttribute('aria-expanded','false');
     if(restoreFocus)$(workspacePickerPurpose==='compose'?'compose':'workspace-picker').focus({preventScroll:true});
@@ -632,8 +855,23 @@
   workspaceDialog.addEventListener('cancel',event=>{event.preventDefault();closeWorkspacePicker();},{signal:abort.signal});
   workspaceDialog.addEventListener('click',event=>{if(event.target===workspaceDialog){const r=workspaceDialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeWorkspacePicker();}},{signal:abort.signal});
   $('search').addEventListener('input',render,{signal:abort.signal});
+  // Run navigation chords before Slack's document-level shortcuts so their
+  // unread traversal cannot bypass the selected triage workspace and filters.
+  window.addEventListener('keydown',event=>{
+    if(!event.isComposing&&event.metaKey&&event.shiftKey&&!event.ctrlKey&&!event.altKey&&event.code==='KeyU'&&!snapshot.nativeStockHotkey){
+      event.preventDefault();event.stopImmediatePropagation();if(!event.repeat)void command('stock-toggle');return;
+    }
+    if(mode!=='stock'&&!event.isComposing&&(event.metaKey||event.ctrlKey)&&!event.altKey&&!event.shiftKey&&event.key.toLowerCase()==='k'){
+      if(workspaceDialog.open||aliasDialog.open)return;
+      event.preventDefault();event.stopImmediatePropagation();if(!event.repeat)void openNativeSwitcher();return;
+    }
+    if(aliasDialog.open||densityMenu.matches(':popover-open')||workspaceDialog.open||window.__PME_REPLY__?.switcherOpen?.()||window.__PME_REPLY__?.overlayOpen?.())return;
+    if(!composeToggleKey(event)&&!inboxNavigationKey(event))triageNavigationKey(event);
+  },{capture:true,signal:abort.signal});
   document.addEventListener('keydown',event=>{
     touch();
+    if(aliasDialog.open)return;
+    if(densityKey(event))return;
     if ((event.metaKey||event.ctrlKey)&&event.shiftKey&&event.code==='KeyY'&&(!snapshot.nativeHotkey||!connected())){
       event.preventDefault();event.stopImmediatePropagation();void command('toggle');return;
     }
@@ -649,7 +887,12 @@
       return;
     }
     if (mode==='stock')return;
-    if(mode==='reply'&&window.__PME_REPLY__?.overlayOpen?.())return;
+    if(window.__PME_REPLY__?.switcherOpen?.()||mode==='reply'&&window.__PME_REPLY__?.overlayOpen?.())return;
+    if(event.key==='Escape'&&event.composedPath().includes(host)&&shadow.activeElement?.matches('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]')){
+      if(event.defaultPrevented||event.isComposing)return;
+      event.preventDefault();event.stopImmediatePropagation();
+      if(!event.repeat)focusInbox();return;
+    }
     if(mode==='reply'&&event.key==='Escape'&&window.__PME_REPLY__?.status().auxiliary){
       if(event.defaultPrevented||event.isComposing)return;
       event.preventDefault();event.stopImmediatePropagation();if(!event.repeat)window.__PME_REPLY__.closeAuxiliary();return;
@@ -683,18 +926,11 @@
         event.preventDefault();event.stopImmediatePropagation();controls[event.shiftKey?controls.length-1:0]?.focus();
       }return;
     }
-    if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();void transition(detailMode()?'queue':restMode());return;}
-    if(!event.composedPath().includes(host))return;
-    if(typing&&shadow.activeElement!==$('search'))return;
-    if(['ArrowDown','ArrowUp'].includes(event.key)){
-      event.preventDefault();event.stopImmediatePropagation();const list=filtered();if(!list.length)return;
-      const index=list.findIndex(i=>i.key===selection);selection=list[index<0?(event.key==='ArrowDown'?0:list.length-1):(index+(event.key==='ArrowDown'?1:-1)+list.length)%list.length].key;render();
-      if(mode==='reading')requestHistory();
-      else if(mode==='reply')openItem(selection);
-      [...$('list').children].find(e=>e.dataset.key===selection)?.scrollIntoView({block:'nearest'});
-    }else if(event.key==='Enter'&&!event.isComposing){
-      if(shadow.activeElement===$('search')){event.preventDefault();event.stopImmediatePropagation();const list=filtered();selection=list.some(i=>i.key===selection)?selection:list[0]?.key;if(selection)openItem(selection);}
+    if(event.key==='Escape'){
+      if(event.defaultPrevented||event.isComposing||nativeTyping)return;
+      event.preventDefault();event.stopImmediatePropagation();if(!event.repeat)void transition(detailMode()?'queue':restMode());return;
     }
+
   },{capture:true,signal:abort.signal});
 
   function reportShell(returnFocus=false,resumed=false){window.__pmeShellState?.(JSON.stringify({workspaceId:team(),mode,focused:document.hasFocus(),returnFocus,resumed,online:navigator.onLine,displays:displayInfo,edgeStrip:mode==='strip'?nativeStripRequest:null,preview:pillPreview}));}
@@ -715,6 +951,13 @@
     if(JSON.stringify(next)!==JSON.stringify(pillPreview)){pillPreview=next;reportShell();}
   }
   async function command(op){
+    if(op==='stock-toggle'){
+      await nativeQueue.catch(()=>{});
+      if(mode!=='stock')return command('stock');
+      const w=desktop.window,id=await w.getWindowId(),call=method=>w.callBrowserWindowMethod(id,method);
+      if(await call('isVisible')&&!await call('isMinimized')){await call('hide');reportShell(true);return {mode:'stock',returnFocus:true};}
+      if(await call('isMinimized'))await call('restore');await call('show');await call('focus');reportShell();return {mode:'stock',returnFocus:false};
+    }
     if(op==='peek'&&mode!=='strip')return {mode};
     const next=op==='peek'?'cluster':op==='toggle'?(['reading','queue','reply'].includes(mode)?restMode():'queue'):op==='rest'?restMode():op==='hide'?'hidden':op;
     if(op==='toggle'&&resumeReply&&['stock','strip','cluster','hidden'].includes(mode)&&window.__PME_REPLY__?.status().target){await startReply(window.__PME_REPLY__.status().target);const w=desktop.window;await w.callBrowserWindowMethod(await w.getWindowId(),'focus');return {mode};}
@@ -817,10 +1060,10 @@
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
   idle=setInterval(observe,10000);
-  window.__PME_TRIAGE__={version:'0.20.0',update:value=>{const activity=detectPillActivity(value,{reset:!connected()});lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify(settings),previewWasHeld=snapshot.previewHeld;snapshot=value;if(value.previewHeld||previewWasHeld!==value.previewHeld)touch();syncNativeStrip();acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify(settings)&&!['stock','hidden'].includes(mode))void transition(mode);if(activity)revealPillActivity();},transition,command,quick,readFromPill,open:openItem,
+  window.__PME_TRIAGE__={threadAlias,version:'0.20.0',update:value=>{const activity=detectPillActivity(value,{reset:!connected()});lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify({...settings,inboxDensity:undefined}),previewWasHeld=snapshot.previewHeld;snapshot=value;acceptAliasResult();if(value.previewHeld||previewWasHeld!==value.previewHeld)touch();syncNativeStrip();acceptLocalResult();settings={...settings,...value.settings};edge=settings.edge;render();if(before!==JSON.stringify({...settings,inboxDensity:undefined})&&!['stock','hidden'].includes(mode))void transition(mode);if(activity)revealPillActivity();},transition,command,quick,readFromPill,open:openItem,
     status:()=>({mode,edge,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
     dispose:async()=>{if(disposed)return;setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);clearTimeout(pillIdleTimer);
-      window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});clearDetailMotion();document.body.removeAttribute('data-pme-quick');document.body.removeAttribute('data-pme-quick-read');document.body.removeAttribute('data-pme-background-read');++pillReadRun;await geometry('stock').catch(()=>{});host.remove();delete window.__PME_TRIAGE__;
+      window.__PME_REPLY__?.cancelSwitcher?.({restore:false});window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});clearDetailMotion();document.body.removeAttribute('data-pme-quick');document.body.removeAttribute('data-pme-quick-read');document.body.removeAttribute('data-pme-background-read');++pillReadRun;await geometry('stock').catch(()=>{});host.remove();delete window.__PME_TRIAGE__;
     }};
   observe();render();
   if(window.__PME_REPLY__?.status().active&&window.__PME_REPLY__.status().target)void startReply(window.__PME_REPLY__.status().target);

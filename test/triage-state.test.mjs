@@ -38,3 +38,30 @@ test('snooze durations expire at the saved boundary; unsupported values do not w
  const before=await fs.readFile(state.file,'utf8');for(const minutes of [-1,0,NaN,100000,'60'])assert.equal(await state.act(item,'later',{minutes}),false);
  assert.equal(await fs.readFile(state.file,'utf8'),before);
 });
+
+test('inbox density defaults to expanded, persists each choice and rejects unknown renderers',async t=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'triage-density-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+ const file=path.join(dir,'state.json'),state=await new TriageState(file).load();assert.equal(state.settings.inboxDensity,'expanded');
+ for(const inboxDensity of ['cozy','compact','expanded']){await state.configure({inboxDensity});const restored=await new TriageState(file).load();assert.equal(restored.settings.inboxDensity,inboxDensity);}
+ await state.configure({inboxDensity:'compact'});await state.configure({inboxDensity:'invalid'});assert.equal(state.settings.inboxDensity,'compact');
+});
+
+test('thread aliases persist independently of attention state and are isolated by workspace and root',async t=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'triage-alias-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+ const file=path.join(dir,'state.json'),state=await new TriageState(file).load();
+ const thread={key:'TONE:CONE:100.000001',unread:false};
+ assert.equal(await state.setAlias(thread.key,'  Launch blockers  '),true);
+ assert.equal(state.project(thread).alias,'Launch blockers');assert.equal(state.project(thread).needsAction,false);assert.equal(state.project(thread).explicit,false);
+ assert.equal(state.project({...thread,key:'TTWO:CONE:100.000001'}).alias,null);assert.equal(state.project({...thread,key:'TONE:CONE:100.000002'}).alias,null);
+ await state.act(thread,'done');await state.setAlias(thread.key,'Updated name');await state.act(thread,'undo');
+ assert.equal(state.project(thread).alias,'Updated name');assert.equal(state.project(thread).state,'active');
+ const loaded=await new TriageState(file).load();assert.equal(loaded.project(thread).alias,'Updated name');
+ await loaded.setAlias(thread.key,'');assert.equal((await new TriageState(file).load()).project(thread).alias,null);
+});
+test('alias validation and failed writes preserve prior names',async t=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'triage-alias-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+ const state=await new TriageState(path.join(dir,'state.json')).load(),key='TONE:CONE:100.000001';
+ await state.setAlias(key,'Existing');
+ for(const [k,value] of [[item.key,'No'],['bad','No'],[key,'x'.repeat(121)],[key,'line\nbreak'],[key,null]])assert.equal(await state.setAlias(k,value),false);
+ state.error='read failure';await assert.rejects(state.setAlias(key,'New'));assert.equal(state.aliases.get(key),'Existing');
+});

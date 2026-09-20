@@ -6,7 +6,7 @@ const source=await fs.readFile(new URL('../src/renderer/triage.js',import.meta.u
 function functionSource(startText,endText){const start=source.indexOf(startText)+startText.length,end=source.indexOf(endText,start);assert.ok(start>=startText.length&&end>start);return source.slice(start,end);}
 const transitionSource='function transition('+functionSource('function transition(',"  shadow.addEventListener('click'");
 function motionEnv(mode,{reduced=false,staged=false}={}){
- const calls=[],env={mode,pillReadPending:null,quickReply:null,disposed:false,stagedDetail:staged,innerWidth:mode==='queue'||staged?420:820,openSequence:0,openingKey:null,
+ const calls=[],env={focusInbox:()=>{},workspaceDialog:{open:false},aliasDialog:{open:false},densityMenu:{matches:()=>false},mode,pillReadPending:null,quickReply:null,disposed:false,stagedDetail:staged,innerWidth:mode==='queue'||staged?420:820,openSequence:0,openingKey:null,
   hoverTimer:0,hoverIntent:null,pillIdleTimer:0,pillPointerInside:false,touch(){},schedulePillCollapse(){},clearTimeout(){},setPillPreview(){},nativeQueue:Promise.resolve(),document:{activeElement:null},
   window:{matchMedia:()=>({matches:reduced}),__PME_REPLY__:{suspend:()=>calls.push('suspend'),status:()=>({ready:true})}},
   setDetailMotion:()=>calls.push('mask'),clearDetailMotion:()=>{calls.push('unmask');env.stagedDetail=false;},

@@ -47,3 +47,10 @@ test('confirmed replies disappear through their sent timestamp, while newer acti
  env.dismissRepliedItem({key:item.key,ts:'100.000004'});assert.equal(env.replyDismissed({...item,unread:false}),false);assert.equal(env.replyDismissed(item),false);
  env.dismissRepliedItem({key:item.key,ts:'100.000004'});now=25000;assert.equal(env.replyDismissed(item),false);assert.equal(item.unread,true);
 });
+
+test('inbox read uses inbox scope even when notification settings exclude the workspace, and does not change layout',async()=>{
+ const s=setup();s.env.mode='queue';s.env.items=()=>[s.item];s.env.notificationItems=()=>[];s.env.render=()=>s.calls.push('inbox-render');
+ const pending=s.env.readFromPill({key:s.item.key},{inbox:true});await new Promise(r=>setImmediate(r));
+ assert.equal(s.calls[0],'inbox-render');assert.equal(s.calls[1].options.focusEditor,false);assert.equal(s.env.mode,'queue');
+ s.open({ok:true});assert.equal((await pending).ok,true);assert.equal(s.calls.at(-1),'inbox-render');assert.equal(s.env.pillReadPending,null);
+});

@@ -100,3 +100,39 @@ If a cached DM is absent from the sidebar, triage can now use Slack's native sea
 The lookup is bounded to three seconds, skips an already open native overlay, cancels when superseded, and yields if the user edits its query. No direct API calls or background polling were added; this on-demand native search can generate Slack's own normal search requests.
 
 Live validation opened Slackbot from triage with Agents & apps collapsed and confirmed the native greeting, themed conversation header, and editable composer. No messages were sent.
+
+## Linked destinations and keyboard triage
+
+Known signed-in Slack workspace URLs are parsed into explicit workspace/channel/thread destinations. Links with external or unknown hosts, credentials, malformed IDs or unrelated routes remain with Slack. Native thread timestamps keep their “Open in channel” meaning; search-result timestamps retain their thread root. Clicking the body of a scoped-search result also selects its message. User/profile controls and external links remain native.
+
+For cached destinations, the existing verified navigation path opens the conversation and uses the mounted message list's `jumpToMessageInChannel({messageTs})` or thread `jumpToReply(ts)` callback. It does not jump to latest afterward. For a conversation absent from the inbox cache, a bounded navigation attempt replays the original native link once and verifies the resulting destination; cancellation prevents replay. No private store dispatch or custom API request is added.
+
+Native menu actions get a brief mounting grace period. An unsupported view opened through an explicit native control hands off to full Slack, rather than exposing an incorrectly framed composer. Visible native dialogs keep priority; Slack's empty 2×2 popup remnants no longer block triage shortcuts after closing search. Destination and send verification still apply throughout.
+
+The next/previous unread chords are Option-Shift-Down/Up. Traversal follows the filtered inbox order, wraps once, excludes the current item, unknown/read state, pending reads, locally Done/Later items and optimistic quick-reply dismissals. It focuses messages and leaves drafts owned by Slack. F6/Shift-F6 cycles inbox/messages/composer, omitting the composer for notifications-only panes. Quick reply and full Slack are unchanged. Repeated keydown and IME composition do not advance the queue.
+
+Live checks covered scoped search mounting, a result-body click opening the matching thread/reply, a thread-root link returning to its parent at the linked message, native user-mention profile rendering, F6 focus cycling, and the empty unread shortcut preserving composer focus. Automated checks cover URL/workspace validation, target cancellation, exact message jumps, filtered unread ordering and focus cleanup. Channel-mention and attachment samples are still requested for live acceptance; arbitrary file, Canvas and agent layouts are not claimed as embedded renderers.
+
+
+## Native quick switcher in triage
+
+The inbox search icon and Command-K open Slack's existing floating omniswitcher through its native top-search control. The query, suggestions and ranking remain Slack-owned. The popup is layered above the queue and constrained to the window; full Slack's styling and shortcut handling are unchanged. Invoking it from the pill first opens the inbox. In a native conversation or composer it stays in the current workspace; in queue/reader mode it uses the selected workspace (or the active native workspace for All workspaces).
+
+A selection is captured before Slack navigates, using the actual highlighted result for Enter or the clicked result for mouse input. Channel IDs come from the native result. Member results require an exact member ID, cached native DM ID and matching workspace from that suggestion's React props. Display names are labels only. The original result is replayed once after the triage pane is prepared, with connectivity and identity checks; normal destination and send verification still gate the embedded editor. No private store dispatch, credential access, custom endpoint or background search polling is introduced.
+
+Workflows and suggestions without a verified conversation identity (including a DM without native cached mapping) hand off to full Slack and perform the original selection there. Full-search queries are now an independent embedded pane, described below. This is intentionally a compatibility fallback, not a claim of supporting every native result type in the pane. Slack's native search can generate its ordinary requests while a user searches.
+
+Escape closes only the popup, then restores the original element and selection after native layout/focus restoration. Message drafts are never copied or rewritten. The session is cleaned up when leaving triage, reloading or disabling the module. Repeated keys and IME confirmation do not trigger duplicate selections.
+
+Live validation on Slack 4.52.155 covered Command-K from the inbox and conversation composer; the search icon; Enter and mouse selection; channel and DM opening in the right pane; switching from Personal Test to haxx before native search; draft retention when navigating away and back; and Escape restoring the exact composer cursor offset. The temporary unsent test draft was removed, and no messages were sent. Automated coverage exercises identity checks, wrong-workspace/peer rejection, native result selection, cancellation, one-time replay, popup dismissal and focus restoration.
+
+
+## Full search results pane
+
+Search is now a first-class `kind: search` destination, scoped to a workspace and verified against Slack's active workspace, `/client/<team>/search` route, and a single mounted native `search_view`. It uses the normal sliding side-pane lifecycle, supports suspension/resume, and has no message recipient or send capability. It no longer depends on an existing conversation being open. Native full-search navigation from a conversation's search controls is promoted to this destination too.
+
+The switcher recognizes both current queries (`queryUser`) and search history (`queryHistory`). If Slack accepts Enter before mounting a suggestion row, the resulting native search route is adopted after the popup closes. Slack owns query execution, filtering, sorting, pagination, empty/loading states and search requests. The mod does not add endpoints, fetch results itself, or persist search text in its target metadata.
+
+The native results pane is themed for the available width, with a readable sender/context/timestamp layout and an Open in Slack control. Clicking a message body, timestamp or reply count enters the verified conversation/thread navigation path and preserves the matching message position. Native result metadata can supplement a thread root only when workspace, channel and message timestamp all agree. Profile controls and filter dialogs remain native. Escape closes an open popup first; otherwise it returns from results to the inbox.
+
+Live checks on Slack 4.52.155 covered searches from the queue and an open thread, a four-result channel search, the native filter dialog, result-body navigation to an exact thread reply, and a reply-count click opening the thread. No messages were sent. Automated checks cover search identity and recipient rejection, send guarding, promotion from native search, query/history routing, result metadata matching, and body/reply-count navigation.

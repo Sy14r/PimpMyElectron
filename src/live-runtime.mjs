@@ -18,7 +18,7 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   if (!contextGuard) throw Error('A trusted CDP context guard is required');
   const store = new ActivityStore({maxMessagesPerItem:200,maxWorkspaces:12});
   const local=await new TriageState(path.join(runtimeDir,'triage-state.json')).load();
-  let actionError=null,returnEpoch=0,settingsEpoch=0,nativeHotkey=false,edgeHelperAt=0,edgeHelperReady=null;
+  let actionError=null,returnEpoch=0,settingsEpoch=0,nativeHotkey=false,nativeStockHotkey=false,edgeHelperAt=0,edgeHelperReady=null;
   const knownWorkspaces=new Map(),selectedWorkspaces=new Map();
   const previewSession=createPreviewSession(),sendConfirmation=createSendConfirmation(),quickTargets=new Map(),previewReads=new Map();
   const uiStates=new Map(),actionResults=new Map();let lastSnapshot={workspaces:[]};
@@ -90,12 +90,12 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   }
   async function shellCommand(op,workspaceId){if(op==='preferences'){settingsEpoch++;return {settingsRequested:true};}const entry=pickEntry(workspaceId)||pickEntry();if(!entry)throw Error('No connected workspace');
     if(op==='switch'&&knownWorkspaces.has(workspaceId)){selectedWorkspaces.set(entry.sessionId,workspaceId);await local.configure({workspace:workspaceId});}
-    if(op==='stock'&&!await evaluate(entry,'!!window.__PME_TRIAGE__')){await evaluate(entry,`(async()=>{const w=desktop.window,id=await w.getWindowId();await w.callBrowserWindowMethod(id,'show');await w.callBrowserWindowMethod(id,'focus');})()`);return {mode:'stock'};}
+    if(['stock','stock-toggle'].includes(op)&&!await evaluate(entry,'!!window.__PME_TRIAGE__')){return evaluate(entry,`(async()=>{const w=desktop.window,id=await w.getWindowId(),call=(method)=>w.callBrowserWindowMethod(id,method);if(${JSON.stringify(op==='stock-toggle')}&&await call('isVisible')&&!await call('isMinimized')){await call('hide');return {mode:'stock',returnFocus:true};}if(await call('isMinimized'))await call('restore');await call('show');await call('focus');return {mode:'stock'};})()`);}
     return evaluate(entry,`window.__PME_TRIAGE__?.command(${JSON.stringify(op==='switch'?'queue':op)})`);
   }
   const shell=await createShellServer({file:path.join(runtimeDir,'shell.sock'),
     previewAction,
-    state:request=>{if(typeof request.previewHover==='string'&&shellPreview()?.key===request.previewHover)previewSession.hold(request.previewHover);if(request.edgeStripVersion===1){edgeHelperAt=Date.now();edgeHelperReady=typeof request.stripReady==='string'?request.stripReady:null;}if(typeof request.hotKeyOK==='boolean')nativeHotkey=request.hotKeyOK;return {slackPID:slackPID||sessionInfo.slackPid||0,returnEpoch,settingsEpoch,settings:local.settings,
+    state:request=>{if(typeof request.previewHover==='string'&&shellPreview()?.key===request.previewHover)previewSession.hold(request.previewHover);if(request.edgeStripVersion===1){edgeHelperAt=Date.now();edgeHelperReady=typeof request.stripReady==='string'?request.stripReady:null;}if(typeof request.hotKeyOK==='boolean')nativeHotkey=request.hotKeyOK;if(typeof request.stockHotKeyOK==='boolean')nativeStockHotkey=request.stockHotKeyOK;return {slackPID:slackPID||sessionInfo.slackPid||0,returnEpoch,settingsEpoch,settings:local.settings,
       attention:unreadItemCount(notificationWorkspaces()),inboxWorkspace:pickEntry()?scopeFor(pickEntry()):null,preview:shellPreview(),edgeStrip:shellEdgeStrip(),
       displays:[...uiStates.values()].find(s=>s.displays?.length)?.displays||[],
       workspaces:[...knownWorkspaces.values()].map(w=>({...w,connected:true}))};},
@@ -193,7 +193,10 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
         const item=store.workspaces.get(r.workspaceId)?.items.get(r.key);
         if(r.action==='mark-read'){void readMarker.mark(r.workspaceId,r.key,r.ts);return;}
         const requestId=typeof r.requestId==='string'&&/^[a-z0-9-]{1,60}$/.test(r.requestId)?r.requestId:null;
-        const task=r.action==='settings'?local.configure(r.patch||{}):item?local.act(item,r.action,{minutes:r.minutes}):Promise.resolve(false);
+        // Alias identity is scoped to an observed conversation; its thread may
+        // have been opened natively without entering the observer's thread list.
+        const aliasParent=typeof r.key==='string'&&r.key.startsWith(r.workspaceId+':')?store.workspaces.get(r.workspaceId)?.items.get(r.key.replace(/:[^:]*$/,':')):null;
+        const task=r.action==='alias'&&(item||aliasParent)?local.setAlias(r.key,r.alias):r.action==='settings'?local.configure(r.patch||{}):item?local.act(item,r.action,{minutes:r.minutes}):Promise.resolve(false);
         void task.then(ok=>{actionError=null;if(requestId)actionResults.set(entry.sessionId,{requestId,ok:ok===true,key:r.key,action:r.action});}).catch(()=>{actionError='Could not save local changes. Your previous state is intact.';if(requestId)actionResults.set(entry.sessionId,{requestId,ok:false,key:r.key,action:r.action});});
       }catch{}return;
     }
@@ -282,10 +285,11 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
       if(mods.enabled('history-reader'))refreshes.tick(new Set([...sessions.values()].map(e=>teamFromURL(e.url)).filter(Boolean).concat([...knownWorkspaces.keys()])));
       for (const [key, req] of requests) if (Date.now() - req.at > 30000) requests.delete(key);
       const snapshot = store.snapshot();
-      snapshot.settings=local.settings;snapshot.nativeHotkey=shell.connected()&&nativeHotkey;snapshot.localError=local.error||actionError;
+      snapshot.settings=local.settings;snapshot.nativeHotkey=shell.connected()&&nativeHotkey;snapshot.nativeStockHotkey=shell.connected()&&nativeStockHotkey;snapshot.localError=local.error||actionError;
       snapshot.canUndo=!!local.undo&&Date.now()-local.undo.at<30000;
       snapshot.undoKey=snapshot.canUndo?local.undo.key:null;
       snapshot.apiPolicy='manual-only';snapshot.customReadsAvailable=mods.enabled('history-reader');snapshot.markReadAvailable=mods.enabled('mark-read');snapshot.network=refreshes.status().online?'available':'offline';
+      for(const workspace of snapshot.workspaces)workspace.threadAliases=Object.fromEntries([...local.aliases].filter(([key])=>key.startsWith(workspace.id+':')));
       for(const workspace of snapshot.workspaces)for(const item of workspace.items){item.triage=local.project(item);item.readMark=readMarker.state(item.key);}
       snapshot.workspaceDirectory=[...knownWorkspaces.values()].map(w=>({...w,connected:true,stale:refreshes.get(w.id).status!=='ready'||Date.now()-(refreshes.get(w.id).countsAt||0)>150000}));
       for(const w of snapshot.workspaces)w.activity=refreshes.get(w.id);
@@ -312,7 +316,7 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
     attach,
     async detach(entry) {sendConfirmation.clear(entry.sessionId);quickTargets.delete(entry.sessionId);attached.delete(entry.sessionId);boundContexts.delete(entry.sessionId);uiStates.delete(entry.sessionId);actionResults.delete(entry.sessionId);selectedWorkspaces.delete(entry.sessionId);mods.detach(entry);syncConnectivity(); },
     status: () => ({ quickSend:sendConfirmation.status(),callbackSecurity:{rejected:rejectedCallbacks,ready:[...sessions.values()].filter(e=>contextGuard.current(e)).length}, ...store.status(), ...stats, customApi:{...customApi,methods:{...customApi.methods}}, methods: Object.fromEntries(observedMethods), shapes: Object.fromEntries(shapes), socketTypes: Object.fromEntries(socketTypes),
-      shell:{connected:shell.connected(),hotkeyRegistered:nativeHotkey},network:refreshes.status().online?'available':'offline',apiPolicy:'manual-only',refreshQueue:{active:refreshes.status().active,queued:refreshes.status().queued},activity:refreshes.status().workspaces.map(a=>({status:a.status,at:a.at,attemptAt:a.attemptAt,nextAt:a.nextAt,hasMore:a.hasMore,countsAvailable:a.countsAvailable,threadsAvailable:a.threadsAvailable})),history:history.status(),mode: 'triage-with-native-reply', mods:mods.status(),liveUI:mods.enabled('triage-surface'), partial: true }),
+      shell:{connected:shell.connected(),hotkeyRegistered:nativeHotkey,stockHotkeyRegistered:nativeStockHotkey},network:refreshes.status().online?'available':'offline',apiPolicy:'manual-only',refreshQueue:{active:refreshes.status().active,queued:refreshes.status().queued},activity:refreshes.status().workspaces.map(a=>({status:a.status,at:a.at,attemptAt:a.attemptAt,nextAt:a.nextAt,hasMore:a.hasMore,countsAvailable:a.countsAvailable,threadsAvailable:a.threadsAvailable})),history:history.status(),mode: 'triage-with-native-reply', mods:mods.status(),liveUI:mods.enabled('triage-surface'), partial: true }),
     async dispose() {
       if(disposed)return;
       disposed = true; clearInterval(timer); cdp.off('event', event);
