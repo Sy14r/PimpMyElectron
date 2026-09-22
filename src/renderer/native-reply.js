@@ -316,6 +316,9 @@
     return run!==generation||disposed?{cancelled:true}:{ok:false,error:'Slack could not leave the conversation. Open Normal Slack and close its detail pane.'};
   }
   async function park(){
+    // Pill/inbox visibility changes do not require another timed navigation
+    // when the same workspace still has a verified, conversation-free Activity.
+    if(!active&&parkingState==='parked'&&locateActivity())return {ok:true};
     suspend();const run=generation;parkingState='parking';document.body.setAttribute('data-pme-parking','');
     let result;try{result=await navigateActivity(run);}catch{result={ok:false,error:'Slack could not leave the conversation. Open Normal Slack and close its detail pane.'};}
     if(run===generation&&!disposed){document.body.removeAttribute('data-pme-parking');parkingState=result.ok?'parked':'failed';notify();}

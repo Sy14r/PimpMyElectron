@@ -96,7 +96,7 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   const shell=await createShellServer({file:path.join(runtimeDir,'shell.sock'),
     previewAction,
     state:request=>{if(typeof request.previewHover==='string'&&shellPreview()?.key===request.previewHover)previewSession.hold(request.previewHover);if(request.edgeStripVersion===1){edgeHelperAt=Date.now();edgeHelperReady=typeof request.stripReady==='string'?request.stripReady:null;}if(typeof request.hotKeyOK==='boolean')nativeHotkey=request.hotKeyOK;if(typeof request.stockHotKeyOK==='boolean')nativeStockHotkey=request.stockHotKeyOK;return {slackPID:slackPID||sessionInfo.slackPid||0,returnEpoch,settingsEpoch,settings:local.settings,
-      attention:unreadItemCount(notificationWorkspaces()),inboxWorkspace:pickEntry()?scopeFor(pickEntry()):null,preview:shellPreview(),edgeStrip:shellEdgeStrip(),
+      mode:pickEntry()?uiStates.get(pickEntry().sessionId)?.mode||'stock':'stock',attention:unreadItemCount(notificationWorkspaces()),inboxWorkspace:pickEntry()?scopeFor(pickEntry()):null,preview:shellPreview(),edgeStrip:shellEdgeStrip(),
       displays:[...uiStates.values()].find(s=>s.displays?.length)?.displays||[],
       workspaces:[...knownWorkspaces.values()].map(w=>({...w,connected:true}))};},
     configure:async patch=>{await local.configure(patch);return {settings:local.settings};},command:shellCommand});

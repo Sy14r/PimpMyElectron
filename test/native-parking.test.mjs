@@ -7,7 +7,7 @@ const start=source.indexOf('  function activityDetailMounted('),end=source.index
 function setup({activity=false,remembered=true,closeAvailable=true,tabAvailable=true,cancel=false}={}){
  let now=1,route=activity?'activity-inbox':'CONE',detail=true,clicks=0,closes=0;
  const view={isConnected:true},title={closest:()=>view};
- const env={generation:0,disposed:false,parkingState:'idle',inWorkspace:()=>true,path:()=>['','client','TONE',route],notify(){},
+ const env={generation:0,active:false,disposed:false,parkingState:'idle',inWorkspace:()=>true,path:()=>['','client','TONE',route],notify(){},
    suspend(){env.generation++;},Date:{now:()=>now},pause:async ms=>{now+=ms;if(cancel)env.generation++;},
    document:{body:{setAttribute(){},removeAttribute(){}},querySelector(selector){
      if(selector==='[data-qa="tab_rail_activity_button"]')return tabAvailable?{click(){clicks++;route='activity-inbox';detail=remembered;}}:null;
@@ -46,4 +46,14 @@ test('compact navigation uses Slack’s Activity entry in More when the rail but
    f.env.document.querySelector=next.env.document.querySelector;f.env.path=next.env.path;
   }}:query(s);
  const result=await f.env.park();assert.equal(more,true);assert.equal(result.ok,true);
+});
+
+
+test('already parked Activity does not suspend or wait again unless a conversation reappears',async()=>{
+ const f=setup();await f.env.park();const generation=f.env.generation;
+ f.env.pause=async()=>{throw Error('unexpected timer while already parked');};
+ assert.equal((await f.env.park()).ok,true);assert.equal(f.env.generation,generation);
+ // A stale parked flag alone is not sufficient: verify the mounted surface.
+ const stale=setup({activity:true});stale.env.parkingState='parked';
+ await stale.env.park();assert.equal(stale.state().closes,1);
 });

@@ -61,6 +61,61 @@ final class EdgeStripView: NSView {
     }
 }
 
+// Instant local placeholder while Electron prepares the real pill. It has no
+// message content and never claims that a read/reply action has completed.
+final class PillPlaceholderView: NSView {
+    var edge = "left"
+    var count = 0
+    var action: ((String) -> Void)?
+    override var isFlipped: Bool { true }
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        setAccessibilityElement(true); setAccessibilityRole(.button)
+        setAccessibilityLabel("Opening triage. Click to open inbox")
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) {
+        let y=convert(event.locationInWindow,from:nil).y
+        action?(y > bounds.height-38 ? "preferences" : y > bounds.height-69 ? "stock" : "queue")
+    }
+    override func accessibilityPerformPress() -> Bool { action?("queue"); return true }
+    override func draw(_ dirtyRect: NSRect) {
+        let background=NSColor(calibratedRed:0.094,green:0.09,blue:0.11,alpha:1)
+        let tint=NSColor(calibratedRed:0.663,green:0.608,blue:0.733,alpha:1)
+        background.setFill()
+        NSBezierPath(roundedRect:bounds,xRadius:12,yRadius:12).fill()
+        NSBezierPath(rect:NSRect(x:edge == "left" ? 0 : bounds.width-12,y:0,width:12,height:bounds.height)).fill()
+        func symbol(_ name:String,_ y:CGFloat) {
+            guard let image=NSImage(systemSymbolName:name,accessibilityDescription:nil)?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize:17,weight:.regular)) else { return }
+            let tinted=NSImage(size:image.size,flipped:false) { rect in
+                image.draw(in:rect);tint.setFill();rect.fill(using:.sourceAtop);return true
+            }
+            tinted.draw(in:NSRect(x:13,y:y,width:18,height:18),from:.zero,operation:.sourceOver,fraction:1,respectFlipped:true,hints:nil)
+        }
+        if count == 0 { symbol("tray",12) }
+        else {
+            for i in 0..<min(count,12) {
+                let y=CGFloat(9+i*38);if y+32 > bounds.height-72 { break }
+                tint.withAlphaComponent(0.18).setFill()
+                NSBezierPath(roundedRect:NSRect(x:6,y:y,width:32,height:32),xRadius:10,yRadius:10).fill()
+                tint.withAlphaComponent(0.6).setFill()
+                NSBezierPath(ovalIn:NSRect(x:20,y:y+14,width:4,height:4)).fill()
+            }
+        }
+        // The same monochrome Slack mark as the web pill.
+        let transform=NSAffineTransform();transform.translateX(by:13,yBy:bounds.height-62);transform.scale(by:0.75)
+        NSGraphicsContext.saveGraphicsState();transform.concat();tint.setFill()
+        for turn in 0..<4 {
+            let rotate=NSAffineTransform();rotate.translateX(by:12,yBy:12);rotate.rotate(byDegrees:CGFloat(turn*90));rotate.translateX(by:-12,yBy:-12)
+            for rect in [NSRect(x:13,y:1,width:4.5,height:10),NSRect(x:7,y:1,width:4.5,height:4.5)] {
+                let path=NSBezierPath(roundedRect:rect,xRadius:2.25,yRadius:2.25);path.transform(using:rotate as AffineTransform);path.fill()
+            }
+        }
+        NSGraphicsContext.restoreGraphicsState();symbol("gearshape",bounds.height-31)
+    }
+}
+
 final class SettingsDocumentView: NSView { override var isFlipped: Bool { true } }
 
 // Draw sample rows rather than fetching any workspace content for Settings.
@@ -162,6 +217,11 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var edgeView: EdgeStripView?
     var stripReady: String?
     var edgeOpening = false
+    var shellMode = "stock"
+    var attentionCount = 0
+    var pillPlaceholder: EdgePanel?
+    var pillPlaceholderToken = 0
+    var pendingPillAction: String?
     var previewPanel: NSPanel?
     var previewSignature = ""
     var previewKey: String?
@@ -227,8 +287,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard !polling else { return }; polling = true
         call(["op": "state", "hotKeyOK": hotKeyOK, "stockHotKeyOK": stockHotKeyOK, "edgeStripVersion": 1, "stripReady": stripReady ?? "", "previewHover": previewPanel?.isVisible == true && (previewPanel!.frame.contains(NSEvent.mouseLocation) || Date().timeIntervalSince(previewLastInside) < 0.9) ? previewKey ?? "" : ""]) { [weak self] state in
             guard let self else { return }; self.polling = false
-            guard let state else { self.shellOnline = false; self.renderSettings(); self.showPreview(nil); self.showEdgeStrip(nil); self.item.button?.title = "!"; self.item.button?.toolTip = "Triage controller disconnected — normal Slack remains available"; self.menu(connected: false); return }
+            guard let state else { self.shellOnline = false; self.renderSettings(); self.showPreview(nil); self.showEdgeStrip(nil); self.dismissPillPlaceholder(); self.item.button?.title = "!"; self.item.button?.toolTip = "Triage controller disconnected — normal Slack remains available"; self.menu(connected: false); return }
             self.shellOnline = true
+            self.shellMode = state["mode"] as? String ?? self.shellMode
             self.slackPID = pid_t(state["slackPID"] as? Int ?? 0)
             self.settings = state["settings"] as? [String: Any] ?? [:]
             self.workspaces = state["workspaces"] as? [[String: Any]] ?? []
@@ -246,6 +307,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.showPreview(state["preview"] as? [String: Any])
             self.showEdgeStrip(state["edgeStrip"] as? [String: Any])
             let attention = state["attention"] as? Int ?? 0
+            self.attentionCount = attention
             self.item.button?.title = attention > 0 ? " \(attention)" : ""
             self.item.button?.toolTip = self.hotKeyOK ? "Slack triage — \(attention) unread conversations and threads" : "Global shortcut unavailable; use this menu or choose another shortcut"
             let epoch = state["returnEpoch"] as? Int ?? 0
@@ -284,12 +346,73 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         stripReady = edgePanel?.isVisible == true ? id : nil
         if !wasVisible && frame.contains(NSEvent.mouseLocation) { edgeView?.armHover() }
     }
+    func beginPillPlaceholder() -> Int {
+        pillPlaceholderToken += 1;let token=pillPlaceholderToken;pendingPillAction=nil
+        let display=settings["display"] as? String ?? "main"
+        let screen=NSScreen.screens.first(where:{ String(($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0) == display }) ?? NSScreen.screens.first
+        guard let screen else { return token }
+        let area=screen.visibleFrame,edge=settings["edge"] as? String ?? "left"
+        let height=min(area.height,CGFloat(max(132,96+min(attentionCount,12)*38)))
+        let frame=NSRect(x:edge == "right" ? area.maxX-44 : area.minX,y:area.midY-height/2,width:44,height:height)
+        if pillPlaceholder == nil {
+            let panel=EdgePanel(contentRect:frame,styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
+            panel.isReleasedWhenClosed=false;panel.hidesOnDeactivate=false;panel.backgroundColor = .clear;panel.isOpaque=false;panel.hasShadow=false
+            panel.level=NSWindow.Level(rawValue:NSWindow.Level.floating.rawValue+1)
+            panel.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary,.ignoresCycle]
+            let view=PillPlaceholderView(frame:NSRect(origin:.zero,size:frame.size));view.autoresizingMask=[.width,.height]
+            view.action={ [weak self] op in
+                guard let self else { return }
+                if op == "preferences" { self.openSettings() } else { self.pendingPillAction=op }
+            }
+            panel.contentView=view;pillPlaceholder=panel
+        }
+        if let view=pillPlaceholder?.contentView as? PillPlaceholderView { view.edge=edge;view.count=attentionCount;view.needsDisplay=true }
+        pillPlaceholder?.setFrame(frame,display:true);pillPlaceholder?.orderFrontRegardless();pillPlaceholder?.displayIfNeeded()
+        // A failed/crashed Slack must never leave an inert imitation on screen.
+        DispatchQueue.main.asyncAfter(deadline:.now()+5) { [weak self] in
+            guard let self, self.pillPlaceholderToken == token else { return }
+            self.dismissPillPlaceholder();self.edgeOpening=false;self.refresh()
+        }
+        return token
+    }
+    func dismissPillPlaceholder() {
+        pillPlaceholderToken += 1;pendingPillAction=nil;pillPlaceholder?.orderOut(nil)
+    }
+    func finishPillPlaceholder(_ token:Int,_ result:[String:Any]?) {
+        guard token == pillPlaceholderToken else { return }
+        if let mode=result?["mode"] as? String { shellMode=mode }
+        if result != nil, let op=pendingPillAction {
+            pendingPillAction=nil
+            if result?["mode"] as? String != op {
+                call(["op":op]) { [weak self] next in
+                    guard let self else { return };self.finishPillPlaceholder(token,next)
+                    if token == self.pillPlaceholderToken, next?["mode"] as? String == "queue" || next?["mode"] as? String == "stock" {
+                        NSRunningApplication(processIdentifier:self.slackPID)?.activate(options:[])
+                    }
+                }
+                return
+            }
+        }
+        // The command acknowledges final native bounds/show. Give the now
+        // visible renderer one display interval before uncovering it.
+        DispatchQueue.main.asyncAfter(deadline:.now()+0.033) { [weak self] in
+            guard let self, self.pillPlaceholderToken == token else { return }
+            self.dismissPillPlaceholder();self.refresh()
+        }
+    }
     func openFromEdge(_ op: String) {
         guard !edgeOpening else { return }; edgeOpening = true
+        // Hover already reveals the real pill quickly; reserve the temporary
+        // native surface for opening the larger inbox.
+        let placeholder=op == "peek" ? nil : beginPillPlaceholder()
+        if placeholder == nil { dismissPillPlaceholder() }
+        let requestToken=pillPlaceholderToken
         edgeView?.cancelHover(); edgePanel?.orderOut(nil); stripReady = nil
         if let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != slackPID, front.processIdentifier != getpid() { previousApp = front }
         call(["op": op]) { [weak self] result in
-            guard let self else { return }; self.edgeOpening = false
+            guard let self, requestToken == self.pillPlaceholderToken else { return }; self.edgeOpening = false
+            if let placeholder { self.finishPillPlaceholder(placeholder,result) }
+            if let mode=result?["mode"] as? String { self.shellMode=mode }
             if result?["mode"] as? String == "queue", self.slackPID > 0 { NSRunningApplication(processIdentifier: self.slackPID)?.activate(options: []) }
             self.refresh()
         }
@@ -384,6 +507,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         shortcut = triage; stockShortcut = stock
     }
     func perform(_ op: String, workspace: String? = nil) {
+        let optimistic=["toggle","queue"].contains(op) && (edgePanel?.isVisible == true || ["strip","hidden"].contains(shellMode))
+        let placeholder=optimistic ? beginPillPlaceholder() : nil
+        if !optimistic { dismissPillPlaceholder() }
         if op == "stock-toggle" { if stockToggleBusy { return }; stockToggleBusy = true }
         let visible = visibleApplications()
         if let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != slackPID, front.processIdentifier != getpid(), visible.contains(front.processIdentifier) {
@@ -395,6 +521,11 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         call(request) { [weak self] result in
             guard let self else { return }
             if op == "stock-toggle" { self.stockToggleBusy = false }
+            if let placeholder {
+                guard placeholder == self.pillPlaceholderToken else { return }
+                self.finishPillPlaceholder(placeholder,result)
+            }
+            if let mode=result?["mode"] as? String { self.shellMode=mode }
             guard let result else { return }
             if result["returnFocus"] as? Bool == true { self.returnFocus() }
             else if let mode = result["mode"] as? String, ["queue", "reading", "reply", "stock"].contains(mode), self.slackPID > 0 {

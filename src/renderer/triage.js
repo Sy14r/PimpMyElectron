@@ -657,16 +657,27 @@
     stagedDetail=false;delete host.dataset.detailMotion;host.style.removeProperty('--pme-detail-width');
     document.body.removeAttribute('data-pme-detail-motion');document.body.style.removeProperty('--pme-detail-width');
   }
+  async function concealWindow(){
+    const w=window.desktop?.window;
+    if(w?.callBrowserWindowMethod)await w.callBrowserWindowMethod(await w.getWindowId(),'hide');
+  }
   async function geometry(next,{animate=false}={}) {
     compactBounds=null;
     if(next!=='strip'){nativeStripRequest=null;nativeStripHidden=false;}
     const w = window.desktop?.window;
     if (!w?.callBrowserWindowMethod) { $('notice').textContent = 'Window controls unavailable; triage uses the current window.'; return; }
     const id = await w.getWindowId(); const call = (method,...args) => w.callBrowserWindowMethod(id,method,...args);
-    await call('setWindowButtonVisibility',next==='stock').catch(()=>{});
     if(next==='hidden'){await call('hide');return;}
-    if(await call('isMinimized'))await call('restore');
-    if(!await call('isVisible')&&!(next==='strip'&&nativeStripHidden))await call('showInactive');
+    await call('setWindowButtonVisibility',next==='stock').catch(()=>{});
+    const minimized=await call('isMinimized'),visible=await call('isVisible');
+    const present=async()=>{
+      if((!visible||minimized)&&!(next==='strip'&&nativeStripHidden)){
+        // Do not wait on renderer timers here: hidden Electron windows can
+        // throttle even a short frame timeout to a full second. Bounds are set.
+        if(minimized)await call('restore');
+        await call('showInactive');
+      }
+    };
     if (next === 'stock') {
       if (original) {
         await call('setMinimumSize',...original.min); await call('setBounds',original.bounds); await call('setAlwaysOnTop',original.top);
@@ -674,7 +685,7 @@
         original = null;spacesApplied=false;
       }
       try { sessionStorage.removeItem(layoutKey); } catch {}
-      return;
+      await present();return;
     }
     if (!original) original = { min:await call('getMinimumSize'),bounds:await call('getBounds'),top:await call('isAlwaysOnTop'),spaces:await call('isVisibleOnAllWorkspaces').catch(()=>null) };
     try { sessionStorage.setItem(layoutKey,JSON.stringify({original,mode:next,edge})); } catch {}
@@ -701,6 +712,7 @@
     // The native callback can precede the renderer's final resize frame.
     if(moving)await new Promise(resolve=>setTimeout(resolve,50));
     if(compact)compactBounds=bounds;
+    await present();
     if(next==='strip'){
       if(nativeStripRequest?.edge!==edge||JSON.stringify(nativeStripRequest?.bounds)!==JSON.stringify(bounds))
         nativeStripRequest={id:`${Date.now()}-${++stripSequence}`,edge,bounds};
@@ -725,6 +737,9 @@
       const animate=!stage&&(closing||expanding)&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       if (from === 'stock' && next !== 'stock') previousFocus = document.activeElement;
       try{
+        // Remove the native window before clearing its surface or navigating
+        // Slack in the background, including full-size to compact changes.
+        if(next==='hidden'||['strip','cluster'].includes(next)&&from!==next)await concealWindow();
         // Keep the current pane mounted while it slides back under the queue.
         if(closing&&animate){setDetailMotion(innerWidth-420);await geometry(next,{animate:true});}
         if(from==='reply'&&next!=='reply'){resumeReply=false;window.__PME_REPLY__?.suspend();}
@@ -734,8 +749,14 @@
         else if(animate&&expanding)setDetailMotion();
         if(next!=='reply')quickReply=null;
         mode=next;applyLayout();render();
-        if(!['stock','reply'].includes(next)){const parked=await window.__PME_REPLY__?.park?.();if(parked?.ok===false)$('notice').textContent=parked.error;}
-        if(!stage&&!(closing&&animate)&&!(reuseLayout&&from==='reply'&&next==='reply'&&!expanding))await geometry(next,{animate});
+        // Start leaving the conversation immediately, but let the custom UI
+        // appear while Slack completes parking. Keep the operation serialized
+        // until both finish so a later open cannot race background navigation.
+        const [parked]=await Promise.all([
+          !['stock','reply'].includes(next)?window.__PME_REPLY__?.park?.():null,
+          next!=='hidden'&&!stage&&!(closing&&animate)&&!(reuseLayout&&from==='reply'&&next==='reply'&&!expanding)?geometry(next,{animate}):null
+        ]);
+        if(parked?.ok===false)$('notice').textContent=parked.error;
       }catch{$('notice').textContent='Window layout could not be applied. Normal Slack restores the saved layout.';}
       finally{if(!stage)clearDetailMotion();}
       if(!stage&&!passive){

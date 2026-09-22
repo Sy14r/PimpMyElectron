@@ -10,7 +10,7 @@ function motionEnv(mode,{reduced=false,staged=false}={}){
   hoverTimer:0,hoverIntent:null,pillIdleTimer:0,pillPointerInside:false,touch(){},schedulePillCollapse(){},clearTimeout(){},setPillPreview(){},nativeQueue:Promise.resolve(),document:{activeElement:null},
   window:{matchMedia:()=>({matches:reduced}),__PME_REPLY__:{suspend:()=>calls.push('suspend'),status:()=>({ready:true})}},
   setDetailMotion:()=>calls.push('mask'),clearDetailMotion:()=>{calls.push('unmask');env.stagedDetail=false;},
-  applyLayout:()=>calls.push('layout:'+env.mode),render(){},geometry:async(next,options)=>calls.push(`geometry:${next}:${options.animate}`),
+  concealWindow:async()=>calls.push('hide'),applyLayout:()=>calls.push('layout:'+env.mode),render(){},geometry:async(next,options)=>calls.push(`geometry:${next}:${options.animate}`),
   $:()=>({focus(){}}),reportShell(){}};
  vm.runInNewContext(transitionSource,env);return {env,calls};
 }
@@ -92,5 +92,30 @@ test('queue, reader and hidden surfaces park Slack; normal Slack and direct deta
   await f.env.transition(next);
   assert.equal(f.calls.includes('park'),!['stock','reply'].includes(next));
   if(f.calls.includes('park')){assert.ok(f.calls.indexOf('layout:'+next)<f.calls.indexOf('park'));assert.equal(f.env.resumeReply,false);}
+ }
+});
+
+
+test('hiding and compacting conceal the window before clearing the surface or parking Slack',async()=>{
+ for(const next of ['hidden','strip','cluster']){
+  const f=motionEnv('reply');f.env.previousFocus=null;f.env.shadow={querySelector:()=>({focus(){}})};
+  f.env.window.__PME_REPLY__.park=async()=>{f.calls.push('park');return {ok:true};};
+  await f.env.transition(next);
+  assert.ok(f.calls.indexOf('hide')<f.calls.indexOf('suspend'));
+  assert.ok(f.calls.indexOf('hide')<f.calls.indexOf('layout:'+next));
+  assert.ok(f.calls.indexOf('hide')<f.calls.indexOf('park'));
+  if(next==='hidden')assert.equal(f.calls.some(c=>c.startsWith('geometry:')),false);
+ }
+});
+
+
+test('pill and inbox appear before slow background parking finishes, while later navigation stays serialized',async()=>{
+ for(const next of ['queue','cluster']){
+  const f=motionEnv('reply');f.env.previousFocus=null;f.env.shadow={querySelector:()=>({focus(){}})};
+  let parked;f.env.window.__PME_REPLY__.park=()=>new Promise(resolve=>{parked=resolve;});
+  let complete=false;const pending=f.env.transition(next).then(()=>{complete=true;});await flush();
+  assert.ok(f.calls.some(c=>c.startsWith('geometry:'+next+':')));assert.equal(complete,false);
+  const following=f.env.transition('stock');await flush();assert.equal(f.env.mode,next);
+  parked({ok:true});await pending;await following;assert.equal(f.env.mode,'stock');
  }
 });
