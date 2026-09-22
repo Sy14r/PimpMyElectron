@@ -25,9 +25,10 @@
       .rail{width:44px;flex-shrink:0;background:#10141f;border-right:1px solid #ffffff0c;display:flex;flex-direction:column;align-items:center;gap:9px;padding:12px 0}.rail button{width:32px;height:32px;font-size:13px;background:#ffffff07;color:#a4adc0}.rail .brand{background:#b6a5e8;color:#20182b;font-weight:800}.spacer{flex:1}
       .queue{width:420px;max-width:100vw;flex-shrink:0;display:flex;flex-direction:column;padding:22px 16px 12px;border-right:1px solid #ffffff10;min-height:0}.eyebrow{font-size:10px;font-weight:600;letter-spacing:1.7px;color:#b3a4d5;text-transform:uppercase}h1{font-size:25px;line-height:1.2;letter-spacing:-.6px;margin:8px 0}
       .queue-heading{display:flex;align-items:center;gap:6px}.inbox-icon{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:5px;flex-shrink:0;color:#a4adc0;font-size:16px}.control-icon{display:block;width:20px;height:20px;flex-shrink:0;pointer-events:none}.slack-icon{width:18px;height:18px}.close-icon{width:18px;height:18px}#inbox-stock{color:#8792a6}#inbox-stock:hover{color:#c4cada}.rail #restore{display:flex;align-items:center;justify-content:center}.filter-row{display:flex;align-items:center;gap:4px}.filter-row .filters{flex:1}.shell:not(.cluster)>.rail{display:none}.queue-heading h1{min-width:0;flex:1;position:relative}#compose{padding:5px;background:#ab8cdd20;color:#d6c8ef;flex-shrink:0}#compose:hover{background:#ab8cdd35}#search{margin-top:12px;width:100%;border:1px solid #ffffff12;border-radius:8px;background:#ffffff05;padding:9px 11px;outline-offset:0;font-size:12px}#search::placeholder{color:#758196}
-      .filters{display:flex;gap:4px;flex-wrap:wrap;margin:12px 0}.filters button{padding:5px 9px;font-size:11px;color:#94a2b8}.filters button[aria-pressed="true"]{color:#d0bdf5;background:#ab8cdd20}
+      .filters{display:flex;gap:4px;flex-wrap:wrap;margin:12px 0}.filters button{padding:5px 7px;font-size:11px;color:#94a2b8}.filters button[aria-pressed="true"]{color:#d0bdf5;background:#ab8cdd20}
       #alias-dialog{pointer-events:auto;-webkit-app-region:no-drag;width:min(360px,calc(100vw - 40px));box-sizing:border-box;padding:22px;border:1px solid #ffffff20;border-radius:14px;background:#191f2c;color:#edf0f7;box-shadow:0 20px 80px #0008;font:13px/1.5 -apple-system,BlinkMacSystemFont,sans-serif}#alias-dialog::backdrop{background:#090d1680}#alias-dialog h2{font-size:17px;margin:0 0 5px}#alias-dialog p{color:#94a2b8;margin:0 0 16px;overflow-wrap:anywhere}#alias-dialog label{display:block;margin-bottom:5px}#alias-input{box-sizing:border-box;width:100%;padding:9px 10px;border:1px solid #ffffff25;border-radius:7px;background:#111723;color:#edf0f7;font:inherit}#alias-dialog .alias-hint{font-size:11px;margin:10px 0 16px}#alias-dialog #alias-error{color:#f4aaa9;font-size:12px;margin:0}.alias-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.alias-actions button{padding:7px 14px;background:#ffffff0b}#alias-save{background:#b6a1e929!important;color:#decfff}
       #list{overflow:auto;flex:1;min-height:60px;padding:2px;scrollbar-width:none}#list::-webkit-scrollbar{display:none}.row{display:block;width:100%;text-align:left;border:1px solid transparent;padding:12px 10px;margin-bottom:4px}.row:focus-visible{background:#a492d022;outline:2px solid #b7a8ec;outline-offset:-2px}.row.selected{background:#a492d017;border-color:#b6a1e940}.row-head{display:flex;gap:7px;align-items:center}.kind{color:#7787a0;font-size:15px;width:15px;flex-shrink:0}.name{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;flex:1}.unread{width:6px;height:6px;background:#bca9f0;border-radius:50%}.badge{font-size:10px;color:#c5b3ee}.preview{font-size:11.5px;line-height:1.5;color:#8796ae;margin:7px 0 0 22px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.meta{font-size:10px;color:#748299;margin:5px 0 0 22px}
+      #inbox-menu{position:fixed;inset:auto;margin:0;width:190px;padding:5px;background:#202735;color:#cdd4e4;border:1px solid #ffffff20;border-radius:10px;box-shadow:0 10px 30px #0007;pointer-events:auto;font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}#inbox-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;text-align:left;color:inherit;font:inherit}#inbox-menu button:hover,#inbox-menu button:focus-visible{background:#ffffff0d}#inbox-menu .control-icon{width:18px;height:18px}
       .list-toolbar{display:flex;align-items:center;gap:6px;margin-top:12px}.list-toolbar #search{margin-top:0;flex:1;min-width:0}.list-toolbar #density-picker{width:30px;height:32px;color:#8796ae;flex:none}
       #density-menu{position:fixed;inset:auto;margin:0;width:224px;padding:6px;background:#202735;color:#cdd4e4;border:1px solid #ffffff20;border-radius:10px;box-shadow:0 10px 30px #0007;pointer-events:auto;font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
       #density-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:9px;text-align:left;border-radius:7px}#density-menu button[aria-pressed="true"]{background:#ab8cdd20;color:#ddcff5}#density-menu button>span{display:flex;flex-direction:column;gap:2px;flex:1}#density-menu small{font-size:11px;color:#94a2b8}#density-menu strong{font-size:12px;font-weight:600}#density-menu .density-check{display:inline;width:12px;flex:none}
@@ -79,7 +80,7 @@
     <section class="shell" hidden aria-label="Slack triage">
       <nav class="rail" aria-label="Triage views"><button class="brand" id="home" aria-label="Show queue">T</button><button id="reply-latest" hidden aria-label="Jump to latest messages" title="Jump to latest messages">↓</button><div id="pill-items" aria-label="Unread conversations and threads"></div><button id="pill-empty" type="button" hidden aria-label="Open triage inbox" title="All caught up · Open triage inbox"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4h16l2 10v6H2v-6L4 4Z"/><path d="M2 14h6l2 3h4l2-3h6"/></svg></button><div class="spacer"></div><button id="restore" aria-label="Return to normal Slack" title="Normal Slack"><svg class="control-icon slack-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><g transform="rotate(0 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(90 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(180 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(270 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g></svg></button><button id="collapse" aria-label="Collapse to rail" title="Collapse">›</button></nav>
       <section class="queue"><div class="queue-heading"><h1><button id="workspace-picker" type="button" aria-label="Choose workspace" aria-haspopup="dialog" aria-expanded="false" aria-controls="workspace-dialog">Workspace</button></h1><button class="inbox-icon" id="inbox-activity" type="button" title="Activity" aria-label="Open Slack Activity"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></button><button class="inbox-icon" id="inbox-switcher" type="button" title="Search Slack · ⌘K" aria-label="Search Slack" aria-keyshortcuts="Meta+K"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button><button class="inbox-icon" id="compose" type="button" title="Compose new message" aria-label="Compose new message" aria-keyshortcuts="n"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-7"/><path d="m16 3 5 5M10 14l1-5 7-7a2.1 2.1 0 0 1 3 3l-7 7-4 2Z"/></svg></button><button class="inbox-icon" id="inbox-stock" title="Normal Slack" aria-label="Return to normal Slack"><svg class="control-icon slack-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><g transform="rotate(0 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(90 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(180 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(270 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g></svg></button><button class="inbox-icon" id="inbox-collapse" title="Close inbox to pill" aria-label="Close inbox to pill"><svg class="control-icon close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m7 7 10 10M17 7 7 17"/></svg></button></div><div class="list-toolbar"><input id="search" type="search" placeholder="Filter conversations…" aria-label="Filter observed conversations" autocomplete="off"><button id="density-picker" class="inbox-icon" type="button" aria-label="Inbox density" title="Inbox density" aria-haspopup="dialog" aria-expanded="false" aria-controls="density-menu"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><path d="M4 8h10M4 15h10" opacity=".5"/></svg></button></div>
-        <div class="activity-controls"><button id="activity-refresh">Refresh activity</button><button id="activity-more" hidden>More conversations</button></div><div id="activity-status" role="status"></div><div class="filter-row"><div class="filters" role="group" aria-label="Filter activity"><button data-filter="all" aria-pressed="true">All</button><button data-filter="unread" aria-pressed="false">Unread</button><button data-filter="mentions" aria-pressed="false">Mentions</button><button data-filter="dms" aria-pressed="false">DMs</button><button data-filter="threads" aria-pressed="false">Threads</button></div><button class="inbox-icon" id="inbox-next-unread" title="Next unread · ⌥⇧↓ (previous: ⌥⇧↑) · F6 switches focus" aria-label="Next unread in this inbox view" aria-keyshortcuts="Alt+Shift+ArrowDown"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h9v14H5M10 12h11m-4-4 4 4-4 4"/></svg></button><button class="inbox-icon" id="inbox-latest" hidden title="Jump to latest messages" aria-label="Jump to latest messages">↓</button><button class="inbox-icon" id="inbox-back" hidden title="Close conversation" aria-label="Close conversation and return to inbox">←</button></div><div id="list" aria-label="Observed conversations"></div>
+        <div class="activity-controls"><button id="activity-refresh">Refresh activity</button><button id="activity-more" hidden>More conversations</button></div><div id="activity-status" role="status"></div><div class="filter-row"><div class="filters" role="group" aria-label="Filter activity"><button data-filter="all" aria-pressed="true">All</button><button data-filter="unread" aria-pressed="false">Unread</button><button data-filter="mentions" aria-pressed="false">Mentions</button><button data-filter="dms" aria-pressed="false">DMs</button><button data-filter="channels" aria-pressed="false">Channels</button><button data-filter="threads" aria-pressed="false">Threads</button></div><button class="inbox-icon" id="inbox-next-unread" title="Next unread · ⌥⇧↓ (previous: ⌥⇧↑) · F6 switches focus" aria-label="Next unread in this inbox view" aria-keyshortcuts="Alt+Shift+ArrowDown"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h9v14H5M10 12h11m-4-4 4 4-4 4"/></svg></button><button class="inbox-icon" id="inbox-latest" hidden title="Jump to latest messages" aria-label="Jump to latest messages">↓</button><button class="inbox-icon" id="inbox-back" hidden title="Close conversation" aria-label="Close conversation and return to inbox">←</button></div><div id="list" aria-label="Observed conversations"></div>
         <div id="notice" role="status"></div>
       </section>
       <section class="reader" hidden aria-label="Captured messages"><div class="reader-header"><button id="back" aria-label="Back to queue">←</button><div class="eyebrow">Message reader</div><h2 id="conversation"></h2><div id="coverage"></div><div class="triage-controls"><button id="done" title="E · Save Done locally, then open the next item">Done →</button><button id="mark-read" title="Mark Slack read through the latest message loaded here. Does not change local Done.">Mark read</button><button id="later" title="L · Snooze locally, then open the next item">Later →</button><select id="snooze" aria-label="Snooze duration" style="background:#202735;color:inherit;border:1px solid #ffffff15;border-radius:5px"><option value="15">15 min</option><option value="60" selected>1 hour</option><option value="240">4 hours</option><option value="1440">24 hours</option></select><button id="pin" title="P · Toggle local pin">Pin</button><button id="reopen" hidden>Bring back</button><button id="undo" hidden>Undo</button></div><div id="mark-status" role="status" style="font-size:11px;color:#b5a6d5;margin-top:8px"></div><div class="history-controls"><button id="refresh">Refresh</button><button id="reply" title="Use Slack’s native editor. Opening the conversation may mark it read.">Native chat</button><button id="handoff" title="Open this conversation in ordinary Slack. Slack may mark it read.">Open in Slack ↗</button><button id="older" hidden>Load older</button></div><div id="history-status" role="status" aria-live="polite"></div></div><div class="messages" id="messages"></div><div class="read-only"><span class="signal"></span>Reading alone does not mark read. Done is local; Mark read updates Slack.</div></section>
@@ -142,12 +143,49 @@
     if(id==='inbox-settings')$('inbox-collapse').before(button);else $('restore').after(button);
   }
 
+
+  // Preserve the existing actions while keeping the inbox header compact.
+  $('search').before($('inbox-switcher'));
+  const inboxMenuButton=document.createElement('button');
+  inboxMenuButton.id='inbox-menu-button';inboxMenuButton.type='button';inboxMenuButton.className='inbox-icon';inboxMenuButton.title='Inbox menu';
+  inboxMenuButton.setAttribute('aria-label','Inbox menu');inboxMenuButton.setAttribute('aria-haspopup','menu');inboxMenuButton.setAttribute('aria-expanded','false');inboxMenuButton.setAttribute('aria-controls','inbox-menu');
+  inboxMenuButton.innerHTML='<svg class="control-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>';
+  shadow.querySelector('.queue-heading').append(inboxMenuButton);
+  const inboxMenu=document.createElement('div');inboxMenu.id='inbox-menu';inboxMenu.setAttribute('popover','auto');inboxMenu.setAttribute('role','menu');inboxMenu.setAttribute('aria-label','Inbox menu');
+  for(const [id,label] of [['inbox-stock','Open Slack'],['inbox-settings','Settings'],['inbox-collapse','Close inbox']]){
+    const button=$(id);button.className='';button.type='button';button.setAttribute('role','menuitem');button.tabIndex=-1;
+    const text=document.createElement('span');text.textContent=label;button.append(text);inboxMenu.append(button);
+  }
+  shadow.append(inboxMenu);
+  inboxMenu.addEventListener('toggle',()=>inboxMenuButton.setAttribute('aria-expanded',String(inboxMenu.matches(':popover-open'))),{signal:abort.signal});
+  function closeInboxMenu(restoreFocus=false){
+    if(inboxMenu.matches(':popover-open'))inboxMenu.hidePopover();
+    inboxMenuButton.setAttribute('aria-expanded','false');
+    if(restoreFocus)inboxMenuButton.focus({preventScroll:true});
+  }
+  function showInboxMenu(){
+    if(inboxMenu.matches(':popover-open')){closeInboxMenu(true);return;}
+    const bounds=inboxMenuButton.getBoundingClientRect();
+    inboxMenu.style.left=`${Math.max(8,Math.min(innerWidth-198,bounds.right-190))}px`;inboxMenu.style.top=`${bounds.bottom+6}px`;
+    inboxMenu.showPopover();inboxMenuButton.setAttribute('aria-expanded','true');inboxMenu.querySelector('button').focus({preventScroll:true});
+  }
+  function inboxMenuKey(event){
+    event.stopImmediatePropagation();
+    if(event.key==='Escape'){event.preventDefault();closeInboxMenu(true);}
+    else if(['ArrowDown','ArrowUp','Home','End','Tab'].includes(event.key)){
+      event.preventDefault();
+      if(!inboxMenu.matches(':popover-open')){showInboxMenu();return;}
+      const choices=[...inboxMenu.querySelectorAll('button')],index=choices.indexOf(shadow.activeElement),delta=event.key==='ArrowUp'||event.key==='Tab'&&event.shiftKey?-1:1;
+      choices[event.key==='Home'?0:event.key==='End'?choices.length-1:(index+delta+choices.length)%choices.length]?.focus({preventScroll:true});
+    }
+  }
+
   let snapshot = { workspaces: [] }, mode = 'stock', edge = 'right', filter = 'all', selection = null;
   let resumeReply=false,openSequence=0,openingKey=null,heldRow=null,quickReply=null,pillReadPending=null,pillReadRun=0;
   const detailMode=()=>['reading','reply'].includes(mode);
   let original = null, disposed = false, nativeQueue = Promise.resolve(), previousFocus = null, spacesApplied = false;
   const viewKey='__pme_triage_view_v1';
-  try{const view=JSON.parse(sessionStorage.getItem(viewKey)||'{}');resumeReply=view.resumeReply===true;if(typeof view.selection==='string')selection=view.selection;if(['all','unread','dms','threads','mentions'].includes(view.filter))filter=view.filter;}catch{}
+  try{const view=JSON.parse(sessionStorage.getItem(viewKey)||'{}');resumeReply=view.resumeReply===true;if(typeof view.selection==='string')selection=view.selection;if(['all','unread','dms','channels','threads','mentions'].includes(view.filter))filter=view.filter;}catch{}
   const layoutKey = '__pme_triage_layout_v1';
   let savedLayout = null;
   try { savedLayout = JSON.parse(sessionStorage.getItem(layoutKey)); } catch {}
@@ -162,7 +200,7 @@
   const filtered = () => items().filter(item => {
     const query = $('search').value.trim().toLocaleLowerCase();
     return (!query || `${displayName(item)} ${item.name}`.toLocaleLowerCase().includes(query)) &&
-      (filter === 'mentions' && (item.mentions>0||item.mentionObserved===true) || filter === 'all' || filter === 'unread' && (inboxUnread(item) || heldRow?.key===item.key&&heldRow.filter===filter&&item.triage?.state==='active') || filter === 'dms' && ['dm','groupDM'].includes(item.kind) || filter === 'threads' && item.kind === 'thread');
+      (filter === 'mentions' && (item.mentions>0||item.mentionObserved===true) || filter === 'all' || filter === 'unread' && (inboxUnread(item) || heldRow?.key===item.key&&heldRow.filter===filter&&item.triage?.state==='active') || filter === 'dms' && ['dm','groupDM'].includes(item.kind) || filter === 'channels' && item.kind === 'channel' || filter === 'threads' && item.kind === 'thread');
   }).sort((a,b)=>Number(b.triage?.pinned)-Number(a.triage?.pinned));
   const el = (tag, className, content) => { const node = document.createElement(tag); if (className) node.className = className; if (content != null) node.textContent = content; return node; };
   const time = ts => { const date = new Date(Number(ts) * 1000); return Number.isFinite(date.getTime()) ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''; };
@@ -602,6 +640,7 @@
     }
   }
   function applyLayout() {
+    closeInboxMenu();
     closeWorkspacePicker(false);
     host.dataset.edge=edge;
     host.toggleAttribute('data-quick',!!quickReply&&mode==='reply');
@@ -720,7 +759,9 @@
   shadow.addEventListener('click',event=>{
     event.stopPropagation();const button=event.target.closest('button');if(!button)return;
     touch();clearTimeout(hoverTimer);hoverIntent=null;
-    if(button.id==='quick-close'){resumeReply=false;void transition('cluster');}
+    if(inboxMenu.contains(button))closeInboxMenu(true);
+    if(button.id==='inbox-menu-button')showInboxMenu();
+    else if(button.id==='quick-close'){resumeReply=false;void transition('cluster');}
     else if(button.id==='quick-inbox'){const target=window.__PME_REPLY__?.status().target;if(target)void startReply(target);}
     else if(button.id==='workspace-picker')openWorkspacePicker();
     else if(button.id==='workspace-close')closeWorkspacePicker();
@@ -774,7 +815,7 @@
     row?.focus({preventScroll:true});row?.scrollIntoView({block:'nearest'});
   }
   function moveInboxFilter(direction){
-    const filters=['all','unread','mentions','dms','threads'],index=filters.indexOf(filter);
+    const filters=['all','unread','mentions','dms','channels','threads'],index=filters.indexOf(filter);
     filter=filters[(index+direction+filters.length)%filters.length];
     render();focusInbox();
   }
@@ -916,6 +957,7 @@
       if(workspaceDialog.open||aliasDialog.open)return;
       event.preventDefault();event.stopImmediatePropagation();if(!event.repeat)void openNativeSwitcher();return;
     }
+    if(mode!=='stock'&&event.composedPath().some(n=>n?.id==='inbox-menu'||n?.id==='inbox-menu-button'&&['ArrowDown','ArrowUp'].includes(event.key))){inboxMenuKey(event);return;}
     if(aliasDialog.open||densityMenu.matches(':popover-open')||workspaceDialog.open||window.__PME_REPLY__?.switcherOpen?.()||window.__PME_REPLY__?.overlayOpen?.())return;
     if(!composeToggleKey(event)&&!inboxNavigationKey(event))triageNavigationKey(event);
   },{capture:true,signal:abort.signal});

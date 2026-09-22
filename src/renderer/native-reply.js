@@ -36,7 +36,9 @@
     body[data-pme-native-reply] [data-pme-native-reply-pane]{visibility:visible!important;}
     body:is([data-pme-native-reply],[data-pme-switcher]) > .ReactModalPortal > .ReactModal__Overlay{z-index:2147483647!important;}
     body:is([data-pme-native-reply],[data-pme-switcher]) > :is(.c-sk-modal_portal,.ReactModalPortal){position:fixed!important;inset:0;z-index:2147483647!important;pointer-events:none;}
-    body:is([data-pme-native-reply],[data-pme-switcher]) > :is(.c-sk-modal_portal,.ReactModalPortal) > *{pointer-events:auto;}
+    /* Native hover tooltips must remain click-through: their full-window
+       overlay otherwise steals hover and repeatedly unmounts message actions. */
+    body:is([data-pme-native-reply],[data-pme-switcher]) > :is(.c-sk-modal_portal,.ReactModalPortal) > :not(.c-popover--no-pointer){pointer-events:auto;}
     body:is([data-pme-native-reply],[data-pme-switcher]) .ReactModal__Content{--sk_primary_background:25,31,44;--sk_secondary_background:32,39,53;--sk_primary_foreground:205,212,228;--sk_secondary_foreground:148,162,184;--sk_highlight:195,179,239;background:#191f2c!important;color:#cdd4e4;max-width:calc(100vw - 32px)!important;min-width:0!important;max-height:calc(100vh - 32px)!important;border:1px solid #ffffff20;border-radius:12px!important;box-shadow:0 16px 50px #0008;}
     body:is([data-pme-native-reply],[data-pme-switcher]) .ReactModal__Content :is(.c-sk-modal_header,.c-sk-modal_footer,.p-about_modal__header,.p-about_modal__tab_panel,.p-about_modal__contents,.c-sk-modal_content__inner){background:#191f2c!important;border-color:#ffffff12!important;}
     body[data-pme-switcher] .c-search_modal .ReactModal__Content{position:fixed!important;left:16px!important;right:16px!important;top:64px!important;bottom:auto!important;transform:none!important;width:calc(100vw - 32px)!important;max-width:620px!important;margin:0 auto!important;overflow:auto;}
