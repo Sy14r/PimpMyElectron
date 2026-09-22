@@ -17,9 +17,13 @@ test('every triage mode restores normal Slack first',async()=>{
 });
 const start=source.indexOf("  window.addEventListener('keydown',event=>{"),end=source.indexOf('},{capture:true,signal:abort.signal});',start)+'},{capture:true,signal:abort.signal});'.length;
 test('focused-window shortcut fallback is suppressed while the global helper owns the key',()=>{
- let listener;const calls=[],env={mode:'stock',snapshot:{nativeStockHotkey:false},window:{addEventListener:(_,fn)=>listener=fn},abort:{signal:{}},aliasDialog:{open:false},workspaceDialog:{open:false},densityMenu:{matches:()=>false},composeToggleKey:()=>false,inboxNavigationKey:()=>false,triageNavigationKey(){},command:op=>calls.push(op)};
- vm.runInNewContext(source.slice(start,end),env);
+ let listener;const calls=[],env={settings:{},mode:'stock',snapshot:{nativeStockHotkey:false},window:{addEventListener:(_,fn)=>listener=fn},abort:{signal:{}},aliasDialog:{open:false},workspaceDialog:{open:false},densityMenu:{matches:()=>false},composeToggleKey:()=>false,inboxNavigationKey:()=>false,triageNavigationKey(){},command:op=>calls.push(op)};
+ vm.runInNewContext(source.slice(source.indexOf('  function shortcutMatches('),end),env);
  const key=patch=>({key:'U',code:'KeyU',metaKey:true,shiftKey:true,preventDefault(){this.prevented=true;},stopImmediatePropagation(){},...patch});
  const event=key();listener(event);assert.equal(event.prevented,true);assert.deepEqual(calls,['stock-toggle']);listener(key({repeat:true}));assert.equal(calls.length,1);
  env.snapshot.nativeStockHotkey=true;listener(key());assert.equal(calls.length,1);
+ env.snapshot.nativeStockHotkey=false;env.settings.stockShortcut='ctrl-option-space';listener(key());assert.equal(calls.length,1);
+ listener(key({key:' ',code:'Space',metaKey:false,shiftKey:false,ctrlKey:true,altKey:true}));assert.equal(calls.at(-1),'stock-toggle');assert.equal(calls.length,2);
+ env.settings.shortcut='option-space';listener(key({key:' ',code:'Space',metaKey:false,shiftKey:false,altKey:true}));assert.equal(calls.at(-1),'toggle');
+
 });

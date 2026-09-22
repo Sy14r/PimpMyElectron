@@ -61,6 +61,69 @@ final class EdgeStripView: NSView {
     }
 }
 
+final class SettingsDocumentView: NSView { override var isFlipped: Bool { true } }
+
+// Draw sample rows rather than fetching any workspace content for Settings.
+final class InboxDensityPreview: NSButton {
+    let density: String
+    let caption: String
+    override var isFlipped: Bool { true }
+    init(density: String, title: String, caption: String) {
+        self.density=density;self.caption=caption
+        super.init(frame:.zero)
+        self.title=title;isBordered=false;setButtonType(.momentaryPushIn)
+        identifier=NSUserInterfaceItemIdentifier("inboxDensity")
+        setAccessibilityRole(.radioButton)
+        setAccessibilityLabel("\(title) inbox density. \(caption)")
+        setAccessibilityHelp("Select this inbox layout. Preview uses sample conversations.")
+    }
+    required init?(coder:NSCoder) { fatalError("init(coder:) is not supported") }
+    override var focusRingMaskBounds: NSRect { bounds.insetBy(dx:3,dy:3) }
+    override func drawFocusRingMask() {
+        NSBezierPath(roundedRect:focusRingMaskBounds,xRadius:10,yRadius:10).fill()
+    }
+    override func draw(_ dirtyRect:NSRect) {
+        let accent=NSColor(calibratedRed:0.737,green:0.663,blue:0.941,alpha:1)
+        let foreground=NSColor(calibratedRed:0.929,green:0.941,blue:0.969,alpha:1)
+        let muted=NSColor(calibratedRed:0.529,green:0.588,blue:0.682,alpha:1)
+        func text(_ value:String,_ rect:NSRect,size:CGFloat=11,color:NSColor?=nil,weight:NSFont.Weight = .regular,lines:Bool=false) {
+            let paragraph=NSMutableParagraphStyle();paragraph.lineBreakMode=lines ? .byWordWrapping : .byTruncatingTail
+            paragraph.lineSpacing=2
+            (value as NSString).draw(with:rect,options:[.usesLineFragmentOrigin,.truncatesLastVisibleLine],attributes:[.font:NSFont.systemFont(ofSize:size,weight:weight),.foregroundColor:(color ?? foreground).withAlphaComponent(isEnabled ? 1 : 0.45),.paragraphStyle:paragraph])
+        }
+        let outline=NSBezierPath(roundedRect:bounds.insetBy(dx:3,dy:3),xRadius:10,yRadius:10)
+        NSColor(calibratedRed:0.078,green:0.098,blue:0.145,alpha:1).setFill();outline.fill()
+        (state == .on ? accent : NSColor.white.withAlphaComponent(isHighlighted ? 0.3 : 0.13)).setStroke()
+        outline.lineWidth=state == .on ? 2 : 1;outline.stroke()
+        text(title,NSRect(x:15,y:16,width:bounds.width-50,height:20),size:13,weight:.semibold)
+        let radio=NSBezierPath(ovalIn:NSRect(x:bounds.width-30,y:18,width:13,height:13))
+        (state == .on ? accent : muted).setStroke();radio.lineWidth=1.3;radio.stroke()
+        if state == .on { accent.setFill();NSBezierPath(ovalIn:NSRect(x:bounds.width-27,y:21,width:7,height:7)).fill() }
+        let rows=[("Alex Chen","Can you take a look at the latest mockups?","now","@"),
+                  ("design","Maya: The updated screens are ready for review.","2m","#"),
+                  ("Launch checklist","Sam: All checks passed. Ready for tomorrow!","5m","↳")]
+        let rowHeight:CGFloat=density == "expanded" ? 78 : density == "cozy" ? 53 : 34
+        let left:CGFloat=13,width=bounds.width-26
+        for (index,row) in rows.enumerated() {
+            let y=CGFloat(49)+CGFloat(index)*rowHeight
+            if index == 0 {
+                accent.withAlphaComponent(0.09).setFill()
+                NSBezierPath(roundedRect:NSRect(x:left,y:y,width:width,height:rowHeight-3),xRadius:6,yRadius:6).fill()
+            }
+            text(row.3,NSRect(x:left+7,y:y+8,width:14,height:16),size:12,color:muted)
+            let nameX=left+25,timeWidth:CGFloat=density == "expanded" ? 0 : 28
+            text(row.0,NSRect(x:nameX,y:y+8,width:width-42-timeWidth,height:16),size:11,weight:.semibold)
+            accent.setFill();NSBezierPath(ovalIn:NSRect(x:left+width-12,y:y+12,width:5,height:5)).fill()
+            if density != "expanded" { text(row.2,NSRect(x:left+width-42,y:y+9,width:26,height:14),size:9,color:muted) }
+            if density != "compact" {
+                text(row.1,NSRect(x:nameX,y:y+28,width:width-33,height:density == "expanded" ? 30 : 16),size:10,color:muted,lines:density == "expanded")
+            }
+            if density == "expanded" { text("Sample workspace · \(row.2)",NSRect(x:nameX,y:y+61,width:width-33,height:13),size:9,color:muted) }
+        }
+        text(caption,NSRect(x:15,y:bounds.height-33,width:bounds.width-30,height:18),size:10,color:muted)
+    }
+}
+
 // Local menu, keyboard and cached hover previews. No Slack credentials or API calls.
 final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let socketPath: String
@@ -71,6 +134,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var hotKey: EventHotKeyRef?
     var handler: EventHandlerRef?
     var shortcut = ""
+    var stockShortcut = ""
     var hotKeyOK = false
     var timer: Timer?
     var polling = false
@@ -83,6 +147,11 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var workspaces: [[String: Any]] = []
     var displays: [[String: Any]] = []
     var settingsWindow: NSWindow?
+    var settingsScrollView: NSScrollView?
+    var settingsSectionHeaders: [NSTextField] = []
+    var settingsSectionButtons: [NSButton] = []
+    var settingsScrollObservers: [NSObjectProtocol] = []
+    var settingsJump: (index: Int, offset: CGFloat)?
     var settingsSignature = ""
     var settingsSaving = false
     var settingsError = ""
@@ -119,7 +188,6 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.async { controller.perform(op) }
             return noErr
         }, 1, &type, Unmanaged.passUnretained(self).toOpaque(), &handler)
-        stockHotKeyOK = RegisterEventHotKey(UInt32(kVK_ANSI_U), UInt32(cmdKey | shiftKey), EventHotKeyID(signature: 0x504D4554, id: 2), GetApplicationEventTarget(), 0, &stockHotKey) == noErr
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.refresh() }
     }
@@ -171,11 +239,12 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let advanced = settingsEpoch > self.lastSettingsEpoch; self.lastSettingsEpoch = settingsEpoch
                 if advanced { self.openSettings() }
             }
+            let combination = self.settings["shortcut"] as? String ?? "cmd-shift-y"
+            let stockCombination = self.settings["stockShortcut"] as? String ?? "cmd-shift-u"
+            if combination != self.shortcut || stockCombination != self.stockShortcut { self.registerShortcuts(combination, stockCombination) }
             self.renderSettings()
             self.showPreview(state["preview"] as? [String: Any])
             self.showEdgeStrip(state["edgeStrip"] as? [String: Any])
-            let combination = self.settings["shortcut"] as? String ?? "cmd-shift-y"
-            if combination != self.shortcut { self.register(combination) }
             let attention = state["attention"] as? Int ?? 0
             self.item.button?.title = attention > 0 ? " \(attention)" : ""
             self.item.button?.toolTip = self.hotKeyOK ? "Slack triage — \(attention) unread conversations and threads" : "Global shortcut unavailable; use this menu or choose another shortcut"
@@ -299,14 +368,20 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.refresh()
         }
     }
-    func register(_ value: String) {
-        let code = value == "cmd-shift-y" ? UInt32(kVK_ANSI_Y) : UInt32(kVK_Space)
-        let modifiers = value == "cmd-shift-y" ? UInt32(cmdKey | shiftKey) : value == "option-space" ? UInt32(optionKey) : UInt32(controlKey | optionKey)
-        var replacement: EventHotKeyRef?
-        let result = RegisterEventHotKey(code, modifiers, EventHotKeyID(signature: 0x504D4554, id: 1), GetApplicationEventTarget(), 0, &replacement)
-        if result == noErr { if let hotKey { UnregisterEventHotKey(hotKey) }; hotKey = replacement; hotKeyOK = true }
-        else { hotKeyOK = false }
-        shortcut = value
+    func shortcutLabel(_ value: String) -> String {
+        return ["cmd-shift-y":"⌘⇧Y", "cmd-shift-u":"⌘⇧U", "ctrl-option-space":"⌃⌥Space", "option-space":"⌥Space"][value] ?? value
+    }
+    func registerShortcuts(_ triage: String, _ stock: String) {
+        // Release both before registering so swapping their assignments works.
+        if let hotKey { UnregisterEventHotKey(hotKey) }; hotKey = nil
+        if let stockHotKey { UnregisterEventHotKey(stockHotKey) }; stockHotKey = nil
+        func register(_ value: String, _ id: UInt32, _ ref: inout EventHotKeyRef?) -> Bool {
+            let code = value == "cmd-shift-y" ? UInt32(kVK_ANSI_Y) : value == "cmd-shift-u" ? UInt32(kVK_ANSI_U) : UInt32(kVK_Space)
+            let modifiers = value.hasPrefix("cmd-shift-") ? UInt32(cmdKey | shiftKey) : value == "option-space" ? UInt32(optionKey) : UInt32(controlKey | optionKey)
+            return RegisterEventHotKey(code, modifiers, EventHotKeyID(signature: 0x504D4554, id: id), GetApplicationEventTarget(), 0, &ref) == noErr
+        }
+        hotKeyOK = register(triage, 1, &hotKey); stockHotKeyOK = register(stock, 2, &stockHotKey)
+        shortcut = triage; stockShortcut = stock
     }
     func perform(_ op: String, workspace: String? = nil) {
         if op == "stock-toggle" { if stockToggleBusy { return }; stockToggleBusy = true }
@@ -357,69 +432,163 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     @objc func openSettings() {
         if settingsWindow == nil {
-            let window = NSWindow(contentRect:NSRect(x:0,y:0,width:568,height:650),styleMask:[.titled,.closable,.miniaturizable],backing:.buffered,defer:false)
+            let window = NSWindow(contentRect:NSRect(x:0,y:0,width:900,height:720),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
+            window.contentMinSize=NSSize(width:820,height:420)
             window.title="Slack Triage Settings";window.isReleasedWhenClosed=false
             window.appearance=NSAppearance(named:.darkAqua)
             window.backgroundColor=NSColor(calibratedRed:0.078,green:0.098,blue:0.145,alpha:1)
-            window.center();window.setFrameAutosaveName("SlackTriageSettings");settingsWindow=window
+            window.center();window.setFrameAutosaveName("SlackTriageSettings")
+            if (window.contentView?.bounds.width ?? 0) < 820 { window.setContentSize(NSSize(width:900,height:max(420,window.contentView?.bounds.height ?? 720))) }
+            settingsWindow=window
         }
         settingsSignature="";renderSettings();settingsWindow?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
     }
+    @objc func jumpToSettingsSection(_ sender: NSButton) {
+        guard let scroll=settingsScrollView,let document=scroll.documentView,settingsSectionHeaders.indices.contains(sender.tag) else { return }
+        document.layoutSubtreeIfNeeded()
+        let header=settingsSectionHeaders[sender.tag]
+        let top=document.convert(header.bounds,from:header).minY-20
+        let offset=max(0,min(top,document.bounds.height-scroll.contentView.bounds.height))
+        // Short final sections cannot always reach the top. Keep the clicked
+        // section selected until the user scrolls away from this position.
+        settingsJump=(sender.tag,offset)
+        scroll.contentView.scroll(to:NSPoint(x:0,y:offset));scroll.reflectScrolledClipView(scroll.contentView)
+        updateSettingsSection()
+    }
+    func updateSettingsSection() {
+        guard let scroll=settingsScrollView,let document=scroll.documentView,!settingsSectionHeaders.isEmpty else { return }
+        let offset=scroll.contentView.bounds.minY,maxOffset=max(0,document.bounds.height-scroll.contentView.bounds.height)
+        var active=0
+        if let jump=settingsJump,abs(jump.offset-offset)<1 { active=jump.index }
+        else {
+            settingsJump=nil
+            for (index,header) in settingsSectionHeaders.enumerated() {
+                if document.convert(header.bounds,from:header).minY<=offset+28 { active=index }
+            }
+            if maxOffset>0 && offset>=maxOffset-1 { active=settingsSectionHeaders.count-1 }
+        }
+        for (index,button) in settingsSectionButtons.enumerated() {
+            button.font = .systemFont(ofSize:12,weight:index==active ? .bold : .regular)
+            button.contentTintColor=index==active ? .labelColor : .secondaryLabelColor
+            button.setAccessibilityValue(index==active ? "Current section" : "")
+        }
+    }
     func renderSettings() {
         guard let window=settingsWindow else { return }
-        let data: [String:Any] = ["settings":settings,"workspaces":workspaces,"displays":displays,"inbox":inboxWorkspace ?? "","online":shellOnline,"saving":settingsSaving,"error":settingsError]
+        let data: [String:Any] = ["settings":settings,"workspaces":workspaces,"displays":displays,"inbox":inboxWorkspace ?? "","online":shellOnline,"saving":settingsSaving,"error":settingsError,"triageHotkey":hotKeyOK,"stockHotkey":stockHotKeyOK]
         let signature=String(data:(try? JSONSerialization.data(withJSONObject:data,options:[.sortedKeys])) ?? Data(),encoding:.utf8) ?? ""
         if signature == settingsSignature { return };settingsSignature=signature
+        let oldOffset=settingsScrollView?.contentView.bounds.origin.y ?? 0
+        for observer in settingsScrollObservers { NotificationCenter.default.removeObserver(observer) };settingsScrollObservers=[]
+        settingsSectionHeaders=[];settingsSectionButtons=[];settingsJump=nil
         let content=NSView();window.contentView=content
+        let sidebar=NSView();sidebar.translatesAutoresizingMaskIntoConstraints=false;sidebar.wantsLayer=true
+        sidebar.layer?.backgroundColor=NSColor(calibratedRed:0.064,green:0.08,blue:0.12,alpha:1).cgColor;content.addSubview(sidebar)
+        let navigation=NSStackView();navigation.orientation = .vertical;navigation.alignment = .leading;navigation.spacing=6;navigation.translatesAutoresizingMaskIntoConstraints=false;sidebar.addSubview(navigation)
+        let scroll=NSScrollView();scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true;scroll.drawsBackground=false;scroll.translatesAutoresizingMaskIntoConstraints=false;content.addSubview(scroll);settingsScrollView=scroll
+        NSLayoutConstraint.activate([sidebar.leadingAnchor.constraint(equalTo:content.leadingAnchor),sidebar.topAnchor.constraint(equalTo:content.topAnchor),sidebar.bottomAnchor.constraint(equalTo:content.bottomAnchor),sidebar.widthAnchor.constraint(equalToConstant:180),navigation.leadingAnchor.constraint(equalTo:sidebar.leadingAnchor,constant:12),navigation.trailingAnchor.constraint(equalTo:sidebar.trailingAnchor,constant:-12),navigation.topAnchor.constraint(equalTo:sidebar.topAnchor,constant:20),scroll.leadingAnchor.constraint(equalTo:sidebar.trailingAnchor),scroll.trailingAnchor.constraint(equalTo:content.trailingAnchor),scroll.topAnchor.constraint(equalTo:content.topAnchor),scroll.bottomAnchor.constraint(equalTo:content.bottomAnchor)])
+        let document=SettingsDocumentView();document.translatesAutoresizingMaskIntoConstraints=false;scroll.documentView=document
         let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=12
-        stack.translatesAutoresizingMaskIntoConstraints=false;content.addSubview(stack)
-        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:24),stack.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-24),stack.topAnchor.constraint(equalTo:content.topAnchor,constant:20)])
+        stack.translatesAutoresizingMaskIntoConstraints=false;document.addSubview(stack)
+        NSLayoutConstraint.activate([document.widthAnchor.constraint(equalTo:scroll.contentView.widthAnchor),stack.leadingAnchor.constraint(equalTo:document.leadingAnchor,constant:24),stack.trailingAnchor.constraint(equalTo:document.trailingAnchor,constant:-24),stack.topAnchor.constraint(equalTo:document.topAnchor,constant:20),stack.bottomAnchor.constraint(equalTo:document.bottomAnchor,constant:-24)])
         let enabled=shellOnline && !settingsSaving
         func label(_ text:String,heading:Bool=false)->NSTextField {
             let field=NSTextField(wrappingLabelWithString:text);field.font=heading ? .systemFont(ofSize:14,weight:.semibold) : .systemFont(ofSize:12)
             field.textColor=heading ? .labelColor : .secondaryLabelColor;return field
         }
+        func note(_ text:String) { let field=label(text);stack.addArrangedSubview(field);field.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true }
+        func section(_ title:String) {
+            if !stack.arrangedSubviews.isEmpty { let divider=NSBox();divider.boxType = .separator;stack.addArrangedSubview(divider);divider.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true }
+            let heading=label(title,heading:true);stack.addArrangedSubview(heading);settingsSectionHeaders.append(heading)
+            let button=NSButton(title:title,target:self,action:#selector(jumpToSettingsSection(_:)))
+            button.tag=settingsSectionButtons.count;button.isBordered=false;button.alignment = .left;button.setButtonType(.momentaryPushIn)
+            button.font = .systemFont(ofSize:12);button.lineBreakMode = .byWordWrapping;button.cell?.wraps=true
+            button.setAccessibilityLabel(title);button.setAccessibilityHelp("Jump to the \(title) section")
+            navigation.addArrangedSubview(button);button.widthAnchor.constraint(equalTo:navigation.widthAnchor).isActive=true;button.heightAnchor.constraint(greaterThanOrEqualToConstant:34).isActive=true;settingsSectionButtons.append(button)
+        }
         func popup(_ title:String,key:String,choices:[(String,Any)]) {
             let row=NSStackView();row.orientation = .horizontal;row.spacing=12;row.alignment = .centerY
-            let name=label(title);name.widthAnchor.constraint(equalToConstant:170).isActive=true
+            let name=label(title);name.widthAnchor.constraint(equalToConstant:230).isActive=true
             let control=NSPopUpButton();control.identifier=NSUserInterfaceItemIdentifier(key);control.target=self;control.action=#selector(changeSetting(_:));control.isEnabled=enabled
-            control.setAccessibilityLabel(title);control.widthAnchor.constraint(equalToConstant:338).isActive=true
-            for (title,value) in choices { control.addItem(withTitle:title);control.lastItem?.representedObject=value }
+            control.setAccessibilityLabel(title);control.setContentHuggingPriority(.defaultLow,for:.horizontal)
+            for (title,value) in choices {
+                control.addItem(withTitle:title);control.lastItem?.representedObject=value
+                if key == "shortcut" || key == "stockShortcut" { let other=settings[key == "shortcut" ? "stockShortcut" : "shortcut"] as? String;control.lastItem?.isEnabled = String(describing:value) != other }
+            }
+            control.menu?.autoenablesItems=false
             if let current=settings[key] { for (index,choice) in choices.enumerated() { if String(describing:choice.1) == String(describing:current) { control.selectItem(at:index) } } }
-            row.addArrangedSubview(name);row.addArrangedSubview(control);stack.addArrangedSubview(row)
+            row.addArrangedSubview(name);row.addArrangedSubview(control);stack.addArrangedSubview(row);row.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         }
-        stack.addArrangedSubview(label("Appearance & behavior",heading:true))
-        popup("Inbox density",key:"inboxDensity",choices:[("Expanded","expanded"),("Cozy","cozy"),("Compact","compact")])
+        func checkbox(_ title:String,key:String,defaultValue:Bool=true) {
+            let button=NSButton(checkboxWithTitle:title,target:self,action:#selector(changeSetting(_:)))
+            button.identifier=NSUserInterfaceItemIdentifier(key);button.state=(settings[key] as? Bool ?? defaultValue) ? .on : .off;button.isEnabled=enabled;stack.addArrangedSubview(button)
+        }
+        section("Appearance & behavior")
+        note("Inbox density — choose a preview")
+        let densityChoices=NSStackView();densityChoices.orientation = .horizontal;densityChoices.spacing=10;densityChoices.distribution = .fillEqually
+        for (value,title,caption) in [("expanded","Expanded","Two-line previews"),("cozy","Cozy","One-line previews"),("compact","Compact","Names and status")] {
+            let preview=InboxDensityPreview(density:value,title:title,caption:caption)
+            preview.target=self;preview.action=#selector(changeSetting(_:));preview.isEnabled=enabled
+            preview.state=(settings["inboxDensity"] as? String ?? "expanded") == value ? .on : .off
+            preview.setAccessibilityValue(preview.state == .on ? 1 : 0)
+            densityChoices.addArrangedSubview(preview);preview.heightAnchor.constraint(equalToConstant:322).isActive=true
+        }
+        stack.addArrangedSubview(densityChoices);densityChoices.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         popup("Screen edge",key:"edge",choices:[("Left","left"),("Right","right")])
         var screens:[(String,Any)]=[("Main display","main")]
         for display in displays { if let id=display["id"] as? String { screens.append((display["name"] as? String ?? id,id)) } }
         popup("Display",key:"display",choices:screens)
-        popup("Resting view",key:"rest",choices:[("Thin edge strip","strip"),("Pill","cluster"),("Hidden","hidden")])
-        popup("Collapse pill when idle",key:"idleSeconds",choices:[("Never",0),("5 seconds",5),("15 seconds",15),("30 seconds",30),("1 minute",60),("5 minutes",300)])
-        popup("Global shortcut",key:"shortcut",choices:[("⌘⇧Y","cmd-shift-y"),("⌃⌥Space","ctrl-option-space"),("⌥Space","option-space")])
-        let reopen=NSButton(checkboxWithTitle:"Return Done items when new messages arrive",target:self,action:#selector(changeSetting(_:)))
-        reopen.identifier=NSUserInterfaceItemIdentifier("reopenNew");reopen.state=settings["reopenNew"] as? Bool == false ? .off : .on;reopen.isEnabled=enabled;stack.addArrangedSubview(reopen)
-        let divider=NSBox();divider.boxType = .separator;stack.addArrangedSubview(divider);divider.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
-        stack.addArrangedSubview(label("Notifications",heading:true))
-        popup("Notify me about",key:"notificationMode",choices:[("All connected workspaces","all"),("Choose workspaces…","selected"),("Follow the inbox filter","inbox")])
-        let mode=settings["notificationMode"] as? String ?? "all"
-        let explanation=label(mode == "inbox" ? "The menu count, pill, and automatic expansion follow the workspace selected in your inbox. All workspaces includes every connected workspace." : mode == "selected" ? "Only checked workspaces contribute to the menu count, pill, and automatic expansion. Leave all unchecked to turn these notifications off." : "The menu count, pill, and automatic expansion include every connected workspace, regardless of your inbox filter.")
-        stack.addArrangedSubview(explanation);explanation.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
-        let scroll=NSScrollView();scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true;scroll.drawsBackground=false
-        let list=NSStackView();list.orientation = .vertical;list.alignment = .leading;list.spacing=8;list.translatesAutoresizingMaskIntoConstraints=false
-        let document=NSView();scroll.documentView=document;document.translatesAutoresizingMaskIntoConstraints=false;document.addSubview(list)
-        NSLayoutConstraint.activate([document.widthAnchor.constraint(equalTo:scroll.contentView.widthAnchor),list.leadingAnchor.constraint(equalTo:document.leadingAnchor,constant:4),list.trailingAnchor.constraint(equalTo:document.trailingAnchor,constant:-4),list.topAnchor.constraint(equalTo:document.topAnchor,constant:4),list.bottomAnchor.constraint(equalTo:document.bottomAnchor,constant:-4)])
-        let selected=settings["notificationWorkspaces"] as? [String] ?? [],inbox=inboxWorkspace
+        popup("When closing the inbox",key:"rest",choices:[("Edge strip","strip"),("Pill","cluster"),("Hidden","hidden")])
+        popup("Shrink pill to edge strip after",key:"idleSeconds",choices:[("Never",0),("5 seconds",5),("15 seconds",15),("30 seconds",30),("1 minute",60),("5 minutes",300)])
+        note("The idle timer only shrinks the pill. It never closes your inbox or an open conversation.")
+        section("Triage notifications")
+        popup("Workspaces shown in triage notifications",key:"notificationMode",choices:[("All connected workspaces","all"),("Choose workspaces…","selected"),("Follow the selected inbox workspace","inbox")])
+        note("Controls the pill, its previews, and the menu count. Slack’s own notification preferences are unchanged. Following the inbox means its workspace selection, not All / Unread / Mentions / DMs / Threads.")
+        let mode=settings["notificationMode"] as? String ?? "all",selected=settings["notificationWorkspaces"] as? [String] ?? [],inbox=inboxWorkspace
         for workspace in workspaces { if let id=workspace["id"] as? String {
             let button=NSButton(checkboxWithTitle:workspace["name"] as? String ?? id,target:self,action:#selector(changeSetting(_:)))
             button.identifier=NSUserInterfaceItemIdentifier("workspace:"+id);button.isEnabled=enabled && mode == "selected"
             button.state=(mode == "all" || mode == "selected" && selected.contains(id) || mode == "inbox" && (inbox == "*" || inbox == id)) ? .on : .off
-            list.addArrangedSubview(button)
+            stack.addArrangedSubview(button)
         } }
-        if workspaces.isEmpty { list.addArrangedSubview(label("Connected workspaces will appear here.")) }
-        stack.addArrangedSubview(scroll);scroll.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true;scroll.heightAnchor.constraint(equalToConstant:104).isActive=true
+        if workspaces.isEmpty { note("Connected workspaces will appear here.") }
+        if mode == "selected" { note("Leave all workspaces unchecked to turn off triage notifications.") }
+        checkbox("Expand the edge strip when new activity arrives",key:"expandOnActivity")
+        note("Opens only the pill, without taking focus. Turn this off to keep the strip quiet while its unread dots continue to update.")
+        section("Global shortcuts")
+        let choices:[(String,Any)]=[("⌘⇧Y","cmd-shift-y"),("⌘⇧U","cmd-shift-u"),("⌃⌥Space","ctrl-option-space"),("⌥Space","option-space")]
+        popup("Toggle triage shortcut",key:"shortcut",choices:choices)
+        note(!shellOnline ? "Triage shortcut: controller disconnected." : hotKeyOK ? "Triage shortcut: registered globally." : "Triage shortcut: unavailable. Another app may be using it; choose a different combination.")
+        popup("Normal Slack shortcut",key:"stockShortcut",choices:choices)
+        note(!shellOnline ? "Normal Slack shortcut: controller disconnected." : stockHotKeyOK ? "Normal Slack shortcut: registered globally." : "Normal Slack shortcut: unavailable. Another app may be using it; choose a different combination.")
+        note("Opens normal Slack from triage; then hides or restores its window. Each global action needs a different shortcut.")
+        section("Keyboard reference")
+        func shortcutRow(_ keys:String,_ text:String) {
+            let row=NSStackView();row.orientation = .horizontal;row.spacing=16;row.alignment = .top
+            let key=label(keys);key.font = .monospacedSystemFont(ofSize:12,weight:.medium);key.widthAnchor.constraint(equalToConstant:150).isActive=true
+            let description=label(text);description.setContentHuggingPriority(.defaultLow,for:.horizontal)
+            row.addArrangedSubview(key);row.addArrangedSubview(description);stack.addArrangedSubview(row);row.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        }
+        shortcutRow("J / K · ↓ / ↑","Move between inbox rows")
+        shortcutRow("H / L · ← / →","Cycle inbox filters")
+        shortcutRow("Enter","Open the selected item and focus its composer")
+        shortcutRow("X","Toggle the selected item read / unread")
+        shortcutRow("N","Toggle the new-message composer")
+        shortcutRow("/","Focus the conversation filter")
+        shortcutRow("⌘K","Search Slack and switch conversations")
+        shortcutRow("⌥⇧↓ / ⌥⇧↑","Open the next / previous unread item")
+        shortcutRow("F6 / ⇧F6","Cycle inbox, messages, and composer focus (Fn may be needed)")
+        shortcutRow("Escape","Leave text focus first, then close the conversation, then collapse the inbox")
+        note("Letter shortcuts stay inactive while typing. In the conversation filter, Down Arrow moves into results. Dialogs handle Escape before the inbox.")
         let status=label(!shellOnline ? "Controller disconnected. Settings will be available after reconnecting." : settingsSaving ? "Saving…" : settingsError.isEmpty ? "Changes save automatically on this Mac." : settingsError)
         status.setAccessibilityIdentifier("settings-status");stack.addArrangedSubview(status);status.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        window.contentView?.layoutSubtreeIfNeeded()
+        scroll.contentView.scroll(to:NSPoint(x:0,y:min(oldOffset,max(0,document.frame.height-scroll.contentSize.height))));scroll.reflectScrolledClipView(scroll.contentView)
+        scroll.contentView.postsBoundsChangedNotifications=true;document.postsFrameChangedNotifications=true
+        for (name,object) in [(NSView.boundsDidChangeNotification,scroll.contentView as NSView),(NSView.frameDidChangeNotification,document as NSView)] {
+            settingsScrollObservers.append(NotificationCenter.default.addObserver(forName:name,object:object,queue:.main) { [weak self] _ in self?.updateSettingsSection() })
+        }
+        updateSettingsSection()
     }
     @objc func changeSetting(_ sender:NSControl) {
         guard shellOnline,!settingsSaving,let key=sender.identifier?.rawValue else { return }
@@ -428,6 +597,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let id=String(key.dropFirst("workspace:".count));var ids=settings["notificationWorkspaces"] as? [String] ?? []
             ids.removeAll(where:{$0 == id});if button.state == .on { ids.append(id) };patch["notificationWorkspaces"]=ids
         } else if let popup=sender as? NSPopUpButton,let value=popup.selectedItem?.representedObject { patch[key]=value }
+        else if let preview=sender as? InboxDensityPreview { patch[key]=preview.density }
         else if let button=sender as? NSButton { patch[key]=button.state == .on }
         guard !patch.isEmpty else { return };settingsSaving=true;settingsError="";renderSettings()
         call(["op":"settings","patch":patch]) { [weak self] result in
@@ -440,9 +610,12 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if trackingMenu { return }
         let menu = NSMenu();menu.delegate=self
         if !connected { let row = NSMenuItem(title:"Controller disconnected",action:nil,keyEquivalent:"");row.isEnabled=false;menu.addItem(row) }
-        for (title,op) in [("Show attention queue", "queue"),("Toggle triage", "toggle"),("Return to work", "rest"),("Hide triage", "hide"),("Minimize", "minimize"),("Normal Slack", "stock"),("Toggle normal Slack (⌘⇧U)", "stock-toggle")] {
+        for (title,op) in [("Open inbox", "queue"),("Toggle triage (\(shortcutLabel(shortcut)))", "toggle"),("Return to work", "rest"),("Normal Slack (\(shortcutLabel(stockShortcut)))", "stock-toggle")] {
             let row = entry(title,data:["op":op]); row.isEnabled=connected; menu.addItem(row)
         }
+        let windowActions=NSMenu()
+        for (title,op) in [("Hide triage","hide"),("Minimize","minimize"),("Open normal Slack","stock")] { let row=entry(title,data:["op":op]);row.isEnabled=connected;windowActions.addItem(row) }
+        let more=NSMenuItem(title:"More window actions",action:nil,keyEquivalent:"");more.submenu=windowActions;menu.addItem(more)
         menu.addItem(.separator())
         let preferences=NSMenuItem(title:"Settings…",action:#selector(openSettings),keyEquivalent:",");preferences.target=self;menu.addItem(preferences)
         if !workspaces.isEmpty { let sub=NSMenu();for ws in workspaces { if let id=ws["id"] as? String { let row=entry(ws["name"] as? String ?? id,data:["op":"switch","workspace":id]);row.isEnabled=ws["connected"] as? Bool == true;sub.addItem(row) } };let row=NSMenuItem(title:"Workspaces",action:nil,keyEquivalent:"");row.submenu=sub;menu.addItem(row) }
@@ -450,7 +623,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     func menuWillOpen(_ menu: NSMenu) { trackingMenu=true }
     func menuDidClose(_ menu: NSMenu) { trackingMenu=false }
-    func applicationWillTerminate(_ notification: Notification) { timer?.invalidate();edgeView?.cancelHover();edgePanel?.orderOut(nil);if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) };if let hotKey { UnregisterEventHotKey(hotKey) };if let stockHotKey { UnregisterEventHotKey(stockHotKey) };if let handler { RemoveEventHandler(handler) } }
+    func applicationWillTerminate(_ notification: Notification) { for observer in settingsScrollObservers { NotificationCenter.default.removeObserver(observer) };timer?.invalidate();edgeView?.cancelHover();edgePanel?.orderOut(nil);if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) };if let hotKey { UnregisterEventHotKey(hotKey) };if let stockHotKey { UnregisterEventHotKey(stockHotKey) };if let handler { RemoveEventHandler(handler) } }
 }
 let app=NSApplication.shared
 let controller=Controller(CommandLine.arguments.dropFirst().first ?? "")

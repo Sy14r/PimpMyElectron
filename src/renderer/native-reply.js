@@ -332,11 +332,44 @@
     scrollMethod=usedNative?'native-latest':'rendered-bottom';return {ok:true,method:scrollMethod};
   }
   function markReadNative(){
-    if(target?.threadTs||!verifiedPane()||state!=='ready')return {ok:false};
+    if(!verifiedPane()||state!=='ready'||auxiliary||['compose','search'].includes(target?.kind))return {ok:false};
+    if(target.threadTs){
+      // A manually unread thread suppresses Slack's automatic read-on-open.
+      // Use the thread's own explicit mark-read action (also used by Escape).
+      const mark=nativeCapability(pane.querySelector('[data-qa="threads_flexpane"]'),(p,instance)=>
+        p.threadTs===target.threadTs&&/^\d+\.\d+$/.test(p.maxMarkableTs)&&typeof instance?.markThreadRead==='function'?()=>instance.markThreadRead():null);
+      if(!mark)return {ok:false};mark();return {ok:true};
+    }
     // Slack's own unread banner button, scoped to the verified conversation.
     const button=pane.querySelector('button.p-message_pane__unread_banner__close_icon');
-    if(!button||button.disabled)return {ok:false};
-    button.click();return {ok:true};
+    if(button){if(button.disabled)return {ok:false};button.click();return {ok:true};}
+    // Some channel layouts omit the banner. Its native action still exists;
+    // avoid "mark all" because that would also clear separate unread threads.
+    const mark=nativeCapability(pane.querySelector('.c-virtual_list'),p=>typeof p.markMostRecentMsgRead==='function'?()=>p.markMostRecentMsgRead({channelId:target.channelId}):null);
+    if(!mark)return {ok:false};mark();return {ok:true};
+  }
+  function markUnreadNative(){
+    if(!verifiedPane()||state!=='ready'||auxiliary||['compose','search'].includes(target?.kind))return {ok:false};
+    let mark,noReply=false;
+    if(target.threadTs){
+      mark=nativeCapability(pane.querySelector('[data-qa="threads_flexpane"]'),p=>{
+        if(p.threadTs!==target.threadTs||typeof p.markReplyAsUnreadByMsg!=='function')return null;
+        const message=p.messages?.[p.latest];
+        if(message?.ts===target.threadTs&&p.latest===target.threadTs)noReply=true;
+        // Never fall back to the root: that would mark the parent conversation.
+        if(!message||!/^\d+\.\d+$/.test(message.ts)||message.ts!==p.latest||message.thread_ts!==target.threadTs||Number(message.ts)<=Number(target.threadTs))return null;
+        return ()=>p.markReplyAsUnreadByMsg(message);
+      });
+    }else{
+      // Use the newest rendered message's own action; do not invent timestamps
+      // or access the store/dispatch layer. Slack owns the resulting write.
+      const rows=[...pane.querySelectorAll('[data-qa="message_container"][data-msg-ts]')]
+        .filter(n=>n.getAttribute('data-msg-channel-id')===target.channelId&&/^\d+\.\d+$/.test(n.getAttribute('data-msg-ts')))
+        .sort((a,b)=>Number(b.getAttribute('data-msg-ts'))-Number(a.getAttribute('data-msg-ts')));
+      const row=rows[0],ts=row?.getAttribute('data-msg-ts');
+      mark=nativeCapability(row,p=>p.ts===ts&&typeof p.markMsgUnread==='function'?()=>p.markMsgUnread({channel:target.channelId,ts}):null);
+    }
+    if(!mark)return {ok:false,error:noReply?'no-reply':'unavailable'};mark();return {ok:true};
   }
   function fail(message){state='error';reason=message;unframe();notify();}
   const pause=ms=>new Promise(r=>setTimeout(r,ms));
@@ -534,7 +567,12 @@
         // Replaying the user's link must run after its first activation ends.
         await pause(0);if(disposed||run!==generation||!active)return {cancelled:true};
         nativeNavigate();
-      }else if(target.kind!=='search'||previousAuxiliary?.kind!=='full search')close?.click();
+      }else if(close&&(target.kind!=='search'||previousAuxiliary?.kind!=='full search')){
+        // The profile's Back button can be the originating click. Chromium
+        // ignores a nested .click() on that same button until activation ends.
+        await pause(0);if(disposed||run!==generation||!active)return {cancelled:true};
+        close.click();
+      }
       while(Date.now()<deadline){
       if(disposed||run!==generation||!active)return {cancelled:true};
       if(!nativeNavigate&&!inWorkspace()&&!workspaceClicked){
@@ -630,6 +668,31 @@
       if(used||!anchor.isConnected||anchor.getAttribute('href')!==href)throw Error('The native link changed');used=true;anchor.click();
     }}}));return true;
   }
+  function profileAction(event){
+    if(event.type!=='click'||event.defaultPrevented||event.metaKey||event.ctrlKey||event.altKey||event.shiftKey||event.button>0||
+      !active||state!=='ready'||auxiliary?.kind!=='profile'||!auxiliaryReady()||window.__PME_TRIAGE__?.status().mode!=='reply')return false;
+    const button=event.target.closest?.('button');if(!button||!pane?.contains(button)||button.disabled)return false;
+    // Slack's Recent DMs links carry the actual conversation ID as their React
+    // key, not an href. Require the enclosing native Recent DMs section; never
+    // infer recipients from visible names or unrelated profile controls.
+    let fiber=button[Object.keys(button).find(k=>k.startsWith('__reactFiber$'))],link=null,recent=false;
+    for(let depth=0;fiber&&depth<40;depth++,fiber=fiber.return){
+      const props=fiber.memoizedProps;
+      if(!link&&/^[DG][A-Z0-9]+$/.test(fiber.key||'')&&typeof props?.onClick==='function')link={channelId:fiber.key,click:props.onClick};
+      if(props?.section&&/^[UW][A-Z0-9]+$/.test(props.memberId||'')&&String(fiber.key||'').endsWith('-recent-dms')){recent=true;break;}
+    }
+    if(!recent||!link)return false;
+    const sourceKey=target.key,workspaceId=target.workspaceId,profile=pane;
+    const close=profile.querySelector('button:has(svg[data-qa="caret-left-full"]),button[aria-label="Close"]');
+    let used=false;
+    event.preventDefault();event.stopImmediatePropagation();
+    window.dispatchEvent(new CustomEvent('pme-native-link-action',{detail:{sourceKey,destination:{workspaceId,channelId:link.channelId},navigate:()=>{
+      if(used||!inWorkspace()||!profile.isConnected)throw Error('The native profile changed');used=true;
+      // Known inbox destinations use ordinary routing. For uncached DMs, keep
+      // Slack's exact navigation callback after dismissing the originating pane.
+      close?.click();link.click();
+    }}}));return true;
+  }
   function threadAction(event){
     if(event.type!=='click'||event.defaultPrevented||event.metaKey||event.ctrlKey||event.altKey||event.shiftKey||
       !active||state!=='ready'||target?.kind==='compose'||target?.threadTs||auxiliary||window.__PME_TRIAGE__?.status().mode!=='reply')return false;
@@ -646,7 +709,7 @@
   // A route/editor replacement must never leave a stale destination label over
   // a different composer. Recheck on input as well as during DOM reconciliation.
   function guard(event){if(switcherAction(event))return;if(!active)return;
-    if(headerAction(event)||threadAction(event)||linkAction(event))return;
+    if(headerAction(event)||profileAction(event)||threadAction(event)||linkAction(event))return;
     const sending=event.type==='click'&&event.target.closest?.('[data-qa="texty_send_button"]')||event.type==='keydown'&&event.key==='Enter'&&event.target.closest?.('[data-qa="message_input"]');
     if(sending&&(state!=='ready'||!verified())){event.preventDefault();event.stopImmediatePropagation();fail('The Slack destination changed. Reopen the conversation to continue.');return;}
     if(!sending&&event.type==='click'&&event.isTrusted&&state==='ready'&&pane?.contains(event.target)&&
@@ -697,7 +760,7 @@
     }
     fail('The Slack destination changed. Reopen the conversation to continue.');
   },250);
-  window.__PME_REPLY__={openSwitcher,cancelSwitcher,switcherOpen,open,status,suspend,jumpToLatest,focus,focusMessages,confirmSend,markReadNative,overlayOpen,closeAuxiliary,
+  window.__PME_REPLY__={openSwitcher,cancelSwitcher,switcherOpen,open,status,suspend,jumpToLatest,focus,focusMessages,confirmSend,markReadNative,markUnreadNative,overlayOpen,closeAuxiliary,
     dispose(){if(disposed)return;cancelSwitcher({restore:false});suspend();disposed=true;abort.abort();clearInterval(timer);style.remove();delete window.__PME_REPLY__;window.dispatchEvent(new CustomEvent('pme-native-reply-state'));}};
   window.dispatchEvent(new CustomEvent('pme-native-reply-installed'));
 })();

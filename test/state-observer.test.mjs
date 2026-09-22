@@ -94,3 +94,20 @@ test('removing a live count after reading falls back to the cleared startup stat
   env.change();env.flush();assert.equal(env.snapshots.at(-1).channels[0].has_unreads,false);
   assert.equal(env.snapshots.at(-1).channels[0].mentionObserved,false);env.api.dispose();
 });
+
+
+test('on-demand read-state resolution republishes unchanged cached evidence without dispatch or requests',()=>{
+ const env=setup([state(),state('TTWO')]);env.flush();const n=env.snapshots.length;
+ assert.equal(env.api.readState({workspaceId:'TTWO',channelId:'DONE'}),true);
+ assert.equal(env.api.readState({workspaceId:'TONE',channelId:'DONE',threadTs:'100.000001'}),true);
+ assert.equal(env.snapshots.length,n+2);assert.equal(env.snapshots.at(-2).workspaceId,'TTWO');
+ env.stores[0].state.threadSub['DONE-100.000001']={id:'DONE-100.000001',lastRead:'100.000002',subscribed:true};
+ assert.equal(env.api.readState({workspaceId:'TONE',channelId:'DONE',threadTs:'100.000001'}),false);
+ assert.equal(env.network(),0);assert.equal(env.dispatches(),0);env.api.dispose();
+});
+test('on-demand checks keep missing cursors unknown and reject wrong account, workspace, and disposed state',()=>{
+ const s=state();s.threadSub={};const env=setup([s]);env.flush();
+ for(const request of [{workspaceId:'TONE',channelId:'DONE',threadTs:'100.000001'},{workspaceId:'TUNKNOWN',channelId:'DONE'},{workspaceId:'TONE',channelId:'bad'}])assert.equal(env.api.readState(request),null);
+ env.accounts.TONE.user_id='UNEW';s.bootData={user_id:'UOLD'};assert.equal(env.api.readState({workspaceId:'TONE',channelId:'DONE'}),null);
+ env.api.dispose();assert.equal(env.api.readState({workspaceId:'TONE',channelId:'DONE'}),null);assert.equal(env.network(),0);assert.equal(env.dispatches(),0);
+});

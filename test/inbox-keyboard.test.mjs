@@ -7,8 +7,8 @@ function setup(){
  const list={children:rows.map(item=>({dataset:{key:item.key},focus(){shadow.activeElement=this;calls.push(['focus',item.key]);},scrollIntoView(){}}))};
  const search={dataset:{},matches:()=>true,focus(){shadow.activeElement=this;},select(){calls.push(['select-filter']);}};nodes.set('list',list);nodes.set('search',search);nodes.set('notice',{});
  const status={ready:true,target:{key:'two'}};
- const env={mode:'queue',filter:'all',quickReply:null,pillReadPending:null,selection:null,openingKey:null,shadow,host,startCompose:()=>calls.push(['compose']),filtered:()=>rows,$:id=>nodes.get(id),connected:()=>true,render(){},touch(){},openItem:key=>calls.push(['open',key]),
-   window:{__PME_REPLY__:{status:()=>status,focus:()=>calls.push(['composer'])}},heldRow:null,transition:async mode=>{env.mode=mode;calls.push(['mode',mode]);},focusInbox:()=>calls.push(['inbox']),readFromPill:async(item,opts)=>{calls.push(['read',item.key,opts.inbox]);return {ok:true};}};
+ const env={mode:'queue',filter:'all',quickReply:null,pillReadPending:null,selection:null,openingKey:null,shadow,host,startCompose:()=>calls.push(['compose']),filtered:()=>env.filter==='unread'?rows.filter(r=>r.unread):rows,$:id=>nodes.get(id),connected:()=>true,render(){},touch(){},openItem:key=>calls.push(['open',key]),
+   window:{__PME_REPLY__:{status:()=>status,focus:()=>calls.push(['composer'])}},heldRow:null,transition:async mode=>{env.mode=mode;calls.push(['mode',mode]);},focusInbox:()=>calls.push(['inbox']),readFromPill:async(item,opts)=>{calls.push(['read',item.key,opts.inbox,opts.unread]);item.unread=opts.unread;return {ok:true};}};
  vm.runInNewContext(helpers,env);
  const event=(key,extra={})=>({key,composedPath:()=>[shadow.activeElement,host],preventDefault(){this.prevented=true;},stopImmediatePropagation(){this.stopped=true;},...extra});
  return {env,calls,rows,list,shadow,search,event,status};
@@ -32,12 +32,16 @@ test('typing, native composer, dialogs caller, modifiers, IME and ordinary Slack
  for(const extra of [{metaKey:true},{ctrlKey:true},{altKey:true},{shiftKey:true},{isComposing:true},{defaultPrevented:true},{composedPath:()=>[{}]}])assert.equal(f.env.inboxNavigationKey(f.event('x',extra)),false);
  for(const mode of ['stock','cluster','strip']){f.env.mode=mode;assert.equal(f.env.inboxNavigationKey(f.event('j')),false);}
 });
-test('X reads the selected unread item using the hidden native flow and advances; read items and repeats do nothing',async()=>{
+test('X toggles read and unread through the hidden native flow, keeping rows that remain visible focused',async()=>{
  const f=setup();f.shadow.activeElement=f.list.children[0];f.env.mode='reply';
- await f.env.readInboxItem();assert.deepEqual(f.calls,[['mode','queue'],['read','one',true],['inbox']]);assert.equal(f.env.selection,'two');
- f.calls.length=0;f.shadow.activeElement=f.list.children[2];await f.env.readInboxItem();assert.equal(f.calls.length,0);
- f.shadow.activeElement=f.list.children[0];f.env.inboxNavigationKey(f.event('x',{repeat:true}));assert.equal(f.calls.length,0);
+ await f.env.readInboxItem();assert.deepEqual(f.calls,[['mode','queue'],['read','one',true,false],['inbox']]);assert.equal(f.env.selection,'one');
+ f.calls.length=0;await f.env.readInboxItem();assert.deepEqual(f.calls,[['read','one',true,true],['inbox']]);assert.equal(f.env.selection,'one');
+ f.calls.length=0;f.env.inboxNavigationKey(f.event('x',{repeat:true}));assert.equal(f.calls.length,0);
  f.env.pillReadPending={key:'one',latest:100.1};await f.env.readInboxItem();assert.equal(f.calls.length,0);
+});
+test('X advances only when the selected row leaves the Unread filter and defaults unknown state to explicit read',async()=>{
+ const f=setup();f.env.filter='unread';f.shadow.activeElement=f.list.children[0];await f.env.readInboxItem();assert.equal(f.env.selection,'two');
+ f.env.filter='all';f.rows[2].unread=null;f.shadow.activeElement=f.list.children[2];f.calls.length=0;await f.env.readInboxItem();assert.deepEqual(f.calls,[['read','three',true,false],['inbox']]);
 });
 
 test('H/L and horizontal arrows cycle inbox filters in order and wrap',()=>{
@@ -61,4 +65,25 @@ test('N ignores typing, IME, modifiers, repeats, quick reply and full Slack',()=
  for(const extra of [{isComposing:true},{defaultPrevented:true},{metaKey:true},{ctrlKey:true},{altKey:true},{shiftKey:true},{composedPath:()=>[{matches:()=>true}]}])assert.equal(f.env.composeToggleKey(f.event('n',extra)),false);
  f.env.composeToggleKey(f.event('n',{repeat:true}));assert.equal(f.calls.length,0);
  f.env.mode='stock';assert.equal(f.env.composeToggleKey(f.event('n')),false);f.env.mode='reply';f.env.quickReply={};assert.equal(f.env.composeToggleKey(f.event('n')),false);
+});
+
+test('X restores focus after native navigation, while preserving a field the user focused during the action',async()=>{
+ for(const typing of [false,true]){
+  const f=setup();f.shadow.activeElement=f.list.children[0];
+  f.env.readFromPill=async()=>{await Promise.resolve();f.shadow.activeElement=typing?f.search:null;return {ok:true};};
+  await f.env.readInboxItem();assert.equal(f.calls.filter(c=>c[0]==='inbox').length,typing?1:2);
+ }
+});
+
+
+test('unknown read state checks the passive cache before choosing the toggle direction',async()=>{
+ for(const cached of [true,false,null]){
+  const f=setup();f.rows[0].unread=null;f.shadow.activeElement=f.list.children[0];let requested;
+  f.env.window.__PME_OBSERVER__={readState(item){requested=item;return cached;}};
+  await f.env.readInboxItem();assert.equal(requested,f.rows[0]);assert.deepEqual(f.calls[0],['read','one',true,cached===false]);
+ }
+});
+test('a missing or failed cache observer does not block marking unknown items read',async()=>{
+ const f=setup();f.rows[0].unread=null;f.shadow.activeElement=f.list.children[0];f.env.window.__PME_OBSERVER__={readState(){throw Error('observer unavailable');}};
+ await f.env.readInboxItem();assert.deepEqual(f.calls[0],['read','one',true,false]);
 });

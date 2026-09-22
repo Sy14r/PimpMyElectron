@@ -103,32 +103,48 @@ Quit Slack normally, then run `npm run dev`. The launcher starts official Slack 
 
 Use the **Inbox density** button beside the conversation filter to choose **Expanded** (the original two-line preview cards), **Cozy** (one-line previews with timestamps), or **Compact** (slim name/status rows). Compact rows keep their cached preview and full status in the hover tooltip and accessible label. Workspace labels remain visible in All workspaces. The choice is saved across launches and also appears in Settings → Appearance & behavior → Inbox density. Changing density affects the inbox list without resizing or reopening the native side pane.
 
+Native profiles remain usable in triage. Their **Recent DMs** entries open the selected conversation alongside the inbox, including returning to the same DM; the profile’s Back button restores the previous conversation. Interrupted navigation offers Retry instead of an indefinite loading cover.
+
 To give a thread a **personal alias**, open it in triage and click its title/pencil in the native thread header. Names appear in the inbox, pill preview, and thread header; the inbox filter matches both the alias and the original conversation name. Clear the name to restore the original label. Aliases are stored only on this Mac, are separate from read/Done/pin state, and make no Slack API calls or changes visible to other people.
 
 **⌘K**, or the magnifying-glass button in the inbox header, opens Slack's native search/switcher above triage. Choose a channel or existing DM with Enter or a click to open it in the right-hand pane. Escape dismisses the popup and restores the previous focus and cursor without changing a draft. Search uses the open conversation's workspace, or the selected inbox workspace when no conversation is open; All workspaces uses Slack's currently active workspace. Full message searches and recent search queries open as a themed results pane beside the inbox, with Slack’s own filters and sorting. Click a result or reply count to open its conversation/thread at the matching message; Escape closes the results pane. Workflows and destinations whose identity cannot be verified still open in full Slack. Search requests remain Slack's own, initiated by your interaction; this adds no custom search API or background polling.
 
-**⌘⇧U** globally opens normal Slack from any triage view. When already in normal Slack, it hides or restores the same window (restoring a minimized window first); hiding returns focus to your previous app. **⌘⇧Y** remains the separate triage toggle.
+**⌘⇧U** (the default Normal Slack shortcut) globally opens normal Slack from any triage view. When already in normal Slack, it hides or restores the same window (restoring a minimized window first); hiding returns focus to your previous app. **⌘⇧Y** remains the separate triage toggle by default. Both are configurable in Settings → Global shortcuts, which shows whether each combination registered successfully.
 
-**Inbox keyboard triage:** **N** toggles the native new-message composer when no text field has focus; All workspaces first asks which workspace to compose in. **/** focuses and selects the conversation filter. **J/K** or **↓/↑** moves the row highlight without opening conversations. **H/L** or **←/→** cycles All, Unread, Mentions, DMs, and Threads. **Enter** opens the highlighted item and focuses Slack’s native composer (or focuses the existing editor if already open). **X** marks the highlighted unread item read through Slack’s native view and advances the highlight; an open detail pane closes back to the queue first. Read indicators clear optimistically and return if Slack does not confirm. These keys stay inactive while typing; the filter field accepts ↓/↑ to move into the results and Enter to open one. Escape from the filter text field returns focus to the list (or the selected filter button when empty), preserving the text and keeping the inbox open. H/L never focuses text entry. Escape from the composer releases focus; the next Escape closes the detail pane, and Escape in the queue collapses the inbox. The inbox opens with a row focused so navigation is ready immediately.
+**Inbox keyboard triage:** **N** toggles the native new-message composer when no text field has focus; All workspaces first asks which workspace to compose in. **/** focuses and selects the conversation filter. **J/K** or **↓/↑** moves the row highlight without opening conversations. **H/L** or **←/→** cycles All, Unread, Mentions, DMs, and Threads. **Enter** opens the highlighted item and focuses Slack’s native composer (or focuses the existing editor if already open). **X** toggles the highlighted item between read and unread through Slack’s native actions; an open detail pane closes back to the queue first. Mark unread starts at the newest loaded message (or reply for a thread), preserving the parent conversation’s separate read state. The highlight stays on the item unless it leaves the Unread filter, in which case it moves to the next row. Indicators update optimistically and revert to the last observed state if Slack does not confirm. If read state is unknown, X checks Slack’s existing local cache first (no API request). If it is still unknown, X explicitly marks the item read through the hidden native view; after confirmation, X toggles normally. These keys stay inactive while typing; the filter field accepts ↓/↑ to move into the results and Enter to open one. Escape from the filter text field returns focus to the list (or the selected filter button when empty), preserving the text and keeping the inbox open. H/L never focuses text entry. Escape from the composer releases focus; the next Escape closes the detail pane, and Escape in the queue collapses the inbox. The inbox opens with a row focused so navigation is ready immediately.
 
 **⌥⇧↓ / ⌥⇧↑** opens the next/previous observed unread item within the current inbox workspace, search and filters. It skips local Done/Later and pending read items, wraps once, and leaves the current conversation alone when there is nothing else to read. The small next-unread button beside the filters does the same thing. These actions focus messages rather than the composer. **F6 / ⇧F6** cycles focus through inbox, messages and composer (some Macs require Fn-F6). Slack keeps drafts when navigating. Native dialogs and text composition retain their keys, and these shortcuts do not alter full Slack or quick reply.
 
-`npm run dev:reload` reapplies edited source; `npm run dev:status` reports health; `npm run dev:stop` stops the owned helper/client while retaining sign-ins and local state. `npm run mods -- disable triage-surface` removes the UI and restores Slack. The mod does not patch the app bundle or implement a send API. Slack owns composing, sending and drafts. Mark read is an explicit, timestamp-bounded conversation action; thread marking is not yet supported. Production-profile migration and login items are not implemented.
+`npm run dev:reload` reapplies edited source; `npm run dev:status` reports health; `npm run dev:stop` stops the owned helper/client while retaining sign-ins and local state. `npm run mods -- disable triage-surface` removes the UI and restores Slack. The mod does not patch the app bundle or implement a send API. Slack owns composing, sending and drafts. Read/unread changes use Slack’s native conversation and thread actions. A thread with no loaded replies has no separate reply to mark unread; use its parent conversation instead. Production-profile migration and login items are not implemented.
 
-The menu-bar controller's **Settings…** window contains docking, display, resting
-view, pill idle delay (including 5 seconds), shortcut, and local Done behavior.
-Changes save automatically on this Mac. **Notify me about** controls the menu
-count, pill destinations, cached hover previews, and expansion from strip to pill:
+The menu-bar controller's **Settings…** window is resizable, with a fixed section sidebar and scrollable settings. Clicking a section jumps to it; the current section is bold as you scroll.
+It groups appearance, triage notifications, global shortcuts, and a keyboard reference. The menu's **More window actions** submenu holds
+Hide, Minimize, and an explicit Open normal Slack command.
+
+**When closing the inbox** chooses Edge strip, Pill, or Hidden. **Shrink pill to
+edge strip after** controls only the pill's idle timer; it never closes the inbox
+or a conversation. **Inbox density** offers clickable Expanded, Cozy, and Compact
+previews with the same sample conversations; selecting one saves and applies it immediately.
+Local Done remains separate from Slack read state.
+Personal thread names are always available from their thread headers; no setting enables them. Preferences and names
+save automatically on this Mac.
+
+**Workspaces shown in triage notifications** controls the menu count, pill
+destinations, and cached hover previews. It does not change Slack's native
+notification preferences:
 
 - **All connected workspaces** includes every observed signed-in workspace,
   independently of the inbox filter (the default).
 - **Choose workspaces…** includes only checked workspaces. Selecting none disables
   these notification surfaces without changing the inbox.
-- **Follow the inbox filter** uses the currently selected inbox workspace;
+- **Follow the selected inbox workspace** uses the workspace dropdown, not the
+  All / Unread / Mentions / DMs / Threads filters;
   selecting All workspaces includes them all.
 
-New unread activity reveals only the pill, without activating Slack; additional
-activity resets the pill's idle timer. Startup hydration and preference changes
+With **Expand the edge strip when new activity arrives** enabled (the default),
+new unread activity reveals only the pill, without activating Slack; additional
+activity resets the pill's idle timer. Turn it off to keep the strip quiet while
+unread dots, counts, and cached previews continue to update. Startup hydration and preference changes
 do not announce existing unread items. Clicking a background workspace's pill
 item selects that workspace in the inbox and opens its native conversation.
 Notification awareness uses Slack's existing client cache and observed traffic;

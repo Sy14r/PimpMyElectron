@@ -12,10 +12,11 @@ function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeC
   const scroller={scrollTop:0,scrollHeight:1200};
   const callbacks={teamId:callbackTeam,channelId:'CONE',threadTs:openingThread||thread,latest:'200.000001',
     dispatchNavigateToThread(request){native.threadNavigations.push(request);threadPending=true;setTimeout(()=>{if(!threadClosed)box.thread=request.ts;},230);},
+    markMostRecentMsgRead(request){native.readConversation=request;},markReplyAsUnreadByMsg(message){native.unreadThread=message;},messages:{'200.000001':{ts:'200.000001',thread_ts:openingThread||thread}},maxMarkableTs:'200.000001',
     jumpToReply(ts){native.replyJumps.push(ts);},jumpToMessageInChannel({messageTs}){native.messageJump=messageTs;}};
   const listNode=nativeCallbacks?{__reactFiber$test:{memoizedProps:callbacks,stateNode:{props:callbacks,scrollToMostRecentMessage(){if(scrollThrows)throw Error('scroll unavailable');native.latestJumps++;}}}}:{};
-  const threadNode=nativeCallbacks?{__reactFiber$test:{memoizedProps:callbacks}}:{};
-  const nativeMessage={getAttribute:k=>k==='data-msg-ts'?'100.000002':box.channel,getBoundingClientRect:()=>({top:120,bottom:160,width:400,height:40})};
+  const threadNode=nativeCallbacks?{__reactFiber$test:{memoizedProps:callbacks,stateNode:{props:callbacks,markThreadRead(){native.threadReads=(native.threadReads||0)+1;}}}}:{};
+  const nativeMessage={...(nativeCallbacks?{__reactFiber$test:{memoizedProps:{teamId:callbackTeam,channelId:'CONE',ts:'100.000002',markMsgUnread(request){native.unreadMessage=request;}}}}:{}),getAttribute:k=>k==='data-msg-ts'?'100.000002':box.channel,getBoundingClientRect:()=>({top:120,bottom:160,width:400,height:40})};
   const headerAttributes=new Map(),headerChildren=[],headerEvents=[],bodyChildren=[];
   const makeNode=()=>({attributes:new Map(),children:[],handlers:new Map(),style:{},offsetWidth:220,offsetHeight:120,isConnected:true,
     setAttribute(k,v){this.attributes.set(k,v);},getAttribute(k){return this.attributes.get(k)??null;},hasAttribute(k){return this.attributes.has(k);},removeAttribute(k){this.attributes.delete(k);},
@@ -33,7 +34,7 @@ function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeC
   const back={matches:()=>true},otherHeaderControl={matches:()=>false};
   const header={querySelector:s=>s.startsWith('.p-flexpane_header__primary,')?header:menuControls?controls[controlSelectors.indexOf(s)]||null:null,contains:n=>n===back||n===otherHeaderControl||headerChildren.includes(n)||controls.includes(n),setAttribute:(k,v)=>headerAttributes.set(k,v),removeAttribute:k=>headerAttributes.delete(k),prepend(n){headerChildren.unshift(n);n.parentElement=header;},append(n){headerChildren.push(n);n.parentElement=header;},insertBefore(n,before){headerChildren.splice(headerChildren.indexOf(before),0,n);n.parentElement=header;}};
   for(const control of controls)control.parentElement=header;
-  const pane={hasAttribute:k=>attributes.has(k),focus:()=>{document.activeElement=pane;},querySelectorAll:()=>[nativeMessage],isConnected:true,contains:n=>n===editor||n===composer||n===nativeLinkButton,setAttribute:(k,v)=>attributes.set(k,v),removeAttribute:k=>attributes.delete(k),querySelector:s=>s.startsWith('.p-flexpane_header,')||s.startsWith('.p-view_header,')?(headerControls?header:null):s==='button.p-message_pane__unread_banner__close_icon'?readButton:s==='[data-qa="threads_flexpane"]'&&(thread||openingThread)?threadNode:s==='.c-virtual_list'?listNode:s==='.c-virtual_list [data-qa="slack_kit_scrollbar"]'?scroller:null};
+  const pane={hasAttribute:k=>attributes.has(k),focus:()=>{document.activeElement=pane;},querySelectorAll:()=>[nativeMessage],isConnected:true,contains:n=>n===editor||n===composer||n===nativeLinkButton,setAttribute:(k,v)=>attributes.set(k,v),removeAttribute:k=>attributes.delete(k),querySelector:s=>s.startsWith('.p-flexpane_header,')||s.startsWith('.p-view_header,')?(headerControls?header:null):s==='button.p-message_pane__unread_banner__close_icon'?(readButton.hidden?null:readButton):s==='[data-qa="threads_flexpane"]'&&(thread||openingThread)?threadNode:s==='.c-virtual_list'?listNode:s==='.c-virtual_list [data-qa="slack_kit_scrollbar"]'?scroller:null};
   const editor={contains:n=>n===editor,isConnected:true,textContent:'untouched user draft',closest:s=>s==='.p-view_contents'?pane:box,focus:()=>{focused=true;}};
   const composerAttributes=new Map(),sendButton={disabled:false};
   const composer={parentElement:pane,querySelector:s=>s==='[data-qa="texty_send_button"]'?sendButton:s==='[role="toolbar"]'?{}:null,setAttribute:(k,v)=>composerAttributes.set(k,v),removeAttribute:k=>composerAttributes.delete(k)};
@@ -50,7 +51,7 @@ function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeC
   const location={origin:'https://app.slack.com',pathname:'/client/TONE/CONE',assign:url=>navigations.push(url)};
   vm.runInNewContext(source,{window,document,location,AbortController,CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},Date:{now:()=>Date.now()+clockOffset},innerWidth:820,innerHeight:660,setTimeout,clearInterval(){},setInterval:fn=>{tick=fn;return 1;},
     sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}});
-  return {nativeLinkButton,setNotificationOnly(value){notificationOnly=value;},callbacks,controls,bodyChildren,document,auxAttributes,setAuxiliary(kind){auxiliaryKind=kind;auxView.isConnected=!!kind;editor.isConnected=!kind;},header,headerChildren,headerEvents,headerAttributes,back,otherHeaderControl,advance:ms=>clockOffset+=ms,readButton,sendButton,window,api:window.__PME_REPLY__,tick:()=>tick(),events,composePage,recipient,scroller,box,pane,editor,composerAttributes,location,native,listeners,storage,navigations,attributes,bodyAttributes,focused:()=>focused,removed:()=>removed};
+  return {auxView,nativeLinkButton,setNotificationOnly(value){notificationOnly=value;},callbacks,controls,bodyChildren,document,auxAttributes,setAuxiliary(kind){auxiliaryKind=kind;auxView.isConnected=!!kind;editor.isConnected=!kind;},header,headerChildren,headerEvents,headerAttributes,back,otherHeaderControl,advance:ms=>clockOffset+=ms,readButton,sendButton,window,api:window.__PME_REPLY__,tick:()=>tick(),events,composePage,recipient,scroller,box,pane,editor,composerAttributes,location,native,listeners,storage,navigations,attributes,bodyAttributes,focused:()=>focused,removed:()=>removed};
 }
 function clickHeader(env,button){
  const result={prevented:false,stopped:false};env.listeners.get('click')({type:'click',target:{closest:selector=>selector==='button'?button:null},preventDefault(){result.prevented=true;},stopImmediatePropagation(){result.stopped=true;}});return result;
@@ -329,4 +330,43 @@ test('a search pane cannot authorize a native send even if a composer appears be
  const env=setup();env.setAuxiliary('full search');env.location.pathname='/client/TONE/search';await env.api.open({kind:'search',workspaceId:'TONE'});
  let prevented=false;env.listeners.get('keydown')({type:'keydown',key:'Enter',target:{closest:s=>s==='[data-qa="message_input"]'?{}:null},preventDefault(){prevented=true;},stopImmediatePropagation(){}});
  assert.equal(prevented,true);assert.equal(env.api.status().ready,false);env.api.dispose();
+});
+
+
+test('native unread actions use the exact mounted conversation or thread and preserve drafts',async()=>{
+ const dm=setup({nativeCallbacks:true});assert.equal(dm.api.markUnreadNative().ok,false);await dm.api.open({workspaceId:'TONE',channelId:'CONE'});
+ assert.equal(dm.api.markUnreadNative().ok,true);assert.deepEqual(JSON.parse(JSON.stringify(dm.native.unreadMessage)),{channel:'CONE',ts:'100.000002'});assert.equal(dm.editor.textContent,'untouched user draft');
+ dm.native.team='TTWO';assert.equal(dm.api.markUnreadNative().ok,false);dm.api.dispose();
+ const t=setup({thread:'100.000001',nativeCallbacks:true});await t.api.open({workspaceId:'TONE',channelId:'CONE',threadTs:'100.000001'});
+ assert.equal(t.api.markUnreadNative().ok,true);assert.equal(t.native.unreadThread,t.callbacks.messages['200.000001']);assert.equal(t.native.unreadMessage,undefined);
+ assert.equal(t.api.markReadNative().ok,true);assert.equal(t.native.threadReads,1);assert.equal(t.readButton.clicks,0);t.api.dispose();
+});
+test('unread rejects missing actions, mismatched workspaces, and wrong-thread or root messages without a broader fallback',async()=>{
+ for(const options of [{nativeCallbacks:false},{nativeCallbacks:true,callbackTeam:'TTWO'}]){
+  const e=setup(options);await e.api.open({workspaceId:'TONE',channelId:'CONE'});assert.equal(e.api.markUnreadNative().ok,false);assert.equal(e.native.unreadMessage,undefined);e.api.dispose();
+ }
+ const t=setup({thread:'100.000001',nativeCallbacks:true});await t.api.open({workspaceId:'TONE',channelId:'CONE',threadTs:'100.000001'});
+ t.callbacks.messages['200.000001'].thread_ts='100.000003';assert.equal(t.api.markUnreadNative().ok,false);
+ t.callbacks.latest='100.000001';t.callbacks.messages['100.000001']={ts:'100.000001',thread_ts:'100.000001'};assert.equal(t.api.markUnreadNative().error,'no-reply');
+ t.callbacks.threadTs='100.000003';assert.equal(t.api.markReadNative().ok,false);assert.equal(t.native.unreadThread,undefined);t.api.dispose();
+});
+
+
+test('channel read falls back to the banner action without clearing separate threads or accepting wrong-workspace callbacks',async()=>{
+ for(const team of ['TONE','TTWO']){
+  const e=setup({nativeCallbacks:true,callbackTeam:team});e.readButton.hidden=true;await e.api.open({workspaceId:'TONE',channelId:'CONE'});
+  assert.equal(e.api.markReadNative().ok,team==='TONE');assert.equal(e.native.readConversation?.channelId,team==='TONE'?'CONE':undefined);assert.equal(e.native.threadReads,undefined);e.api.dispose();
+ }
+});
+
+
+test('closing a profile defers its native Back activation, preserving the destination and draft',async()=>{
+ const e=setup({nativeCallbacks:true});await e.api.open({workspaceId:'TONE',channelId:'CONE'});e.setAuxiliary('profile');e.tick();
+ let originalClick=true,closes=0;e.auxView.querySelector=()=>({click(){if(originalClick)return;closes++;e.setAuxiliary(null);}});
+ assert.equal(e.api.closeAuxiliary(),true);assert.equal(closes,0);originalClick=false;
+ await new Promise(r=>setTimeout(r,130));assert.equal(closes,1);assert.equal(e.api.status().ready,true);assert.equal(e.api.status().auxiliary,null);assert.equal(e.editor.textContent,'untouched user draft');e.api.dispose();
+});
+test('cancelling a deferred profile close cannot act on the native pane afterward',async()=>{
+ const e=setup();await e.api.open({workspaceId:'TONE',channelId:'CONE'});e.setAuxiliary('profile');e.tick();let closes=0;e.auxView.querySelector=()=>({click(){closes++;}});
+ e.api.closeAuxiliary();e.api.suspend();await new Promise(r=>setTimeout(r,20));assert.equal(closes,0);assert.equal(e.api.status().active,false);e.api.dispose();
 });

@@ -57,9 +57,10 @@ test('reads, edits, pins, local dismissals, and unknown unread do not announce',
 test('activity only expands the visible strip, and refreshes the timer for an existing pill',()=>{
  const from=source.indexOf('  function revealPillActivity()'),to=source.indexOf("  let pillSignature=",from);
  for(const mode of ['strip','cluster','queue','reply','reading','stock','hidden']){
-  const calls=[],context={mode,disposed:false,nativeStripRequest:{id:'strip'},transition:(next,options)=>calls.push([next,options.passive]),touch:()=>calls.push('touch')};
+  const calls=[],context={settings:{},mode,disposed:false,nativeStripRequest:{id:'strip'},transition:(next,options)=>calls.push([next,options.passive]),touch:()=>calls.push('touch')};
   vm.runInNewContext(source.slice(from,to),context);context.revealPillActivity();
   assert.deepEqual(calls,mode==='strip'?[['cluster',true]]:mode==='cluster'?['touch']:[],mode);
+  calls.length=0;context.settings.expandOnActivity=false;context.revealPillActivity();assert.deepEqual(calls,[]);context.settings.expandOnActivity=true;
   calls.length=0;context.mode='strip';context.nativeStripRequest=null;context.revealPillActivity();assert.deepEqual(calls,[]);
  }
 });

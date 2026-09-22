@@ -64,22 +64,40 @@
     }
     return result;
   }
-  function publish(watch){
+  function publish(watch,force=false){
     watch.timer=null;if(disposed)return;
     try{
       const state=watch.store.getState(),known=accounts(),parts=['channels','channelCursors','channelLatests','unreadCounts','members','messages','threadSub'].map(k=>state[k]);
       const scope=JSON.stringify([location.pathname,known]);
-      if(watch.parts&&parts.every((p,i)=>p===watch.parts[i])&&watch.scope===scope&&Date.now()-watch.at<30000)return;
+      if(!force&&watch.parts&&parts.every((p,i)=>p===watch.parts[i])&&watch.scope===scope&&Date.now()-watch.at<30000)return;
       const snapshot=project(state,known);if(!snapshot||typeof window.__pmeClientState!=='function')return;
       let serialized=JSON.stringify(snapshot);
       // The local binding has a fixed ceiling. Never export raw store state.
       for(const field of ['messages','users','channels','threads'])while(serialized.length>300000&&snapshot[field].length){snapshot[field].length=Math.floor(snapshot[field].length*0.75);snapshot.truncated=true;serialized=JSON.stringify(snapshot);}
       if(serialized.length>300000)return;
       watch.parts=parts;watch.scope=scope;
-      if(serialized===watch.last&&Date.now()-watch.at<30000)return;
+      if(!force&&serialized===watch.last&&Date.now()-watch.at<30000)return;
       window.__pmeClientState(serialized);watch.last=serialized;watch.at=Date.now();
       health.snapshots++;health.lastSnapshot=watch.at;health.truncated=snapshot.truncated;
     }catch{health.errors++;}
+  }
+  function readState(request){
+    // Resolve an explicit keyboard action from the already-mounted workspace
+    // store, without navigation, selectors, dispatch or a network request.
+    if(disposed||!teamId(request?.workspaceId)||!channelId(request?.channelId)||request.threadTs&&!ts(request.threadTs))return null;
+    const watch=watches.get(request.workspaceId);if(!watch)return null;
+    try{
+      const snapshot=project(watch.store.getState(),accounts());if(!snapshot)return null;
+      // A socket event can invalidate the host's state after our last identical
+      // snapshot. Republish even if ordinary background deduplication would skip.
+      clearTimeout(watch.timer);publish(watch,true);
+      if(!request.threadTs)return snapshot.channels.find(c=>c.id===request.channelId)?.has_unreads??null;
+      const thread=snapshot.threads.find(t=>t.channel===request.channelId&&t.ts===request.threadTs);
+      if(!thread?.last_read)return null;
+      const stamps=[thread.root?.ts,thread.root?.latest_reply,...snapshot.messages.filter(m=>m.channel===request.channelId&&m.thread_ts===request.threadTs).map(m=>m.ts)].filter(ts);
+      const latest=stamps.sort(compare).at(-1);
+      return latest?compare(latest,thread.last_read)>0:null;
+    }catch{health.errors++;return null;}
   }
   function schedule(watch){if(!disposed&&!watch.timer)watch.timer=setTimeout(()=>publish(watch),500);}
   function discover(){
@@ -108,6 +126,6 @@
       health.workspaces=watches.size;
     }catch{health.errors++;}
   }
-  window.__PME_OBSERVER__={version:'0.14.2',status:()=>({...health}),dispose(){disposed=true;clearInterval(scanTimer);for(const w of watches.values()){w.unsubscribe();clearTimeout(w.timer);}watches.clear();delete window.__PME_OBSERVER__;}};
+  window.__PME_OBSERVER__={version:'0.14.2',readState,status:()=>({...health}),dispose(){disposed=true;clearInterval(scanTimer);for(const w of watches.values()){w.unsubscribe();clearTimeout(w.timer);}watches.clear();delete window.__PME_OBSERVER__;}};
   discover();scanTimer=setInterval(discover,10000);
 })();

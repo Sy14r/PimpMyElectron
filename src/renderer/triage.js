@@ -249,7 +249,7 @@
     $('inbox-back').setAttribute('aria-label',reply?.target?.kind==='search'?'Close search results and return to inbox':'Close conversation and return to inbox');
     $('reply-back').hidden=['compose','search'].includes(reply?.target?.kind);
     controls.hidden=mode==='reply'&&['compose','search'].includes(reply?.target?.kind);
-    const failed=!openingKey&&!ready&&reply?.state==='error';
+    const failed=!openingKey&&!ready&&reply?.state!=='loading';
     $('reply-chrome').hidden=mode!=='reply'||!failed||!!quickReply;
     const cover=$('reply-placeholder');cover.hidden=mode!=='reply'||!!quickReply;
     cover.dataset.state=ready?'ready':failed?'error':'loading';
@@ -257,8 +257,8 @@
     const destination=openingKey?items().find(i=>i.key===openingKey):reply?.target;
     $('reply-destination').textContent=destination?`${destination.workspaceName||snapshot.workspaceDirectory?.find(w=>w.id===destination.workspaceId)?.name||destination.workspaceId} · ${destination.name}${destination.threadTs?' · Thread':''}`:'Native Slack conversation';
     $('reply-state').textContent=openingKey?'Opening native conversation…':ready?'Slack’s editor · ⌘⇧Y collapses and keeps your draft':reply?.reason||'Native reply is unavailable.';
-    $('reply-placeholder-message').textContent=ready?'':failed?reply.reason:'Loading conversation…';
-    $('reply-retry').hidden=reply?.state!=='error';renderQuick(reply,ready);
+    $('reply-placeholder-message').textContent=ready?'':failed?(reply?.state==='error'?reply.reason:'The conversation changed. Retry or choose another inbox item.'):'Loading conversation…';
+    $('reply-retry').hidden=!failed;renderQuick(reply,ready);
   }
   const quickCard=document.createElement('section');quickCard.id='quick-card';quickCard.hidden=true;
   quickCard.innerHTML='<header><div><strong id="quick-title"></strong><small id="quick-subtitle"></small></div><button id="quick-close" aria-label="Close quick reply" title="Close">×</button></header><footer><span id="quick-status" role="status"></span><button id="quick-inbox">Open inbox</button></footer>';
@@ -278,12 +278,15 @@
       requestAnimationFrame(()=>requestAnimationFrame(finish));
     });
   }
-  async function readFromPill(request,{inbox=false}={}){
+  async function readFromPill(request,{inbox=false,unread=false,resolveUnknown=false}={}){
     const readMode=inbox?'queue':'cluster',source=inbox?items:notificationItems,paint=inbox?render:renderPill;
-    if(mode!==readMode||!connected()||pillReadPending||!window.__PME_REPLY__)return {ok:false};
-    const item=source().find(i=>i.key===request?.key&&i.unread===true);
+    if(mode!==readMode||!connected()||pillReadPending||!window.__PME_REPLY__||unread&&!inbox)return {ok:false};
+    const item=source().find(i=>i.key===request?.key&&(i.unread===!unread||inbox&&resolveUnknown));
     if(!item)return {ok:false};
-    const run=++pillReadRun;pillReadPending={key:item.key,latest:Number(item.latest)||0};paint();schedulePillCollapse();
+    // The cache check may reach the host while the detail pane closes. If it
+    // already confirms our intended state, no native navigation is necessary.
+    if(inbox&&resolveUnknown&&item.unread===unread)return {ok:true};
+    const run=++pillReadRun;pillReadPending={key:item.key,latest:Number(item.latest)||0,unread};paint();schedulePillCollapse();
     document.body.setAttribute('data-pme-background-read','');
     try{
       await paintPillDismissal();
@@ -291,10 +294,14 @@
       const opened=await window.__PME_REPLY__.open(item,{focusEditor:false});
       if(run!==pillReadRun||disposed)return {cancelled:true};
       if(!opened?.ok)return {ok:false};
-      window.__PME_REPLY__.markReadNative();
+      if(unread){
+        const result=window.__PME_REPLY__.markUnreadNative?.();
+        if(!result?.ok)return {ok:false,error:result?.error||'unavailable'};
+        window.__PME_REPLY__.suspend();
+      }else window.__PME_REPLY__.markReadNative();
       const deadline=Date.now()+8000;
       while(run===pillReadRun&&mode===readMode&&Date.now()<deadline){
-        if(source().find(i=>i.key===item.key)?.unread===false)return {ok:true};
+        if(source().find(i=>i.key===item.key)?.unread===unread)return {ok:true};
         await new Promise(resolve=>setTimeout(resolve,200));
       }
       return run!==pillReadRun?{cancelled:true}:{ok:false};
@@ -404,7 +411,7 @@
     if(item.unread===false||Date.now()>=dismissed.until||Number(item.latest||0)>dismissed.latest){repliedPillItems.delete(item.key);return false;}
     return true;
   }
-  const pillItems=()=>notificationItems().filter(i=>!replyDismissed(i)&&i.unread===true&&!i.pendingRead&&!(i.key===pillReadPending?.key&&Number(i.latest||0)<=pillReadPending.latest)&&!['done','later'].includes(i.triage?.state));
+  const pillItems=()=>notificationItems().filter(i=>!replyDismissed(i)&&i.unread===true&&!i.pendingRead&&!pendingInboxRead(i)&&!['done','later'].includes(i.triage?.state));
   function createPillActivityTracker(){
     let scope=null,seen=new Map(),workspaces=new Set(),since=0;
     return (value,{reset=false,now=Date.now()}={})=>{
@@ -431,7 +438,7 @@
   }
   const detectPillActivity=createPillActivityTracker();
   function revealPillActivity(){
-    if(disposed)return;
+    if(disposed||settings.expandOnActivity===false)return;
     if(mode==='strip'&&nativeStripRequest)void transition('cluster',{passive:true});
     else if(mode==='cluster')touch();
   }
@@ -530,9 +537,9 @@
       if(last)head.append(el('span','row-time',time(last.ts)));
       button.append(head);
       button.append(el('div','preview',last?.text || (['queued','loading'].includes(item.history?.status)?'Loading messages…':item.history?.status==='error'?'Could not load · open to retry':item.history?.status==='ready'?'No messages returned':'Open to load messages')));
-      button.append(el('div','meta',[snapshot.workspaces.length>1?snapshot.workspaces.find(w=>w.id===item.workspaceId)?.name:null,item.kind === 'thread' ? 'Thread' : item.kind === 'channel' ? 'Channel' : 'Direct message', item.unread === null ? 'Unread unknown' : item.countsStale ? 'Unread state may be stale' : inboxUnread(item) ? 'Unread observed' : pendingInboxRead(item)?'Marking read…':'Read observed',last ? time(last.ts) : null].filter(Boolean).join(' · ')));
+      button.append(el('div','meta',[snapshot.workspaces.length>1?snapshot.workspaces.find(w=>w.id===item.workspaceId)?.name:null,item.kind === 'thread' ? 'Thread' : item.kind === 'channel' ? 'Channel' : 'Direct message', pendingInboxUnread(item)?'Marking unread…':pendingInboxRead(item)?'Marking read…':item.unread === null ? 'Unread unknown' : item.countsStale ? 'Unread state may be stale' : inboxUnread(item) ? 'Unread observed' : 'Read observed',last ? time(last.ts) : null].filter(Boolean).join(' · ')));
       const summary=[displayName(item),threadAlias(item.key)?item.name:null,item.triage?.pinned?'Pinned':null,inboxUnread(item)?'Unread':null,inboxUnread(item)&&item.unreadCount>0?`${item.unreadCount} unread`:null,button.querySelector('.meta')?.textContent,last?.text].filter(Boolean).join(' · ');
-      button.setAttribute('aria-label',summary);button.title=`${summary.slice(0,400)}\nJ/K: move · H/L: filters · /: filter text · Enter: reply · X: mark read · Option-click: read-only`;button.setAttribute('aria-keyshortcuts','h j k l ArrowLeft ArrowRight ArrowDown ArrowUp Enter x');
+      button.setAttribute('aria-label',summary);button.title=`${summary.slice(0,400)}\nJ/K: move · H/L: filters · /: filter text · Enter: reply · X: toggle read / unread · Option-click: read-only`;button.setAttribute('aria-keyshortcuts','h j k l ArrowLeft ArrowRight ArrowDown ArrowUp Enter x');
       $('list').append(button);
     }
     $('list').scrollTop = listScroll;
@@ -740,8 +747,9 @@
     else if(button.id==='collapse')void transition(mode==='cluster'?'queue':restMode());
     else if(button.id==='back')void transition('queue');
   },{signal:abort.signal});
-  const pendingInboxRead=item=>item.key===pillReadPending?.key&&Number(item.latest||0)<=pillReadPending.latest;
-  const inboxUnread=item=>item.unread===true&&!pendingInboxRead(item);
+  const pendingInboxRead=item=>pillReadPending?.unread!==true&&item.key===pillReadPending?.key&&Number(item.latest||0)<=pillReadPending.latest;
+  const pendingInboxUnread=item=>pillReadPending?.unread===true&&item.key===pillReadPending.key;
+  const inboxUnread=item=>pendingInboxUnread(item)||item.unread===true&&!pendingInboxRead(item);
   function inboxKeyItem(){
     const rows=filtered(),key=shadow.activeElement?.dataset?.key||selection;
     return rows.find(item=>item.key===key)||rows[0];
@@ -761,17 +769,27 @@
     render();focusInbox();
   }
   async function readInboxItem(){
-    const item=inboxKeyItem();if(!item||!inboxUnread(item)||!connected()||pillReadPending)return;
+    const item=inboxKeyItem();if(!item||!connected()||pillReadPending)return;
+    const unknown=typeof item.unread!=='boolean';
+    let observed=item.unread;
+    if(unknown){try{observed=window.__PME_OBSERVER__?.readState(item);}catch{observed=null;}}
+    // Missing state is not evidence of "read". If a fresh local cache check
+    // still cannot resolve it, X explicitly marks read rather than blocking.
+    const unread=observed===false;
     const rows=filtered(),at=rows.findIndex(row=>row.key===item.key),next=rows[at+1]||rows[at-1];
     // Reuse the hidden native read flow. Closing the detail pane first keeps
     // its old editor from appearing under a different conversation label.
     if(mode!=='queue')await transition('queue');
     if(mode!=='queue'||!connected())return;
     heldRow=null;$('notice').textContent='';
-    const reading=readFromPill(item,{inbox:true});
-    if(next)selection=next.key;render();focusInbox();
-    try{const result=await reading;if(!result.ok&&!result.cancelled)$('notice').textContent='Slack has not confirmed this item as read. It is still shown as unread.';}
-    catch{$('notice').textContent='Could not mark read in Slack. Try opening the conversation.';}
+    const reading=readFromPill(item,{inbox:true,unread,resolveUnknown:unknown});
+    selection=filtered().some(row=>row.key===item.key)?item.key:next?.key||null;render();focusInbox();
+    try{const result=await reading;if(!result.ok&&!result.cancelled)$('notice').textContent=result.error==='no-reply'?'This thread has no loaded replies to mark unread. You can mark its parent conversation unread instead.':result.error==='unavailable'?'Slack’s mark-unread action is unavailable for this item. Try it in Normal Slack.':`Slack has not confirmed this item as ${unread?'unread':'read'}. Showing its last observed state.`;}
+    catch{$('notice').textContent=`Could not mark ${unread?'unread':'read'} in Slack. Try opening the conversation.`;}
+    // Slack may focus a native element while changing conversations, even
+    // without focusEditor. Restore queue navigation, but never steal focus
+    // from a field or another row the user selected during the operation.
+    if(mode==='queue'&&!shadow.activeElement)focusInbox();
   }
   function composeToggleKey(event){
     if(!['queue','reading','reply'].includes(mode)||quickReply||event.defaultPrevented||event.isComposing||event.metaKey||event.ctrlKey||event.altKey||event.shiftKey||event.key.toLowerCase()!=='n')return false;
@@ -857,9 +875,14 @@
   $('search').addEventListener('input',render,{signal:abort.signal});
   // Run navigation chords before Slack's document-level shortcuts so their
   // unread traversal cannot bypass the selected triage workspace and filters.
+  function shortcutMatches(event,value){
+    if(value==='cmd-shift-y'||value==='cmd-shift-u')return !!event.metaKey&&!!event.shiftKey&&!event.ctrlKey&&!event.altKey&&event.code===(value==='cmd-shift-y'?'KeyY':'KeyU');
+    return event.code==='Space'&&!!event.altKey&&!event.metaKey&&!event.shiftKey&&(value==='ctrl-option-space'?!!event.ctrlKey:value==='option-space'&&!event.ctrlKey);
+  }
   window.addEventListener('keydown',event=>{
-    if(!event.isComposing&&event.metaKey&&event.shiftKey&&!event.ctrlKey&&!event.altKey&&event.code==='KeyU'&&!snapshot.nativeStockHotkey){
-      event.preventDefault();event.stopImmediatePropagation();if(!event.repeat)void command('stock-toggle');return;
+    if(!event.isComposing){
+      const action=shortcutMatches(event,settings.shortcut||'cmd-shift-y')&&!snapshot.nativeHotkey?'toggle':shortcutMatches(event,settings.stockShortcut||'cmd-shift-u')&&!snapshot.nativeStockHotkey?'stock-toggle':null;
+      if(action){event.preventDefault();event.stopImmediatePropagation();if(!event.repeat)void command(action);return;}
     }
     if(mode!=='stock'&&!event.isComposing&&(event.metaKey||event.ctrlKey)&&!event.altKey&&!event.shiftKey&&event.key.toLowerCase()==='k'){
       if(workspaceDialog.open||aliasDialog.open)return;
@@ -872,9 +895,6 @@
     touch();
     if(aliasDialog.open)return;
     if(densityKey(event))return;
-    if ((event.metaKey||event.ctrlKey)&&event.shiftKey&&event.code==='KeyY'&&(!snapshot.nativeHotkey||!connected())){
-      event.preventDefault();event.stopImmediatePropagation();void command('toggle');return;
-    }
     if(workspaceDialog.open){
       event.stopImmediatePropagation();
       if(event.key==='Escape'){event.preventDefault();closeWorkspacePicker();}

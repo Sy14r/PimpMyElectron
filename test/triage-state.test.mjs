@@ -65,3 +65,13 @@ test('alias validation and failed writes preserve prior names',async t=>{
  for(const [k,value] of [[item.key,'No'],['bad','No'],[key,'x'.repeat(121)],[key,'line\nbreak'],[key,null]])assert.equal(await state.setAlias(k,value),false);
  state.error='read failure';await assert.rejects(state.setAlias(key,'New'));assert.equal(state.aliases.get(key),'Existing');
 });
+
+test('global shortcuts and activity expansion migrate, persist, and reject duplicate assignments',async t=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'triage-shortcuts-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+ const file=path.join(dir,'state.json');await fs.writeFile(file,JSON.stringify({version:1,settings:{shortcut:'option-space'},records:{}}));
+ const state=await new TriageState(file).load();assert.equal(state.settings.stockShortcut,'cmd-shift-u');assert.equal(state.settings.expandOnActivity,true);
+ await state.configure({stockShortcut:'ctrl-option-space',expandOnActivity:false});const loaded=await new TriageState(file).load();assert.equal(loaded.settings.stockShortcut,'ctrl-option-space');assert.equal(loaded.settings.expandOnActivity,false);
+ await loaded.configure({shortcut:'ctrl-option-space'});assert.equal(loaded.settings.shortcut,'option-space');
+ await loaded.configure({shortcut:'ctrl-option-space',stockShortcut:'option-space'});assert.equal(loaded.settings.shortcut,'ctrl-option-space');assert.equal(loaded.settings.stockShortcut,'option-space');
+ await loaded.configure({stockShortcut:'invalid',expandOnActivity:'yes'});assert.equal(loaded.settings.stockShortcut,'option-space');assert.equal(loaded.settings.expandOnActivity,false);
+});
