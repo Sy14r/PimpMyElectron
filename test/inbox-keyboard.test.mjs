@@ -8,7 +8,7 @@ function setup(){
  const search={dataset:{},matches:()=>true,focus(){shadow.activeElement=this;},select(){calls.push(['select-filter']);}};nodes.set('list',list);nodes.set('search',search);nodes.set('notice',{});
  const status={ready:true,target:{key:'two'}};
  const env={mode:'queue',filter:'all',quickReply:null,pillReadPending:null,selection:null,openingKey:null,shadow,host,startCompose:()=>calls.push(['compose']),filtered:()=>env.filter==='unread'?rows.filter(r=>r.unread):rows,$:id=>nodes.get(id),connected:()=>true,render(){},touch(){},openItem:key=>calls.push(['open',key]),
-   window:{__PME_REPLY__:{status:()=>status,focus:()=>calls.push(['composer'])}},heldRow:null,transition:async mode=>{env.mode=mode;calls.push(['mode',mode]);},focusInbox:()=>calls.push(['inbox']),readFromPill:async(item,opts)=>{calls.push(['read',item.key,opts.inbox,opts.unread]);item.unread=opts.unread;return {ok:true};}};
+   document:{activeElement:null},setInboxInput:input=>{env.inputMode=input;},window:{__PME_REPLY__:{status:()=>status,focus:()=>calls.push(['composer'])}},heldRow:null,transition:async mode=>{env.mode=mode;calls.push(['mode',mode]);},focusInbox:()=>calls.push(['inbox']),readFromPill:async(item,opts)=>{calls.push(['read',item.key,opts.inbox,opts.unread]);item.unread=opts.unread;return {ok:true};}};
  vm.runInNewContext(helpers,env);
  const event=(key,extra={})=>({key,composedPath:()=>[shadow.activeElement,host],preventDefault(){this.prevented=true;},stopImmediatePropagation(){this.stopped=true;},...extra});
  return {env,calls,rows,list,shadow,search,event,status};
@@ -86,4 +86,37 @@ test('unknown read state checks the passive cache before choosing the toggle dir
 test('a missing or failed cache observer does not block marking unknown items read',async()=>{
  const f=setup();f.rows[0].unread=null;f.shadow.activeElement=f.list.children[0];f.env.window.__PME_OBSERVER__={readState(){throw Error('observer unavailable');}};
  await f.env.readInboxItem();assert.deepEqual(f.calls[0],['read','one',true,false]);
+});
+
+
+test('native message focus enables inbox navigation without changing the open conversation',()=>{
+ const f=setup();f.env.mode='reply';f.env.selection='two';
+ const native={closest:()=>null};f.env.document.activeElement=native;
+ const event=key=>f.event(key,{composedPath:()=>[native]});
+ assert.equal(f.env.inboxNavigationKey(event('j')),true);
+ assert.equal(f.shadow.activeElement.dataset.key,'three');assert.equal(f.env.selection,'two');
+ assert.equal(f.env.inputMode,'keyboard');assert.equal(f.calls.some(c=>c[0]==='open'),false);
+ f.shadow.activeElement=null;assert.equal(f.env.inboxNavigationKey(event('Enter')),true);assert.deepEqual(f.calls.at(-1),['composer']);
+ f.shadow.activeElement=null;assert.equal(f.env.inboxNavigationKey(event('h')),true);assert.equal(f.env.filter,'threads');
+ assert.equal(f.env.inboxNavigationKey(event('/')),true);assert.equal(f.shadow.activeElement,f.search);
+});
+test('native editors and their descendants keep inbox shortcuts until focus is released',()=>{
+ for(const viaPath of [true,false]){
+  const f=setup();f.env.mode='reply';const editor={closest:()=>({})};
+  f.env.document.activeElement=editor;
+  for(const key of ['j','k','h','l','x','/','Enter','ArrowDown','ArrowLeft']){
+   assert.equal(f.env.inboxNavigationKey(f.event(key,{composedPath:()=>viaPath?[editor]:[{}]})),false);
+  }
+  assert.deepEqual(f.calls,[]);
+ }
+});
+test('native auxiliary views, overlays and quick reply retain their navigation',()=>{
+ for(const state of ['auxiliary','overlay','switcher','quick']){
+  const f=setup();f.env.mode='reply';
+  if(state==='auxiliary')f.status.auxiliary=true;
+  if(state==='overlay')f.env.window.__PME_REPLY__.overlayOpen=()=>true;
+  if(state==='switcher')f.env.window.__PME_REPLY__.switcherOpen=()=>true;
+  if(state==='quick')f.env.quickReply={};
+  assert.equal(f.env.inboxNavigationKey(f.event('j',{composedPath:()=>[{}]})),false);assert.deepEqual(f.calls,[]);
+ }
 });

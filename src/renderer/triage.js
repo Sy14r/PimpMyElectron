@@ -853,15 +853,21 @@
     return true;
   }
   function inboxNavigationKey(event){
-    if(!['queue','reading','reply'].includes(mode)||quickReply||event.defaultPrevented||event.isComposing||event.metaKey||event.ctrlKey||event.altKey||event.shiftKey||!event.composedPath().includes(host))return false;
+    if(!['queue','reading','reply'].includes(mode)||quickReply||event.defaultPrevented||event.isComposing||event.metaKey||event.ctrlKey||event.altKey||event.shiftKey)return false;
+    const path=event.composedPath(),fromInbox=path.includes(host),reply=window.__PME_REPLY__;
+    // Native message focus can drive the inbox after Escape would close the
+    // detail. Profiles, search overlays and editors retain their own keys.
+    if(!fromInbox&&(mode!=='reply'||reply?.status().auxiliary||reply?.switcherOpen?.()||reply?.overlayOpen?.()))return false;
     const active=shadow.activeElement,key=event.key.toLowerCase();
-    const typing=event.composedPath().some(node=>node?.matches?.('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]'));
+    const editable='input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]';
+    const typing=path.some(node=>node?.closest?.(editable)||node?.matches?.(editable))||
+      !fromInbox&&document.activeElement?.closest?.(editable);
     const horizontal=['ArrowLeft','ArrowRight'].includes(event.key),arrows=['ArrowDown','ArrowUp'].includes(event.key),enter=event.key==='Enter';
     if(typing&&!(active===$('search')&&(arrows||enter)))return false;
     if(!arrows&&!horizontal&&!['h','j','k','l','x','/'].includes(key)&&!enter)return false;
     // Keep Enter's ordinary button activation on header and filter controls.
-    if(enter&&!active?.dataset?.key&&active!==$('search'))return false;
-    event.preventDefault();event.stopImmediatePropagation();touch();
+    if(enter&&fromInbox&&!active?.dataset?.key&&active!==$('search'))return false;
+    event.preventDefault();event.stopImmediatePropagation();touch();setInboxInput('keyboard');
     if(key==='/'){$('search').focus({preventScroll:true});$('search').select();}
     else if(horizontal||key==='h'||key==='l')moveInboxFilter(event.key==='ArrowLeft'||key==='h'?-1:1);
     else if(arrows||key==='j'||key==='k')moveInboxCursor(event.key==='ArrowUp'||key==='k'?-1:1);

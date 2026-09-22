@@ -458,10 +458,11 @@
       frame=requestAnimationFrame(()=>{frame=requestAnimationFrame(finish);});
     });
   }
-  async function findMissingDM(run){
-    // A cached DM (notably legacy Slackbot) may have no sidebar row yet. Use
-    // Slack's native search once, matching the cached member ID, never its name.
-    if(!/^D[A-Z0-9]+$/.test(target.channelId)||!target.peer||!inWorkspace()||overlayOpen())return false;
+  async function findMissingConversation(run){
+    // Cached conversations may be absent from Slack's filtered/virtualized
+    // sidebar. Use its native search once and match the exact destination ID.
+    const member=/^D[A-Z0-9]+$/.test(target.channelId),resultId=member?target.peer:target.channelId;
+    if(!(member?/^[UW][A-Z0-9]+$/.test(resultId||''):/^[CG][A-Z0-9]+$/.test(resultId||''))||!inWorkspace()||overlayOpen())return false;
     const button=document.querySelector('[data-qa="top_nav_search"]');if(!button)return false;
     const destination={...target};let modal=null,field=null,typed=false,cancelled=false;
     const cancel=()=>{if(cancelled)return;cancelled=true;if(modal?.isConnected)modal.querySelector('[data-qa="search_input_close"]')?.click();};
@@ -486,7 +487,7 @@
           }
           // If the user changes the query, stop controlling this search.
           if(field.textContent.trim()!==destination.name){modal=null;return false;}
-          const result=[...modal.querySelectorAll('[data-qa="search_autocomplete"] [data-type="member"][data-is-navigational="true"]')].find(n=>n.getAttribute('data-id')===destination.peer);
+          const result=[...modal.querySelectorAll(`[data-qa="search_autocomplete"] [data-type="${member?'member':'channel'}"][data-is-navigational="true"]`)].find(n=>n.getAttribute('data-id')===resultId);
           if(result&&current()){result.click();modal=null;return true;}
         }else if(typed)return false;
         await waitForNativeChange();
@@ -676,7 +677,7 @@
       if(!nativeNavigate&&!['compose','search','activity'].includes(target.kind)&&inWorkspace()&&channelClicks<3&&!threadClicked&&Date.now()-lastChannelClick>=750&&!locate()&&!(target.threadTs&&locate(null))){
         const row=[...document.querySelectorAll('[data-qa="channel-sidebar-channel"]')].find(n=>n.getAttribute('data-qa-channel-sidebar-channel-id')===target.channelId);
         if(row){channelClicks++;lastChannelClick=Date.now();row.click();}
-        else if(!lookupAttempted&&!inConversation()&&target.peer){lookupAttempted=true;await findMissingDM(run);continue;}
+        else if(!lookupAttempted&&!inConversation()&&(target.peer||/^[CG]/.test(target.channelId))){lookupAttempted=true;await findMissingConversation(run);continue;}
       }
       const found=target.kind==='activity'?locateActivity():target.kind==='search'?locateSearch():target.kind==='compose'?locateCompose():locate();
       if(found){
