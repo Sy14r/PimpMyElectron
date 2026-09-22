@@ -370,3 +370,18 @@ test('cancelling a deferred profile close cannot act on the native pane afterwar
  const e=setup();await e.api.open({workspaceId:'TONE',channelId:'CONE'});e.setAuxiliary('profile');e.tick();let closes=0;e.auxView.querySelector=()=>({click(){closes++;}});
  e.api.closeAuxiliary();e.api.suspend();await new Promise(r=>setTimeout(r,20));assert.equal(closes,0);assert.equal(e.api.status().active,false);e.api.dispose();
 });
+
+test('Activity is a verified read-only pane and parking leaves drafts and the reopen destination intact',async()=>{
+ const env=setup();await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+ const before=env.editor.textContent,query=env.document.querySelector;
+ let detail=true;
+ const activityView={isConnected:true,setAttribute(){},removeAttribute(){},querySelector:()=>null};
+ env.document.querySelector=s=>s==='[data-qa="tab_rail_activity_button"]'?{click(){env.location.pathname='/client/TONE/activity-inbox';}}:
+  s.startsWith('.p-view_contents--primary')&&detail?{click(){detail=false;}}:
+  s==='[data-qa="activity-inbox-sidebar-header-title"]'?{closest:()=>activityView}:
+  s==='[data-qa="message_input"],[data-qa="message_pane"],[data-qa="threads_flexpane"],[data-qa="composer_page"]'?(detail?env.editor:null):query(s);
+ assert.equal((await env.api.park()).ok,true);assert.equal(env.api.status().active,false);assert.equal(env.api.status().target.channelId,'CONE');
+ assert.equal((await env.api.open({kind:'activity',workspaceId:'TONE'},{focusEditor:false})).ok,true);
+ assert.equal(env.api.status().ready,true);assert.equal(env.api.status().readOnly,true);assert.equal(env.api.markReadNative().ok,false);assert.equal(env.api.markUnreadNative().ok,false);
+ assert.equal(env.editor.textContent,before);env.api.dispose();
+});

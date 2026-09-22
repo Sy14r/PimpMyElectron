@@ -73,9 +73,9 @@ const start=triage.indexOf("  window.addEventListener('keydown',event=>{");
 const end=triage.indexOf('},{capture:true,signal:abort.signal});',start)+'},{capture:true,signal:abort.signal});'.length;
 test('Command-K is captured before inbox filtering, while full Slack, native dialogs and IME keep their keys',()=>{
   let listener,opened=0,navigated=0;
-  const env={settings:{},snapshot:{},shortcutMatches:()=>false,densityMenu:{matches:()=>false},mode:'queue',aliasDialog:{open:false},workspaceDialog:{open:false},abort:{signal:{}},openNativeSwitcher:()=>opened++,composeToggleKey:()=>false,inboxNavigationKey:()=>false,triageNavigationKey:()=>navigated++,window:{addEventListener:(_name,fn)=>listener=fn,__PME_REPLY__:{switcherOpen:()=>false,overlayOpen:()=>false}}};
+  const env={quickReply:null,host:{},setInboxInput(){},settings:{},snapshot:{},shortcutMatches:()=>false,densityMenu:{matches:()=>false},mode:'queue',aliasDialog:{open:false},workspaceDialog:{open:false},abort:{signal:{}},openNativeSwitcher:()=>opened++,composeToggleKey:()=>false,inboxNavigationKey:()=>false,triageNavigationKey:()=>navigated++,window:{addEventListener:(_name,fn)=>listener=fn,__PME_REPLY__:{switcherOpen:()=>false,overlayOpen:()=>false}}};
   vm.runInNewContext(triage.slice(start,end),env);
-  const key=extra=>({key:'k',metaKey:true,preventDefault(){this.prevented=true;},stopImmediatePropagation(){this.stopped=true;},...extra});
+  const key=extra=>({composedPath:()=>[],key:'k',metaKey:true,preventDefault(){this.prevented=true;},stopImmediatePropagation(){this.stopped=true;},...extra});
   const event=key();listener(event);assert.equal(opened,1);assert.equal(event.stopped,true);
   listener(key({repeat:true}));assert.equal(opened,1);
   env.mode='reply';listener(key());assert.equal(opened,2);

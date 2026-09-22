@@ -85,3 +85,12 @@ test('reply switching reuses geometry only when compact/full size is unchanged',
   assert.equal(options[0].reuseLayout,reuseLayout);
  }
 });
+
+test('queue, reader and hidden surfaces park Slack; normal Slack and direct detail switches do not',async()=>{
+ for(const next of ['queue','reading','cluster','strip','hidden','stock','reply']){
+  const f=motionEnv('reply');f.env.previousFocus=null;f.env.shadow={querySelector:()=>({focus(){}})};f.env.window.__PME_REPLY__.park=async()=>{f.calls.push('park');return {ok:true};};
+  await f.env.transition(next);
+  assert.equal(f.calls.includes('park'),!['stock','reply'].includes(next));
+  if(f.calls.includes('park')){assert.ok(f.calls.indexOf('layout:'+next)<f.calls.indexOf('park'));assert.equal(f.env.resumeReply,false);}
+ }
+});

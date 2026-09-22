@@ -79,6 +79,15 @@ leaving a stuck loading state. See [native navigation checks](research/native-na
 configured to always show scrollbars. Inbox filters are now All, Unread, Mentions,
 DMs and Threads. Saved Attention/Later/Done filter selections reset to All.
 
+The inbox’s **Activity** bell opens Slack’s native Activity feed in a themed side
+pane. In All workspaces mode, choose which workspace’s Activity to display.
+Escape still closes the detail pane to the queue (and first releases focus when
+used inside the composer). Closing details or hiding triage also parks native
+Slack on Activity **in the background**, closing Activity’s remembered detail so
+an invisible conversation cannot consume incoming messages as read. Returning to
+triage starts at the inbox. Normal Slack handoffs retain the visible destination.
+See [Activity parking and validation](research/activity-parking.md).
+
 **0.17.0** adds **Compose** at the top right of the inbox. It opens Slack’s native
 New Message view beside the queue, including recipient selection and the editor.
 It uses the selected workspace, or the active Slack workspace when All workspaces

@@ -89,3 +89,11 @@ test('cache resolution arriving before the hidden flow can confirm the intended 
  assert.equal((await s.env.readFromPill({key:s.item.key},{inbox:true,resolveUnknown:true})).ok,true);
  assert.equal(s.calls.length,0);assert.equal(s.env.pillReadPending,null);
 });
+
+test('background read parks the native conversation before releasing its hidden rendering guard',async()=>{
+ const s=setup();let finishPark;
+ s.env.window.__PME_REPLY__.park=()=>new Promise(r=>{finishPark=r;});
+ const pending=s.env.readFromPill({key:s.item.key});await new Promise(r=>setImmediate(r));s.open({ok:true});await new Promise(r=>setImmediate(r));
+ assert.equal(s.attrs.has('data-pme-background-read'),true);assert.ok(s.env.pillReadPending);
+ finishPark({ok:true});await pending;assert.equal(s.attrs.size,0);assert.equal(s.env.pillReadPending,null);
+});

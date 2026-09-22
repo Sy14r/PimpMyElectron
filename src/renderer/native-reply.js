@@ -5,14 +5,33 @@
   const key='__pme_native_reply_v1',abort=new AbortController();
   let target=null,active=false,state='idle',reason='',pane=null,editor=null,composer=null,generation=0,disposed=false,scrollMethod=null,threadNavigation=null;
   let pendingSend=null,sendSequence=0,nativeAction=null,switcher=null;
-  let aliasButton=null,aliasTitle=null;
+  let aliasButton=null,aliasTitle=null,parkingState='idle';
   let header=null,openSlackButton=null,readOnly=false,cancelLookup=null;
   let menuButton=null,conversationMenu=null,auxiliary=null,auxiliaryMissingAt=0;
   const hiddenHeaderNodes=new Set();
-  const valid=t=>t&&/^[TE][A-Z0-9]+$/.test(t.workspaceId)&&(['compose','search'].includes(t.kind)?!t.channelId&&!t.threadTs:/^[CDG][A-Z0-9]+$/.test(t.channelId)&&(!t.threadTs||/^\d+\.\d+$/.test(t.threadTs)));
+  const valid=t=>t&&/^[TE][A-Z0-9]+$/.test(t.workspaceId)&&(['compose','search','activity'].includes(t.kind)?!t.channelId&&!t.threadTs:/^[CDG][A-Z0-9]+$/.test(t.channelId)&&(!t.threadTs||/^\d+\.\d+$/.test(t.threadTs)));
   try{const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(valid(saved?.target)&&Date.now()-saved.at<86400000){target=saved.target;active=saved.active===true;}}catch{}
   const style=document.createElement('style');style.id='pme-native-reply-style';
   style.textContent=`[data-pme-native-reply-pane]{position:fixed!important;inset:0 0 0 420px!important;width:calc(100vw - 420px)!important;height:100vh!important;max-height:none!important;min-width:0!important;z-index:2!important;background:var(--sk_primary_background,#1a1d21);}
+    /* Activity shares the triage palette only while embedded. Its native
+       tabs, filtering, virtualization, and notification controls stay intact. */
+    [data-pme-native-activity] :is(.p-home_header,.activity_layout_header__contents,.activity_layout_header__tabs,.p-view_sidebar,.p-activity_ia4_page__filter_bar,.c-virtual_list__scroll_container){background:#191f2c!important;color:#cdd4e4!important;border-color:#ffffff12!important;}
+    [data-pme-native-activity] .activity_layout_header__contents{min-height:52px!important;padding:8px 16px!important;gap:8px;}
+    [data-pme-native-activity] [data-qa="activity-inbox-sidebar-header-title"]{font-size:16px!important;font-weight:650!important;color:#edf0f7!important;flex:1;min-width:0;}
+    [data-pme-native-activity] .activity_layout_header__tabs{padding:0 12px!important;}
+    [data-pme-native-activity] .c-tabs__tab{font-size:12px!important;color:#94a2b8!important;}
+    [data-pme-native-activity] .c-tabs__tab--active{color:#d2c4f3!important;box-shadow:inset 0 -2px #b7a8ec!important;}
+    [data-pme-native-activity] [data-qa="activity-item-container"]{background:#202735!important;color:#cdd4e4!important;border:1px solid #ffffff0c!important;border-radius:10px!important;box-shadow:none!important;}
+    [data-pme-native-activity] [data-qa="activity-item-container"]:hover{background:#293246!important;border-color:#b7a8ec44!important;}
+    [data-pme-native-activity] [class*="activity_row_content_container"]{background:#202735!important;color:#cdd4e4!important;border-color:#ffffff10!important;border-radius:9px!important;}
+    [data-pme-native-activity] [data-qa="activity-item-container"]:hover [class*="activity_row_content_container"]{background:#293246!important;}
+    [data-pme-native-activity] [class*="activity_detailed_row_content__sender_name"]{font-size:13px!important;color:#edf0f7!important;}
+    [data-pme-native-activity] [class*="activity_detailed_row_content__sender__destination"]{font-size:12px!important;color:#94a2b8!important;}
+    [data-pme-native-activity] :is(.p-activity_page__date_divider__pill,.p-activity_ia4_page__filter_bar button){background:#202735!important;color:#94a2b8!important;border-color:#ffffff14!important;box-shadow:none!important;font-size:12px!important;}
+    [data-pme-native-activity] .p-activity_page__date_divider__line{background:#ffffff10!important;}
+    [data-pme-native-activity] [data-qa="activity-item-message"]{font-size:13px!important;line-height:1.55!important;color:#bcc6d8!important;}
+    [data-pme-native-activity] [data-qa="inbox-date-divider"]{background:#191f2c!important;color:#8796ae!important;font-size:11px!important;}
+    [data-pme-native-activity] :is(input,[role="searchbox"]){background:#141925!important;color:#cdd4e4!important;border-color:#ffffff18!important;border-radius:8px!important;}
     body[data-pme-native-reply] .p-view_contents:not([data-pme-native-reply-pane]){visibility:hidden!important;}
     body[data-pme-native-reply] [data-pme-native-reply-pane]{visibility:visible!important;}
     body:is([data-pme-native-reply],[data-pme-switcher]) > .ReactModalPortal > .ReactModal__Overlay{z-index:2147483647!important;}
@@ -66,6 +85,7 @@
     [data-pme-native-reply-pane] [data-pme-native-composer] [data-qa="texty_send_button"]:hover:not(:disabled):not([aria-disabled="true"]){background:#c9baf1!important;color:#20182b!important;}
     body[data-pme-quick] [data-pme-native-reply-pane]{inset:64px 0 38px!important;width:100vw!important;height:calc(100vh - 102px)!important;visibility:visible!important;z-index:2147483647!important;-webkit-app-region:no-drag;}
     body[data-pme-quick] [data-pme-native-reply-pane] :is(.p-channel_header,.p-view_header,[role="toolbar"][aria-label="Primary view actions"],[role="tablist"]){display:none!important;}
+    body[data-pme-parking] :is(.ReactModalPortal,.c-popover,.c-menu){visibility:hidden!important;pointer-events:none!important;}
     body[data-pme-background-read] [data-pme-native-reply-pane]{visibility:hidden!important;pointer-events:none!important;}
     [data-pme-native-reply-pane] [data-pme-native-header]{background:#191f2c!important;border-color:#ffffff10!important;}
     [data-pme-native-reply-pane] [data-pme-native-header] :is([data-qa="ai_summary_summarize_thread_button"],[data-qa="secondary-header-more"],[data-feat="view-header:more"]){display:none!important;}
@@ -107,11 +127,11 @@
   const path=()=>location.pathname.split('/');
   const nativeTeam=()=>document.querySelector('[data-qa="team_sidebar_item"][data-team-active="true"]')?.getAttribute('data-team');
   const inWorkspace=()=>target&&path()[2]===target.workspaceId&&nativeTeam()===target.workspaceId;
-  const inConversation=()=>target?.kind!=='compose'&&inWorkspace()&&path()[3]===target.channelId;
+  const inConversation=()=>!!target?.channelId&&inWorkspace()&&(path()[3]===target.channelId||path()[3]==='activity-inbox'&&!!document.querySelector(`[data-qa="message_input"][data-channel-id="${target.channelId}"]`));
   function save(){try{target?sessionStorage.setItem(key,JSON.stringify({target,active,at:Date.now()})):sessionStorage.removeItem(key);}catch{}}
   function notify(){window.dispatchEvent(new CustomEvent('pme-native-reply-state'));}
   function auxiliaryReady(){return !!auxiliary?.view.isConnected&&inWorkspace();}
-  function status(){return {active,state,reason,target:target&&{...target},auxiliary:auxiliary?.kind||null,readOnly,send:pendingSend&&{confirmed:pendingSend.confirmed,dirty:pendingSend.dirty,visible:!!pendingSend.visibleAt},ready:active&&state==='ready'&&(auxiliaryReady()||verifiedPane()),scrollMethod,threadNavigation};}
+  function status(){return {active,state,reason,parking:parkingState,target:target&&{...target},auxiliary:auxiliary?.kind||null,readOnly,send:pendingSend&&{confirmed:pendingSend.confirmed,dirty:pendingSend.dirty,visible:!!pendingSend.visibleAt},ready:active&&state==='ready'&&(auxiliaryReady()||verifiedPane()),scrollMethod,threadNavigation};}
   function closeMenu({focus=false}={}){conversationMenu?.remove();conversationMenu=null;menuButton?.setAttribute('aria-expanded','false');if(focus)menuButton?.focus({preventScroll:true});}
   function clearHeader(){aliasButton?.remove();aliasButton=null;aliasTitle?.removeAttribute('data-pme-alias-title');aliasTitle=null;closeMenu();menuButton?.remove();menuButton=null;for(const node of hiddenHeaderNodes)node.removeAttribute('data-pme-menu-native');hiddenHeaderNodes.clear();openSlackButton?.remove();openSlackButton=null;header?.removeAttribute('data-pme-native-header');header=null;}
   function nativeMenuControls(){
@@ -122,6 +142,7 @@
       {id:'invite',button:invite,label:'Invite teammates…'}].filter(row=>row.button);
   }
   function syncMenuButton(actions){
+    if(target?.kind==='activity')return;
     const controls=nativeMenuControls();if(!controls.length)return;
     for(const {button} of controls){
       let root=button;while(root.parentElement&&root.parentElement!==actions&&actions.contains(root.parentElement))root=root.parentElement;
@@ -207,14 +228,14 @@
     aliasButton.title=alias?'Rename personal thread name':'Give this thread a personal name';aliasButton.setAttribute('aria-label',`${aliasButton.title}${alias?' · '+alias:''}`);
   }
   function themeHeader(){
-    const next=target?.kind==='search'?pane?.querySelector('[data-qa="search_view"]')?.firstElementChild:target?.kind==='compose'?null:pane?.querySelector(auxiliary?'.p-flexpane_header,.p-explorer_header':target?.threadTs?'.p-flexpane_header,.p-threads_flexpane__header':'.p-view_header,.p-channel_header');
+    const next=target?.kind==='activity'?pane?.querySelector('[data-qa="activity-inbox-sidebar-header-title"]')?.parentElement:target?.kind==='search'?pane?.querySelector('[data-qa="search_view"]')?.firstElementChild:target?.kind==='compose'?null:pane?.querySelector(auxiliary?'.p-flexpane_header,.p-explorer_header':target?.threadTs?'.p-flexpane_header,.p-threads_flexpane__header':'.p-view_header,.p-channel_header');
     if(next!==header){clearHeader();header=next;header?.setAttribute('data-pme-native-header','');}
     if(!header)return;
     const actions=header.querySelector('.p-flexpane_header__primary,.p-view_header__actions,.p-explorer_header__container')||header;
     syncAliasButton(actions);
     if(openSlackButton?.parentElement===actions){syncMenuButton(actions);return;}
     openSlackButton?.remove();openSlackButton=document.createElement('button');openSlackButton.type='button';openSlackButton.className='pme-open-slack';
-    const label=target.kind==='search'?'Open search results in Slack':auxiliary?`Open ${auxiliary.kind} in Slack`:target.threadTs?'Open thread in Slack':'Open conversation in Slack';
+    const label=target.kind==='activity'?'Open Activity in Slack':target.kind==='search'?'Open search results in Slack':auxiliary?`Open ${auxiliary.kind} in Slack`:target.threadTs?'Open thread in Slack':'Open conversation in Slack';
     openSlackButton.setAttribute('aria-label',label);openSlackButton.title=label;
     // Match the monochrome Slack icon already used in the triage navigation.
     openSlackButton.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">'+[0,90,180,270].map(angle=>`<g transform="rotate(${angle} 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g>`).join('')+'</svg>';
@@ -244,9 +265,9 @@
     composer?.removeAttribute('data-pme-native-composer');composer=root;
     composer?.setAttribute('data-pme-native-composer','');
   }
-  function unframe(){cancelLookup?.();pendingSend=null;nativeAction=null;clearHeader();document.body?.removeAttribute('data-pme-native-reply');composer?.removeAttribute('data-pme-native-composer');composer=null;for(const n of document.querySelectorAll('[data-pme-message-focus]')){n.removeAttribute('tabindex');n.removeAttribute('data-pme-message-focus');}for(const n of document.querySelectorAll('[data-pme-native-reply-pane]')){n.removeAttribute('data-pme-native-reply-pane');n.removeAttribute('data-pme-native-auxiliary');}auxiliary=null;auxiliaryMissingAt=0;pane=null;editor=null;readOnly=false;}
+  function unframe(){cancelLookup?.();pendingSend=null;nativeAction=null;clearHeader();document.body?.removeAttribute('data-pme-native-reply');composer?.removeAttribute('data-pme-native-composer');composer=null;for(const n of document.querySelectorAll('[data-pme-message-focus]')){n.removeAttribute('tabindex');n.removeAttribute('data-pme-message-focus');}for(const n of document.querySelectorAll('[data-pme-native-reply-pane]')){n.removeAttribute('data-pme-native-reply-pane');n.removeAttribute('data-pme-native-auxiliary');n.removeAttribute('data-pme-native-activity');}auxiliary=null;auxiliaryMissingAt=0;pane=null;editor=null;readOnly=false;}
   // A notifications-only pane is valid to display, never valid to send through.
-  function verifiedPane(){if(target?.kind==='search')return active&&pane?.isConnected&&locateSearch()?.view===pane;return readOnly?active&&pane?.isConnected&&locateReadOnly()?.view===pane:verified();}
+  function verifiedPane(){if(target?.kind==='activity')return active&&pane?.isConnected&&locateActivity()?.view===pane;if(target?.kind==='search')return active&&pane?.isConnected&&locateSearch()?.view===pane;return readOnly?active&&pane?.isConnected&&locateReadOnly()?.view===pane:verified();}
   function verified(){
     if(!active||readOnly||!pane?.isConnected)return false;
     if(target.kind==='compose'){
@@ -256,6 +277,47 @@
     if(!inConversation()||!editor?.isConnected||!pane.contains(editor))return false;
     const box=editor.closest('[data-qa="message_input"]');
     return box?.getAttribute('data-channel-id')===target.channelId&&(box.getAttribute('data-thread-ts')||null)===(target.threadTs||null);
+  }
+  function activityDetailMounted(){
+    return !!document.querySelector('[data-qa="message_input"],[data-qa="message_pane"],[data-qa="threads_flexpane"],[data-qa="composer_page"]');
+  }
+  function locateActivity(){
+    if(!inWorkspace()||path()[3]!=='activity-inbox'||activityDetailMounted())return null;
+    const title=document.querySelector('[data-qa="activity-inbox-sidebar-header-title"]');
+    const view=title?.closest('.p-view_contents');
+    return view?.isConnected?{view,input:null,readOnly:true}:null;
+  }
+  async function navigateActivity(run){
+    let clicked=false,moreClicked=false,stableAt=0;
+    const deadline=Date.now()+2500;
+    while(!disposed&&run===generation&&Date.now()<deadline){
+      if(path()[3]!=='activity-inbox'){
+        const tab=document.querySelector('[data-qa="tab_rail_activity_button"]');
+        if(!clicked&&tab){clicked=true;tab.click();}
+        else if(!clicked){
+          const item=document.querySelector('[data-qa="menu_item_button"][aria-describedby="activity-description"]');
+          if(item){clicked=true;item.click();}
+          else if(!moreClicked){const more=document.querySelector('[data-qa="tab_rail_browse_button"]');if(more){moreClicked=true;more.click();}}
+        }
+      }else{
+        // Activity remembers its own selected conversation. Its native Close
+        // button must unmount that detail; merely hiding it still marks reads.
+        const close=document.querySelector('.p-view_contents--primary [data-qa="view_header"] button[aria-label="Close"],.p-view_contents--primary [data-qa="quip_close_thread"],.p-view_contents--primary [data-qa="threads_flexpane"] button[aria-label="Close"]');
+        if(close){close.click();stableAt=0;}
+        else if(!activityDetailMounted()&&document.querySelector('[data-qa="activity-inbox-sidebar-header-title"]')){
+          if(!stableAt)stableAt=Date.now();
+          if(Date.now()-stableAt>=150)return {ok:true};
+        }else stableAt=0;
+      }
+      await pause(50);
+    }
+    return run!==generation||disposed?{cancelled:true}:{ok:false,error:'Slack could not leave the conversation. Open Normal Slack and close its detail pane.'};
+  }
+  async function park(){
+    suspend();const run=generation;parkingState='parking';document.body.setAttribute('data-pme-parking','');
+    let result;try{result=await navigateActivity(run);}catch{result={ok:false,error:'Slack could not leave the conversation. Open Normal Slack and close its detail pane.'};}
+    if(run===generation&&!disposed){document.body.removeAttribute('data-pme-parking');parkingState=result.ok?'parked':'failed';notify();}
+    return result;
   }
   function locateSearch(){
     if(!inWorkspace()||path()[3]!=='search')return null;
@@ -315,7 +377,7 @@
     navigate({channelId:target.channelId,ts:target.threadTs});return true;
   }
   function jumpToLatest(){
-    if(['compose','search'].includes(target?.kind)||!verifiedPane()||state!=='ready')return {ok:false};
+    if(['compose','search','activity'].includes(target?.kind)||!verifiedPane()||state!=='ready')return {ok:false};
     let usedNative=false;
     try{
       const jump=target.threadTs?
@@ -332,7 +394,7 @@
     scrollMethod=usedNative?'native-latest':'rendered-bottom';return {ok:true,method:scrollMethod};
   }
   function markReadNative(){
-    if(!verifiedPane()||state!=='ready'||auxiliary||['compose','search'].includes(target?.kind))return {ok:false};
+    if(!verifiedPane()||state!=='ready'||auxiliary||['compose','search','activity'].includes(target?.kind))return {ok:false};
     if(target.threadTs){
       // A manually unread thread suppresses Slack's automatic read-on-open.
       // Use the thread's own explicit mark-read action (also used by Escape).
@@ -349,7 +411,7 @@
     if(!mark)return {ok:false};mark();return {ok:true};
   }
   function markUnreadNative(){
-    if(!verifiedPane()||state!=='ready'||auxiliary||['compose','search'].includes(target?.kind))return {ok:false};
+    if(!verifiedPane()||state!=='ready'||auxiliary||['compose','search','activity'].includes(target?.kind))return {ok:false};
     let mark,noReply=false;
     if(target.threadTs){
       mark=nativeCapability(pane.querySelector('[data-qa="threads_flexpane"]'),p=>{
@@ -540,7 +602,7 @@
     else if(session.selected&&Date.now()-session.selectedAt>15000)cancelSwitcher();
   }
   function focus(){
-    if(target?.kind==='search')return focusMessages();
+    if(['search','activity'].includes(target?.kind))return focusMessages();
     if(state!=='ready'||!verified())return false;
     (target.kind==='compose'?locateCompose()?.recipient||editor:editor).focus({preventScroll:true});return true;
   }
@@ -553,14 +615,14 @@
     if(!valid(request)||disposed)return {ok:false,error:'Invalid reply destination'};
     const previousAuxiliary=findAuxiliary();
     const close=previousAuxiliary?.kind==='full search'?document.querySelector('[data-qa="tab_rail_home_button"]'):previousAuxiliary?.view.querySelector('button:has(svg[data-qa="caret-left-full"]),button[aria-label="Close"]');
-    const run=++generation;unframe();scrollMethod=null;threadNavigation=null;
-    target=['compose','search'].includes(request.kind)?{kind:request.kind,workspaceId:request.workspaceId,key:`${request.workspaceId}:${request.kind}`,name:request.kind==='search'?'Search results':'New message',workspaceName:String(request.workspaceName||request.workspaceId).slice(0,180)}:
+    const run=++generation;document.body.removeAttribute('data-pme-parking');parkingState='idle';unframe();scrollMethod=null;threadNavigation=null;
+    target=['compose','search','activity'].includes(request.kind)?{kind:request.kind,workspaceId:request.workspaceId,key:`${request.workspaceId}:${request.kind}`,name:request.kind==='activity'?'Activity':request.kind==='search'?'Search results':'New message',workspaceName:String(request.workspaceName||request.workspaceId).slice(0,180)}:
       {workspaceId:request.workspaceId,channelId:request.channelId,threadTs:request.threadTs||null,
       key:request.key||`${request.workspaceId}:${request.channelId}:${request.threadTs||''}`,messageTs:/^\d+\.\d+$/.test(request.messageTs||'')?request.messageTs:null,peer:/^[UW][A-Z0-9]+$/.test(request.peer||'')?request.peer:undefined,name:String(request.name||request.channelId).slice(0,180),workspaceName:String(request.workspaceName||request.workspaceId).slice(0,180)};
-    active=true;state='loading';reason=target.kind==='search'?'Opening Slack’s search results…':target.kind==='compose'?'Opening Slack’s new message composer…':'Opening Slack’s native editor…';save();notify();
+    active=true;state='loading';reason=target.kind==='activity'?'Opening Slack’s Activity…':target.kind==='search'?'Opening Slack’s search results…':target.kind==='compose'?'Opening Slack’s new message composer…':'Opening Slack’s native editor…';save();notify();
     // Use Slack's own navigation. Assigning a URL can race the desktop client's
     // remembered workspace and restore the old route over the requested editor.
-    let workspaceClicked=false,channelClicks=0,lastChannelClick=0,threadClicked=false,tabClicked=false,auxClosed=false,composeClicked=false,lookupAttempted=false;
+    let workspaceClicked=false,channelClicks=0,lastChannelClick=0,threadClicked=false,tabClicked=false,auxClosed=false,composeClicked=false,lookupAttempted=false,homeClicked=false,activityOpened=false,activityItemClicked=false;
     const deadline=Date.now()+10000;
     try{
       if(nativeNavigate){
@@ -578,6 +640,18 @@
       if(!nativeNavigate&&!inWorkspace()&&!workspaceClicked){
         const team=[...document.querySelectorAll('[data-qa="team_sidebar_item"]')].find(n=>n.getAttribute('data-team')===target.workspaceId);
         if(team){workspaceClicked=true;team.click();}
+      }
+      if(!nativeNavigate&&inWorkspace()&&target.kind!=='activity'&&path()[3]==='activity-inbox'&&!homeClicked){
+        const home=document.querySelector('[data-qa="tab_rail_home_button"]');
+        if(home&&!inConversation()){homeClicked=true;home.click();await waitForNativeChange();continue;}
+        if(!home&&!activityItemClicked&&target.channelId){
+          const row=[...document.querySelectorAll('[data-qa="activity-item-container"]')].find(row=>{const item=activityItem(row,target.workspaceId);return item?.channelId===target.channelId&&(item.threadTs||null)===(target.threadTs||null);});
+          if(row){activityItemClicked=true;row.click();await waitForNativeChange();continue;}
+        }
+      }
+      if(target.kind==='activity'&&inWorkspace()&&!activityOpened){
+        activityOpened=true;const parked=await navigateActivity(run);
+        if(!parked.ok){if(!parked.cancelled)fail(parked.error);return parked;}
       }
       // A Canvas/popout can obscure the conversation while its URL stays the
       // same. Selecting the native row also restores the actual message view.
@@ -597,20 +671,20 @@
           close.click();auxClosed=true;lastChannelClick=Date.now();await waitForNativeChange();continue;
         }
       }
-      if(!nativeNavigate&&!['compose','search'].includes(target.kind)&&inWorkspace()&&channelClicks<3&&!threadClicked&&Date.now()-lastChannelClick>=750&&!locate()&&!(target.threadTs&&locate(null))){
+      if(!nativeNavigate&&!['compose','search','activity'].includes(target.kind)&&inWorkspace()&&channelClicks<3&&!threadClicked&&Date.now()-lastChannelClick>=750&&!locate()&&!(target.threadTs&&locate(null))){
         const row=[...document.querySelectorAll('[data-qa="channel-sidebar-channel"]')].find(n=>n.getAttribute('data-qa-channel-sidebar-channel-id')===target.channelId);
         if(row){channelClicks++;lastChannelClick=Date.now();row.click();}
         else if(!lookupAttempted&&!inConversation()&&target.peer){lookupAttempted=true;await findMissingDM(run);continue;}
       }
-      const found=target.kind==='search'?locateSearch():target.kind==='compose'?locateCompose():locate();
+      const found=target.kind==='activity'?locateActivity():target.kind==='search'?locateSearch():target.kind==='compose'?locateCompose():locate();
       if(found){
-        pane=found.view;editor=found.input;readOnly=!!found.readOnly;pane.setAttribute('data-pme-native-reply-pane','');document.body.setAttribute('data-pme-native-reply','');themeComposer();themeHeader();
-        state='ready';reason=target.kind==='search'?'Slack’s search results':readOnly?'Slack’s notifications-only conversation':'Slack’s editor · sending and drafts are handled by Slack';save();notify();
+        pane=found.view;editor=found.input;readOnly=!!found.readOnly;pane.setAttribute('data-pme-native-reply-pane','');if(target.kind==='activity')pane.setAttribute('data-pme-native-activity','');document.body.setAttribute('data-pme-native-reply','');themeComposer();themeHeader();
+        state='ready';reason=target.kind==='activity'?'Slack’s Activity':target.kind==='search'?'Slack’s search results':readOnly?'Slack’s notifications-only conversation':'Slack’s editor · sending and drafts are handled by Slack';save();notify();
         // Allow the reframed list to measure its final height before jumping.
         await afterLayout();if(disposed||run!==generation||!active)return {cancelled:true};
         if(!verifiedPane()){fail('The Slack destination changed. Reopen the conversation to continue.');return {ok:false,error:reason};}
         if(target.messageTs&&!nativeNavigate){if(!jumpToMessage(target.messageTs)){fail('Slack could not locate the linked message. Open it in Normal Slack.');return {ok:false,error:reason};}}
-        else if(!['compose','search'].includes(target.kind)&&!preservePosition)jumpToLatest();
+        else if(!['compose','search','activity'].includes(target.kind)&&!preservePosition)jumpToLatest();
         if(focusEditor)focus();return {ok:true};
       }
       if(!nativeNavigate&&inConversation()){
@@ -631,7 +705,7 @@
     if(nativeNavigate&&run===generation&&active)window.dispatchEvent(new CustomEvent('pme-native-fallback',{detail:{key:target.key}}));
     return {ok:false,error:reason};
   }
-  function suspend({forget=false}={}){generation++;active=false;state='idle';reason='';unframe();if(forget)target=null;save();notify();}
+  function suspend({forget=false}={}){generation++;document.body.removeAttribute('data-pme-parking');active=false;state='idle';reason='';unframe();if(forget)target=null;save();notify();}
   function slackLinkDestination(anchor){
     let url,teams;try{url=new URL(anchor.getAttribute('href'),location.href);teams=Object.values(JSON.parse(localStorage.getItem('localConfig_v2')||'{}').teams||{});}catch{return null;}
     if(url.protocol!=='https:'||url.username||url.password||url.port||!(url.hostname==='slack.com'||url.hostname.endsWith('.slack.com')))return null;
@@ -666,6 +740,27 @@
     event.preventDefault();event.stopImmediatePropagation();
     window.dispatchEvent(new CustomEvent('pme-native-link-action',{detail:{sourceKey:target.key,destination,navigate:()=>{
       if(used||!anchor.isConnected||anchor.getAttribute('href')!==href)throw Error('The native link changed');used=true;anchor.click();
+    }}}));return true;
+  }
+  function activityItem(row,workspaceId){
+    let fiber=row[Object.keys(row).find(k=>k.startsWith('__reactFiber$'))];
+    for(let depth=0;fiber&&depth<40;depth++,fiber=fiber.return){
+      const props=fiber.memoizedProps;
+      if(props?.activityItem&&props.msg?.source_team_id===workspaceId&&props.msg.channel===props.activityItem.channelId)return props.activityItem;
+    }
+    return null;
+  }
+  function activityAction(event){
+    if(event.type!=='click'||event.defaultPrevented||event.metaKey||event.ctrlKey||event.altKey||event.shiftKey||event.button>0||
+      !active||state!=='ready'||target?.kind!=='activity'||!verifiedPane())return false;
+    const row=event.target.closest?.('[data-qa="activity-item-container"]');
+    if(!row||!pane.contains(row)||event.target.closest?.('button,a,input,[role="checkbox"]'))return false;
+    const item=activityItem(row,target.workspaceId);
+    if(!item||!/^[CDG][A-Z0-9]+$/.test(item.channelId)||item.threadTs&&!/^\d+\.\d+$/.test(item.threadTs))return false;
+    const sourceKey=target.key,destination={workspaceId:target.workspaceId,channelId:item.channelId,threadTs:item.threadTs||null};let used=false;
+    event.preventDefault();event.stopImmediatePropagation();
+    window.dispatchEvent(new CustomEvent('pme-native-link-action',{detail:{sourceKey,destination,activity:true,navigate:()=>{
+      if(used||!row.isConnected)throw Error('The Activity item changed');used=true;row.click();
     }}}));return true;
   }
   function profileAction(event){
@@ -709,7 +804,7 @@
   // A route/editor replacement must never leave a stale destination label over
   // a different composer. Recheck on input as well as during DOM reconciliation.
   function guard(event){if(switcherAction(event))return;if(!active)return;
-    if(headerAction(event)||profileAction(event)||threadAction(event)||linkAction(event))return;
+    if(headerAction(event)||activityAction(event)||profileAction(event)||threadAction(event)||linkAction(event))return;
     const sending=event.type==='click'&&event.target.closest?.('[data-qa="texty_send_button"]')||event.type==='keydown'&&event.key==='Enter'&&event.target.closest?.('[data-qa="message_input"]');
     if(sending&&(state!=='ready'||!verified())){event.preventDefault();event.stopImmediatePropagation();fail('The Slack destination changed. Reopen the conversation to continue.');return;}
     if(!sending&&event.type==='click'&&event.isTrusted&&state==='ready'&&pane?.contains(event.target)&&
@@ -745,6 +840,7 @@
     if(switcher)return;
     finishSend();
     if(!active||state!=='ready')return;
+    if(target.kind==='activity'&&activityDetailMounted()){window.dispatchEvent(new CustomEvent('pme-native-fallback',{detail:{key:target.key}}));return;}
     if(syncAuxiliary())return;
     if(verifiedPane()){themeHeader();return;}
     if(nativeAction?.key===target.key&&Date.now()-nativeAction.at<5000){
@@ -760,7 +856,7 @@
     }
     fail('The Slack destination changed. Reopen the conversation to continue.');
   },250);
-  window.__PME_REPLY__={openSwitcher,cancelSwitcher,switcherOpen,open,status,suspend,jumpToLatest,focus,focusMessages,confirmSend,markReadNative,markUnreadNative,overlayOpen,closeAuxiliary,
+  window.__PME_REPLY__={openSwitcher,cancelSwitcher,switcherOpen,open,status,suspend,park,jumpToLatest,focus,focusMessages,confirmSend,markReadNative,markUnreadNative,overlayOpen,closeAuxiliary,
     dispose(){if(disposed)return;cancelSwitcher({restore:false});suspend();disposed=true;abort.abort();clearInterval(timer);style.remove();delete window.__PME_REPLY__;window.dispatchEvent(new CustomEvent('pme-native-reply-state'));}};
   window.dispatchEvent(new CustomEvent('pme-native-reply-installed'));
 })();
