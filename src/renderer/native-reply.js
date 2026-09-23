@@ -129,7 +129,9 @@
   const path=()=>location.pathname.split('/');
   const nativeTeam=()=>document.querySelector('[data-qa="team_sidebar_item"][data-team-active="true"]')?.getAttribute('data-team');
   const inWorkspace=()=>target&&path()[2]===target.workspaceId&&nativeTeam()===target.workspaceId;
-  const inConversation=()=>!!target?.channelId&&inWorkspace()&&(path()[3]===target.channelId||path()[3]==='activity-inbox'&&!!document.querySelector(`[data-qa="message_input"][data-channel-id="${target.channelId}"]`));
+  // Search can open a DM inside Slack's DMs hub without putting its channel ID
+  // in the URL. As with Activity, require the exact mounted conversation input.
+  const inConversation=()=>!!target?.channelId&&inWorkspace()&&(path()[3]===target.channelId||['activity-inbox','dms'].includes(path()[3])&&!!document.querySelector(`[data-qa="message_input"][data-channel-id="${target.channelId}"]`));
   function save(){try{target?sessionStorage.setItem(key,JSON.stringify({target,active,at:Date.now()})):sessionStorage.removeItem(key);}catch{}}
   function notify(){window.dispatchEvent(new CustomEvent('pme-native-reply-state'));}
   function auxiliaryReady(){return !!auxiliary?.view.isConnected&&inWorkspace();}
@@ -586,8 +588,18 @@
     const id=row.getAttribute('data-id'),type=row.getAttribute('data-type');
     let used=false;
     const navigate=()=>{
-      if(used||switcher!==session||!row.isConnected||row.getAttribute('data-id')!==id||row.getAttribute('data-type')!==type)return;
-      used=true;cancelSwitcher({restore:false,close:false});row.click();
+      if(used||switcher!==session)return;
+      used=true;
+      if(nativeTeam()!==workspaceId||path()[2]!==workspaceId||session.field.getAttribute('data-team-id')!==workspaceId)throw Error('The search workspace changed');
+      // Expanding triage can remount Slack's suggestions before this replay.
+      // Resolve the same recipient again, never the new highlighted result.
+      const matches=node=>node.isConnected&&session.modal?.contains(node)&&node.getAttribute('data-id')===id&&node.getAttribute('data-type')===type&&
+        (!destination?.channelId||switcherDestination(node,workspaceId)?.key===destination.key);
+      const current=matches(row)?row:destination?.channelId?
+        [...(session.modal?.querySelectorAll('[data-qa="search_autocomplete"] [role="option"]')||[])].find(matches):null;
+      cancelSwitcher({restore:false,close:!current});
+      if(!current)return false;
+      current.click();return true;
     };
     session.selected=true;session.selectedAt=Date.now();
     event.preventDefault();event.stopImmediatePropagation();
@@ -634,7 +646,9 @@
       if(nativeNavigate){
         // Replaying the user's link must run after its first activation ends.
         await pause(0);if(disposed||run!==generation||!active)return {cancelled:true};
-        nativeNavigate();
+        // A stale switcher row explicitly reports that it did not navigate.
+        // Recover through the same native routing used by an inbox click.
+        if(nativeNavigate()===false)nativeNavigate=null;
       }else if(close&&(target.kind!=='search'||previousAuxiliary?.kind!=='full search')){
         // The profile's Back button can be the originating click. Chromium
         // ignores a nested .click() on that same button until activation ends.

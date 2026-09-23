@@ -5,12 +5,12 @@ import vm from 'node:vm';
 const source=await fs.readFile(new URL('../src/renderer/native-reply.js',import.meta.url),'utf8');
 const helpers=source.slice(source.indexOf('  function switcherDestination('),source.indexOf('  function focus(){'));
 function fixture({editable=true}={}){
-  const actions=[],events=[],attrs=new Map();let team='TONE',route='TONE',selected,pseudo,now=0;
+  const actions=[],events=[],attrs=new Map();let team='TONE',route='TONE',selected,pseudo,now=0,results=[];
   const selection={rangeCount:1,anchorNode:{},getRangeAt:()=>({cloneRange:()=>savedRange}),removeAllRanges:()=>actions.push('clear-selection'),addRange:r=>actions.push(r===savedRange?'restore-range':'select-query')};
   const savedRange={startContainer:selection.anchorNode};
   const focus={isConnected:true,contains:n=>n===selection.anchorNode,focus:()=>actions.push('restore-focus')};
   const field={isContentEditable:editable,getAttribute:()=>team,closest:()=>modal,focus:()=>actions.push('query-focus')};
-  const modal={isConnected:true,contains:n=>n===field||n===pseudo||n===selected,querySelector:s=>s.includes('search_input_close')?{click(){actions.push('close');modal.isConnected=false;}}:s.includes('aria-selected')?selected:pseudo};
+  const modal={isConnected:true,contains:n=>n===field||n===pseudo||n===selected||results.includes(n),querySelectorAll:()=>results,querySelector:s=>s.includes('search_input_close')?{click(){actions.push('close');modal.isConnected=false;}}:s.includes('aria-selected')?selected:pseudo};
   const button={dispatchEvent:()=>actions.push('open')};
   const env={switcher:null,disposed:false,document:{activeElement:focus,body:{setAttribute:(k,v)=>attrs.set(k,v),removeAttribute:k=>attrs.delete(k)},querySelector:s=>s.includes('top_nav_search')?button:field,querySelectorAll:()=>[{getAttribute:()=> 'TTWO',click(){team=route='TTWO';actions.push('workspace');}}],createRange:()=>({selectNodeContents(){}})},
     nativeTeam:()=>team,path:()=>['','client',route],overlayOpen:()=>false,window:{getSelection:()=>selection,dispatchEvent:e=>events.push(e)},Date:{now:()=>now},
@@ -18,8 +18,35 @@ function fixture({editable=true}={}){
   vm.runInNewContext(helpers,env);
   const row=(type,id,im)=>{const attributes={'data-type':type,'data-id':id,'data-is-navigational':'true','aria-label':'Test, Direct Message'};return {isConnected:true,attributes,getAttribute:k=>attributes[k],closest(){return this;},click:()=>actions.push('navigate'),__reactFiber$test:{memoizedProps:{suggestion:{id,im}}}};};
   const event=(extra={})=>({type:'keydown',key:'Enter',target:field,preventDefault(){this.prevented=true;},stopImmediatePropagation(){this.stopped=true;},...extra});
-  return {env,actions,events,attrs,focus,field,modal,row,event,pseudo:r=>pseudo=r,selected:r=>selected=r};
+  return {env,actions,events,attrs,focus,field,modal,row,event,pseudo:r=>pseudo=r,selected:r=>selected=r,results:r=>results=r};
 }
+test('resizing can replace a Command-K member result without losing the intended DM',async()=>{
+  const f=fixture();await f.env.openSwitcher('TONE');
+  const im={id:'DONE',user:'UONE',context_team_id:'TONE'};
+  const original=f.row('member','UONE',im);f.selected(original);f.env.switcherAction(f.event());
+  original.isConnected=false;
+  const wrong=f.row('member','UTWO',{...im,id:'DTWO',user:'UTWO'}),replacement=f.row('member','UONE',im);
+  wrong.click=()=>f.actions.push('wrong-recipient');replacement.click=()=>f.actions.push('intended-recipient');
+  f.selected(wrong);f.results([wrong,replacement]);
+  assert.equal(f.events[0].detail.navigate(),true);
+  assert.equal(f.actions.at(-1),'intended-recipient');assert.equal(f.actions.includes('wrong-recipient'),false);
+  assert.equal(f.env.switcherOpen(),false);
+});
+test('missing or changed DM results request ordinary native routing instead of silently dropping the selection',async()=>{
+  for(const change of [null,{id:'DOTHER',user:'UONE',context_team_id:'TONE'},{id:'DONE',user:'UONE',context_team_id:'TTWO'}]){
+    const f=fixture();await f.env.openSwitcher('TONE');
+    const original=f.row('member','UONE',{id:'DONE',user:'UONE',context_team_id:'TONE'});
+    f.selected(original);f.env.switcherAction(f.event());original.isConnected=false;
+    f.results(change?[f.row('member','UONE',change)]:[]);
+    assert.equal(f.events[0].detail.navigate(),false);assert.equal(f.env.switcherOpen(),false);
+    assert.equal(f.actions.includes('navigate'),false);assert.equal(f.actions.at(-1),'close');
+  }
+});
+test('workspace changes reject a pending search selection without replay or recovery',async()=>{
+  const f=fixture();await f.env.openSwitcher('TONE');f.selected(f.row('channel','CONE'));f.env.switcherAction(f.event());
+  f.env.nativeTeam=()=> 'TTWO';assert.throws(()=>f.events[0].detail.navigate(),/workspace changed/);
+  assert.equal(f.actions.includes('navigate'),false);
+});
 test('switcher resolves native channel IDs and exact member-to-DM metadata without using labels',()=>{
   const f=fixture();assert.equal(f.env.switcherDestination(f.row('channel','CONE'),'TONE').channelId,'CONE');
   const im={id:'DONE',user:'UONE',context_team_id:'TONE'};

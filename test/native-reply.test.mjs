@@ -45,7 +45,7 @@ function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeC
   const rootMessage={getAttribute:n=>n==='data-msg-ts'?openingThread:'CONE',querySelector:()=>({click(){threadPending=true;setTimeout(()=>{if(!threadClosed)box.thread=openingThread;},230);}})};
   const document={head:{append(){}},body:{append:n=>bodyChildren.push(n),hasAttribute:k=>bodyAttributes.has(k),setAttribute:(k,v)=>bodyAttributes.set(k,v),removeAttribute:k=>bodyAttributes.delete(k)},createElement:tag=>tag==='style'?{remove(){removed=true;}}:makeNode(),
     querySelectorAll:s=>s==='[data-qa="search_view"]'?(auxiliaryKind==='full search'?[{closest:()=>auxView}]:[]):s==='[data-pme-message-focus]'?[...(attributes.has('data-pme-message-focus')?[pane]:[]),...(auxAttributes.has('data-pme-message-focus')?[auxView]:[])]:s==='[data-qa="message-input-system-notification-roadblock"]'?(notificationOnly?[{closest:()=>pane}]:[]):s==='[data-qa="composer_page"]'?(composePage.mounted?[composePage]:[]):s==='[data-pme-native-reply-pane]'?[...(attributes.has('data-pme-native-reply-pane')?[pane]:[]),...(auxAttributes.has('data-pme-native-reply-pane')?[auxView]:[])]:s==='[data-qa="message_input"][data-channel-id]'?(notificationOnly?[]:[box]):s==='[data-qa="message_container"][data-msg-ts]'&&openingThread&&!missingRoot?[rootMessage]:s==='[data-qa="team_sidebar_item"]'?[teamButton]:s==='[data-qa="channel-sidebar-channel"]'?[channelRow]:[],
-    querySelector:s=>(auxiliaryKind==='profile'&&s==='[data-qa="member_profile_pane"]'||auxiliaryKind==='search'&&s==='[data-qa="search_in_channel_title"]'||auxiliaryKind==='full search'&&s==='[data-qa="search_view"]')?{closest:()=>auxView}:s==='[data-qa="quip_close_thread"]'&&returningThread&&box.thread?{click(){native.threadCloses++;box.thread=null;}}:s==='[data-qa="composer_button"]'?composeButton:s==='[data-qa="composer_page"]'?(composePage.mounted?composePage:null):s==='[data-qa="team_sidebar_item"][data-team-active="true"]'?{getAttribute:()=>native.team}:s==='[data-qa="threads_flexpane"] button[aria-label="Close"]'&&threadPending?{click(){threadClosed=true;threadPending=false;}}:null,
+    querySelector:s=>s===`[data-qa="message_input"][data-channel-id="${box.channel}"]`?box:(auxiliaryKind==='profile'&&s==='[data-qa="member_profile_pane"]'||auxiliaryKind==='search'&&s==='[data-qa="search_in_channel_title"]'||auxiliaryKind==='full search'&&s==='[data-qa="search_view"]')?{closest:()=>auxView}:s==='[data-qa="quip_close_thread"]'&&returningThread&&box.thread?{click(){native.threadCloses++;box.thread=null;}}:s==='[data-qa="composer_button"]'?composeButton:s==='[data-qa="composer_page"]'?(composePage.mounted?composePage:null):s==='[data-qa="team_sidebar_item"][data-team-active="true"]'?{getAttribute:()=>native.team}:s==='[data-qa="threads_flexpane"] button[aria-label="Close"]'&&threadPending?{click(){threadClosed=true;threadPending=false;}}:null,
     addEventListener:(name,fn)=>listeners.set(name,fn)};
   const window={__PME_TRIAGE__:{status:()=>({mode:'reply'})},dispatchEvent(event){events.push(event.type);if(event.type==='pme-native-header-action')headerEvents.push(event.detail.action);}};window.top=window;
   const location={origin:'https://app.slack.com',pathname:'/client/TONE/CONE',assign:url=>navigations.push(url)};
@@ -100,6 +100,39 @@ test('replayed native links preserve position and cancelled requests never activ
   const options={nativeNavigate:()=>clicks++,preservePosition:true,focusEditor:false};
   const pending=env.api.open(request,options);env.api.suspend();assert.equal((await pending).cancelled,true);assert.equal(clicks,0);
   assert.equal((await env.api.open(request,options)).ok,true);assert.equal(clicks,1);assert.equal(env.native.latestJumps,0);assert.equal(env.focused(),false);env.api.dispose();
+});
+test('a replaced Command-K result recovers through native conversation navigation without reopening the pane',async()=>{
+  const env=setup();let attempts=0;
+  const result=await env.api.open({workspaceId:'TTWO',channelId:'CTWO'},{nativeNavigate:()=>{attempts++;return false;},preservePosition:true});
+  assert.equal(result.ok,true);assert.equal(attempts,1);assert.equal(env.native.switches,1);assert.equal(env.native.selects,1);
+  assert.equal(env.api.status().ready,true);assert.equal(env.api.status().target.channelId,'CTWO');
+  assert.equal(env.editor.textContent,'untouched user draft');assert.deepEqual(env.navigations,[]);env.api.dispose();
+});
+test('Command-K can mount a verified DM in Slack’s DMs hub without a channel URL',async()=>{
+  const env=setup();env.box.channel='DONE';
+  const result=await env.api.open({workspaceId:'TONE',channelId:'DONE'},{nativeNavigate:()=>{env.location.pathname='/client/TONE/dms';},preservePosition:true});
+  assert.equal(result.ok,true);assert.equal(env.api.status().ready,true);assert.equal(env.focused(),true);
+  assert.ok(env.attributes.has('data-pme-native-reply-pane'));assert.equal(env.native.selects,0);
+  env.tick();assert.equal(env.api.status().ready,true);
+  env.box.channel='DOTHER';env.tick();assert.equal(env.api.status().ready,false);
+  assert.equal(env.api.status().state,'error');assert.equal(env.attributes.has('data-pme-native-reply-pane'),false);env.api.dispose();
+});
+test('DMs hub readiness requires the matching workspace and an unambiguous mounted input',async()=>{
+  for(const mismatch of ['workspace','route','channel','duplicate']){
+    const env=setup();env.box.channel='DONE';
+    const queries=env.document.querySelectorAll;
+    const result=await env.api.open({workspaceId:'TONE',channelId:'DONE'},{nativeNavigate:()=>{
+      env.location.pathname='/client/TONE/dms';
+      if(mismatch==='workspace')env.native.team='TTWO';
+      if(mismatch==='route')env.location.pathname='/client/TTWO/dms';
+      if(mismatch==='channel')env.box.channel='DOTHER';
+      if(mismatch==='duplicate')env.document.querySelectorAll=s=>s==='[data-qa="message_input"][data-channel-id]'?[env.box,env.box]:queries(s);
+      // Advance past the deadline on the first wait after validating the pane.
+      setTimeout(()=>env.advance(11000),10);
+    }});
+    assert.equal(result.ok,false,mismatch);assert.equal(env.api.status().ready,false,mismatch);
+    assert.equal(env.attributes.has('data-pme-native-reply-pane'),false,mismatch);assert.equal(env.focused(),false,mismatch);env.api.dispose();
+  }
 });
 test('message focus preserves drafts and removes only its own temporary tabindex when suspended',async()=>{
   const env=setup();await env.api.open({workspaceId:'TONE',channelId:'CONE'});
