@@ -239,7 +239,7 @@ test('quick reply closes only after confirmed send, empty composer and no new dr
   assert.equal(attempt.action,'quick-send-attempt');e.editor.textContent='';e.sendButton.disabled=true;e.tick();
   assert.equal(e.events.includes('pme-native-quick-sent'),false);
   if(newDraft){e.editor.textContent='next draft';e.listeners.get('beforeinput')({isTrusted:true,target:e.editor});e.editor.textContent='';}
-  e.api.confirmSend(attempt.id,'100.000002');assert.ok(e.events.includes('pme-native-quick-confirmed'));e.tick();assert.equal(e.events.includes('pme-native-quick-sent'),false);e.advance(1101);e.tick();assert.equal(e.events.includes('pme-native-quick-sent'),!newDraft);assert.equal(e.readButton.clicks,newDraft?0:1);
+  e.api.confirmSend(attempt.id,'100.000002');assert.ok(e.events.includes('pme-native-send-confirmed'));e.tick();assert.equal(e.events.includes('pme-native-quick-sent'),false);e.advance(1101);e.tick();assert.equal(e.events.includes('pme-native-quick-sent'),!newDraft);assert.equal(e.readButton.clicks,newDraft?0:1);
   e.api.dispose();
  }
 });
@@ -384,4 +384,23 @@ test('Activity is a verified read-only pane and parking leaves drafts and the re
  assert.equal((await env.api.open({kind:'activity',workspaceId:'TONE'},{focusEditor:false})).ok,true);
  assert.equal(env.api.status().ready,true);assert.equal(env.api.status().readOnly,true);assert.equal(env.api.markReadNative().ok,false);assert.equal(env.api.markUnreadNative().ok,false);
  assert.equal(env.editor.textContent,before);env.api.dispose();
+});
+
+
+test('normal thread replies mark read only after server confirmation and keep the pane open',async()=>{
+ const e=setup({thread:'100.000001',nativeCallbacks:true});
+ await e.api.open({workspaceId:'TONE',channelId:'CONE',threadTs:'100.000001'});
+ let attempt;e.window.__pmeTriageAction=raw=>{attempt=JSON.parse(raw);};
+ e.listeners.get('click')({type:'click',target:{closest:()=>({})}});
+ assert.equal(attempt.action,'native-send-attempt');assert.equal(e.native.threadReads,undefined);
+ e.api.confirmSend('other-attempt','100.000002');assert.equal(e.native.threadReads,undefined);
+ const query=e.pane.querySelectorAll;
+ e.pane.querySelectorAll=selector=>selector==='[data-qa="message_container"][data-msg-ts]'?[]:query(selector);
+ e.editor.textContent='Keep this next draft';
+ e.api.confirmSend(attempt.id,'100.000002');assert.equal(e.native.threadReads,undefined);
+ e.pane.querySelectorAll=query;e.tick();assert.equal(e.native.threadReads,1);
+ assert.equal(e.editor.textContent,'Keep this next draft');
+ assert.ok(e.events.includes('pme-native-send-confirmed'));e.advance(2000);e.tick();
+ assert.equal(e.events.includes('pme-native-quick-sent'),false);assert.equal(e.api.status().ready,true);
+ e.api.dispose();
 });

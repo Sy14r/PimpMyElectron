@@ -359,8 +359,8 @@
     else void startReply(item,{quick:{preview:request.preview,at:Date.now()}});
     return {ok:true};
   }
-  window.addEventListener('pme-native-quick-confirmed',event=>{
-    if(mode==='reply'&&quickReply&&event.detail?.key===window.__PME_REPLY__?.status().target?.key)dismissRepliedItem(event.detail);
+  window.addEventListener('pme-native-send-confirmed',event=>{
+    if(event.detail?.key){dismissRepliedItem(event.detail);render();}
   },{signal:abort.signal});
   window.addEventListener('pme-native-quick-sent',()=>{if(mode==='reply'&&quickReply)void transition('cluster');},{signal:abort.signal});
   window.addEventListener('pme-native-compose-closed',()=>{if(mode==='reply')void transition('queue');},{signal:abort.signal});
@@ -814,7 +814,7 @@
   },{signal:abort.signal});
   const pendingInboxRead=item=>pillReadPending?.unread!==true&&item.key===pillReadPending?.key&&Number(item.latest||0)<=pillReadPending.latest;
   const pendingInboxUnread=item=>pillReadPending?.unread===true&&item.key===pillReadPending.key;
-  const inboxUnread=item=>pendingInboxUnread(item)||item.unread===true&&!pendingInboxRead(item);
+  const inboxUnread=item=>pendingInboxUnread(item)||item.unread===true&&!item.pendingRead&&!pendingInboxRead(item)&&!replyDismissed(item);
   function clearInboxFilter(repaint=true){
     if(!$('search').value)return;
     $('search').value='';

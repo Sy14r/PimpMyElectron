@@ -49,7 +49,8 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   function pickEntry(workspaceId){return [...sessions.values()].filter(e=>teamFromURL(e.url)&&(!workspaceId||teamFromURL(e.url)===workspaceId)).sort((a,b)=>(uiStates.get(b.sessionId)?.activeAt||0)-(uiStates.get(a.sessionId)?.activeAt||0))[0];}
   const scopeFor=entry=>selectedWorkspaces.get(entry.sessionId)||(local.settings.workspace==='*'||knownWorkspaces.has(local.settings.workspace)?local.settings.workspace:null)||teamFromURL(entry.url);
   const inScope=(entry,workspace)=>workspace===scopeFor(entry)||scopeFor(entry)==='*'&&knownWorkspaces.has(workspace);
-  const notificationWorkspaces=(entry=pickEntry())=>filterNotificationWorkspaces(lastSnapshot.workspaces.filter(w=>knownWorkspaces.has(w.id)||!!pickEntry(w.id)),local.settings,entry?scopeFor(entry):null).map(w=>({...w,items:w.items.map(i=>{const read=previewReads.get(i.key);return {...i,pendingRead:['pending','sent'].includes(read?.status)&&Date.now()-read.at<25000&&Number(i.latest||0)<=read.latest};})}));
+  const withPendingReads=w=>({...w,items:w.items.map(i=>{const read=previewReads.get(i.key);return {...i,pendingRead:['pending','sent'].includes(read?.status)&&Date.now()-read.at<25000&&Number(i.latest||0)<=read.latest};})});
+  const notificationWorkspaces=(entry=pickEntry())=>filterNotificationWorkspaces(lastSnapshot.workspaces.filter(w=>knownWorkspaces.has(w.id)||!!pickEntry(w.id)),local.settings,entry?scopeFor(entry):null).map(withPendingReads);
   function shellPreview(){
     const current=previewSession.get(),entry=current&&entryFor(current.sessionId);
     if(!entry||!teamFromURL(entry.url)||uiStates.get(entry.sessionId)?.mode!=='cluster')return null;
@@ -181,6 +182,12 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
     if(message.method==='Runtime.bindingCalled'&&p.name==='__pmeTriageAction'){
       if(typeof p.payload!=='string'||p.payload.length>2000)return;
       try{const r=JSON.parse(p.payload),workspace=teamFromURL(entry.url);
+        if(r.action==='native-send-attempt'){
+          const item=store.workspaces.get(workspace)?.items.get(r.key);
+          if(workspace===r.workspaceId&&uiStates.get(entry.sessionId)?.mode==='reply'&&item)
+            sendConfirmation.begin(entry.sessionId,{workspaceId:workspace,channelId:item.channelId,threadTs:item.threadTs,key:item.key,id:r.id});
+          return;
+        }
         if(r.action==='quick-send-attempt'){
           const target=quickTargets.get(entry.sessionId);
           if(workspace===r.workspaceId&&target?.key===r.key&&target.workspaceId===r.workspaceId)sendConfirmation.begin(entry.sessionId,{...target,id:r.id});
@@ -303,7 +310,7 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
         const nativeEdge=shellEdgeStrip();
         const nativeStripReady=nativeEdge&&nativeEdge.id===edgeHelperReady&&nativeEdge.id===uiStates.get(entry.sessionId)?.edgeStrip?.id?nativeEdge.id:null;
         const notificationScope=JSON.stringify([local.settings.notificationMode,local.settings.notificationMode==='inbox'?scope:local.settings.notificationWorkspaces]);
-        const scoped = { ...snapshot, nativeStripReady, previewHeld:!!shellPreview()&&previewSession.held(entry.sessionId), notificationScope, notificationWorkspaces:notificationSummaries(notificationWorkspaces(entry)), actionResult:actionResults.get(entry.sessionId)||null,selectedWorkspace:scope,workspaces: snapshot.workspaces.filter(w => scope==='*'?knownWorkspaces.has(w.id):w.id===scope) };
+        const scoped = { ...snapshot, nativeStripReady, previewHeld:!!shellPreview()&&previewSession.held(entry.sessionId), notificationScope, notificationWorkspaces:notificationSummaries(notificationWorkspaces(entry)), actionResult:actionResults.get(entry.sessionId)||null,selectedWorkspace:scope,workspaces: snapshot.workspaces.filter(w => scope==='*'?knownWorkspaces.has(w.id):w.id===scope).map(withPendingReads) };
         await bindContext(entry);
         await mods.reconcile(entry);
         await evaluate(entry, `if(location.origin==='https://app.slack.com' && location.pathname.match(/^\\/client\\/([TE][A-Z0-9]+)(?:\\/|$)/)?.[1]===${JSON.stringify(workspace)})window.__PME_TRIAGE__?.update(${JSON.stringify(scoped)})`);

@@ -815,26 +815,40 @@
     if(sending&&(state!=='ready'||!verified())){event.preventDefault();event.stopImmediatePropagation();fail('The Slack destination changed. Reopen the conversation to continue.');return;}
     if(!sending&&event.type==='click'&&event.isTrusted&&state==='ready'&&pane?.contains(event.target)&&
       !event.target.closest?.('[data-qa="message_input"],[data-qa="composer_page"]')&&event.target.closest?.('a,button,[role="button"]'))nativeAction={key:target.key,at:Date.now()};
-    if(sending&&document.body.hasAttribute('data-pme-quick')&&!document.body.hasAttribute('data-pme-quick-read')&&!event.isComposing){
+    if(sending&&!document.body.hasAttribute('data-pme-quick-read')&&!event.isComposing&&target?.channelId){
       const id=`${Date.now().toString(36)}-${++sendSequence}`;
-      pendingSend={id,key:target.key,at:Date.now(),dirty:false,confirmed:false,visibleAt:null};
-      window.__pmeTriageAction?.(JSON.stringify({workspaceId:target.workspaceId,key:target.key,action:'quick-send-attempt',id}));
+      const quick=document.body.hasAttribute('data-pme-quick');
+      pendingSend={id,key:target.key,quick,at:Date.now(),dirty:false,confirmed:false,visibleAt:null};
+      window.__pmeTriageAction?.(JSON.stringify({workspaceId:target.workspaceId,key:target.key,action:quick?'quick-send-attempt':'native-send-attempt',id}));
     }
   }
   document.addEventListener('click',guard,{capture:true,signal:abort.signal});document.addEventListener('keydown',guard,{capture:true,signal:abort.signal});
   // beforeinput records a new user edit; an input event may instead be
   // Slack clearing the old draft after sending. Do not confuse the two.
   document.addEventListener('beforeinput',event=>{if(pendingSend&&event.isTrusted&&editor?.contains(event.target))pendingSend.dirty=true;},{capture:true,signal:abort.signal});
-  function confirmSend(id,ts){if(pendingSend?.id===id&&/^\d+\.\d+$/.test(ts)){pendingSend.confirmed=true;pendingSend.ts=ts;window.dispatchEvent(new CustomEvent('pme-native-quick-confirmed',{detail:{key:pendingSend.key,ts}}));jumpToLatest();notify();}}
+  function confirmSend(id,ts){
+    const pending=pendingSend;
+    if(pending?.id!==id||!/^\d+\.\d+$/.test(ts))return;
+    pending.confirmed=true;pending.ts=ts;
+    window.dispatchEvent(new CustomEvent('pme-native-send-confirmed',{detail:{key:pending.key,ts}}));
+    jumpToLatest();
+    finishSend();notify();
+  }
   function finishSend(){
     const p=pendingSend;if(!p)return;
     if(Date.now()-p.at>30000){pendingSend=null;return;}
     const button=composer?.querySelector('[data-qa="texty_send_button"]');
-    if(!p.confirmed||p.dirty||p.key!==target?.key||!verified()||editor?.textContent?.trim()||!button||!(button.disabled||button.getAttribute?.('aria-disabled')==='true'))return;
+    if(!p.confirmed||p.key!==target?.key||!verified())return;
+    if(p.quick&&(p.dirty||editor?.textContent?.trim()||!button||!(button.disabled||button.getAttribute?.('aria-disabled')==='true')))return;
     const message=[...pane.querySelectorAll('[data-qa="message_container"][data-msg-ts]')].find(n=>n.getAttribute('data-msg-ts')===p.ts&&n.getAttribute('data-msg-channel-id')===target.channelId);
     const r=message?.getBoundingClientRect();
     const visible=r&&r.height>0&&r.width>0&&r.bottom>64&&r.top<innerHeight-38;
     if(!visible){p.visibleAt=null;return;}
+    if(!p.quick){
+      // Wait for the acknowledged reply to mount so Slack's native markable
+      // cursor includes it. Full inbox replies retain the pane and any draft.
+      markReadNative();pendingSend=null;return;
+    }
     if(!p.visibleAt){p.visibleAt=Date.now();return;}
     // Leave the acknowledged message on screen briefly before returning to work.
     if(Date.now()-p.visibleAt<1100)return;

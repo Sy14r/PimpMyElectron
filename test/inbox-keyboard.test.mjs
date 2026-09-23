@@ -7,7 +7,7 @@ function setup(){
  const list={children:rows.map(item=>({dataset:{key:item.key},focus(){shadow.activeElement=this;calls.push(['focus',item.key]);},scrollIntoView(){}}))};
  const search={value:'',dataset:{},matches:()=>true,focus(){shadow.activeElement=this;},select(){calls.push(['select-filter']);}};nodes.set('list',list);nodes.set('search',search);nodes.set('notice',{});
  const status={ready:true,target:{key:'two'}};
- const env={mode:'queue',filter:'all',quickReply:null,pillReadPending:null,selection:null,openingKey:null,shadow,host,startCompose:()=>calls.push(['compose']),filtered:()=>env.filter==='unread'?rows.filter(r=>r.unread):rows,$:id=>nodes.get(id),connected:()=>true,render(){},touch(){},openItem:key=>calls.push(['open',key]),
+ const env={replyDismissed:()=>false,mode:'queue',filter:'all',quickReply:null,pillReadPending:null,selection:null,openingKey:null,shadow,host,startCompose:()=>calls.push(['compose']),filtered:()=>env.filter==='unread'?rows.filter(r=>r.unread):rows,$:id=>nodes.get(id),connected:()=>true,render(){},touch(){},openItem:key=>calls.push(['open',key]),
    document:{activeElement:null},setInboxInput:input=>{env.inputMode=input;},window:{__PME_REPLY__:{status:()=>status,focus:()=>calls.push(['composer'])}},heldRow:null,transition:async mode=>{env.mode=mode;calls.push(['mode',mode]);},focusInbox:()=>calls.push(['inbox']),readFromPill:async(item,opts)=>{calls.push(['read',item.key,opts.inbox,opts.unread]);item.unread=opts.unread;return {ok:true};}};
  vm.runInNewContext(helpers,env);
  const event=(key,extra={})=>({key,composedPath:()=>[shadow.activeElement,host],preventDefault(){this.prevented=true;},stopImmediatePropagation(){this.stopped=true;},...extra});

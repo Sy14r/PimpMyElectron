@@ -195,3 +195,27 @@ test('a confirmed native quick reply immediately suppresses its pill count witho
  binding('__pmeClientState',{...cache,messages:[...cache.messages,{channel:'CONE',ts:'100.000004',text:'newer than reply'}]});await new Promise(r=>setTimeout(r,1600));
  assert.equal((await state()).attention,1);assert.equal(runtime.status().customApi.requests,0);
 });
+
+test('a normal thread send clears inbox and pill indicators only after success and newer activity returns',async t=>{
+ const cdp=new FakeCDP(),entry={targetId:'one',sessionId:'s1',url:'https://app.slack.com/client/TONE/CONE'},sessions=new Map([['one',entry]]);
+ const runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'reply-dismiss-'));
+ const runtime=await createRuntime({cdp,contextGuard:cdp.contextGuard,sessions,root,runtimeDir});
+ t.after(async()=>{await runtime.dispose();await fs.rm(runtimeDir,{recursive:true,force:true});});await runtime.attach(entry);
+ const emit=(method,params)=>cdp.emit('event',{sessionId:'s1',method,params:{executionContextId:1,...params}});
+ const binding=(name,value)=>emit('Runtime.bindingCalled',{name,payload:JSON.stringify(value)});
+ const cache={rendererWorkspaceId:'TONE',workspaceId:'TONE',knownWorkspaces:[{id:'TONE',name:'One'}],channels:[{id:'CONE',has_unreads:false,last_read:'100.000001'}],messages:[{channel:'CONE',ts:'100.000002',thread_ts:'100.000001',text:'new'}],threads:[{channel:'CONE',ts:'100.000001',last_read:'100.000001'}]};
+ binding('__pmeClientState',cache);await new Promise(r=>setTimeout(r,1600));
+ const call=request=>new Promise((resolve,reject)=>{let data='';const socket=net.createConnection(path.join(runtimeDir,'shell.sock'));socket.on('connect',()=>socket.write(JSON.stringify(request)+'\n'));socket.on('error',reject);socket.on('data',c=>data+=c);socket.on('end',()=>resolve(JSON.parse(data)));});
+ const state=async()=> (await call({op:'state'})).result;
+ const key='TONE:CONE:100.000001';binding('__pmeShellState',{workspaceId:'TONE',mode:'reply'});
+ binding('__pmeTriageAction',{action:'native-send-attempt',workspaceId:'TONE',key,id:'attempt-1'});
+ assert.equal((await state()).attention,1);
+ const send=cdp.send.bind(cdp);cdp.send=async(method,params,sessionId)=>method==='Network.getResponseBody'?{body:JSON.stringify({ok:true,channel:'CONE',ts:'100.000003',message:{team:'TONE',thread_ts:'100.000001'}})}:send(method,params,sessionId);
+ emit('Network.requestWillBeSent',{requestId:'native-send',request:{url:'https://app.slack.com/api/chat.postMessage',postData:'channel=CONE&thread_ts=100.000001'}});
+ emit('Network.loadingFinished',{requestId:'native-send',encodedDataLength:100});await new Promise(r=>setImmediate(r));
+ assert.equal((await state()).attention,0);assert.equal(runtime.status().quickSend.confirmed,1);
+ await new Promise(r=>setTimeout(r,1600));
+ assert.equal(cdp.captures.get('s1').workspaces[0].items.find(i=>i.key===key).pendingRead,true);
+ binding('__pmeClientState',{...cache,messages:[...cache.messages,{channel:'CONE',ts:'100.000004',thread_ts:'100.000001',text:'newer than reply'}]});await new Promise(r=>setTimeout(r,1600));
+ assert.equal((await state()).attention,1);assert.equal(runtime.status().customApi.requests,0);
+});
