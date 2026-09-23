@@ -5,7 +5,7 @@ function setup(){
  const calls=[],host={},rows=[{key:'one',unread:true,latest:'100.1'},{key:'two',unread:true,latest:'100.2'},{key:'three',unread:false}],nodes=new Map();
  const shadow={activeElement:null};
  const list={children:rows.map(item=>({dataset:{key:item.key},focus(){shadow.activeElement=this;calls.push(['focus',item.key]);},scrollIntoView(){}}))};
- const search={dataset:{},matches:()=>true,focus(){shadow.activeElement=this;},select(){calls.push(['select-filter']);}};nodes.set('list',list);nodes.set('search',search);nodes.set('notice',{});
+ const search={value:'',dataset:{},matches:()=>true,focus(){shadow.activeElement=this;},select(){calls.push(['select-filter']);}};nodes.set('list',list);nodes.set('search',search);nodes.set('notice',{});
  const status={ready:true,target:{key:'two'}};
  const env={mode:'queue',filter:'all',quickReply:null,pillReadPending:null,selection:null,openingKey:null,shadow,host,startCompose:()=>calls.push(['compose']),filtered:()=>env.filter==='unread'?rows.filter(r=>r.unread):rows,$:id=>nodes.get(id),connected:()=>true,render(){},touch(){},openItem:key=>calls.push(['open',key]),
    document:{activeElement:null},setInboxInput:input=>{env.inputMode=input;},window:{__PME_REPLY__:{status:()=>status,focus:()=>calls.push(['composer'])}},heldRow:null,transition:async mode=>{env.mode=mode;calls.push(['mode',mode]);},focusInbox:()=>calls.push(['inbox']),readFromPill:async(item,opts)=>{calls.push(['read',item.key,opts.inbox,opts.unread]);item.unread=opts.unread;return {ok:true};}};
@@ -119,4 +119,32 @@ test('native auxiliary views, overlays and quick reply retain their navigation',
   if(state==='quick')f.env.quickReply={};
   assert.equal(f.env.inboxNavigationKey(f.event('j',{composedPath:()=>[{}]})),false);assert.deepEqual(f.calls,[]);
  }
+});
+
+
+test('Shift+/ clears only search text and preserves row/native focus and category',()=>{
+ for(const native of [false,true]){
+  const f=setup();f.env.filter='channels';f.search.value='launch';
+  f.env.mode=native?'reply':'queue';f.env.selection='two';f.shadow.activeElement=native?null:f.list.children[1];
+  const before=f.shadow.activeElement;
+  const event=f.event('?',{shiftKey:true,code:'Slash',...(native?{composedPath:()=>[{}]}:{})});
+  assert.equal(f.env.inboxNavigationKey(event),true);assert.equal(f.search.value,'');
+  assert.equal(f.env.filter,'channels');assert.equal(f.shadow.activeElement,before);
+  assert.equal(f.calls.some(c=>c[0]==='select-filter'||c[0]==='open'),false);
+ }
+});
+test('Shift+/ remains a question mark while typing and respects modifiers and composition',()=>{
+ const f=setup();f.search.value='launch';f.shadow.activeElement=f.search;
+ assert.equal(f.env.inboxNavigationKey(f.event('?',{shiftKey:true,code:'Slash'})),false);
+ f.env.mode='reply';f.shadow.activeElement=null;
+ assert.equal(f.env.inboxNavigationKey(f.event('?',{shiftKey:true,code:'Slash',composedPath:()=>[{closest:()=>({})}]})),false);
+ for(const extra of [{metaKey:true},{ctrlKey:true},{altKey:true},{isComposing:true}]){
+  assert.equal(f.env.inboxNavigationKey(f.event('?',{shiftKey:true,code:'Slash',...extra})),false);
+ }
+ assert.equal(f.search.value,'launch');
+});
+test('Enter into the already mounted editor clears the search before moving focus',()=>{
+ const f=setup();f.env.mode='reply';f.search.value='two';f.shadow.activeElement=f.list.children[1];
+ assert.equal(f.env.inboxNavigationKey(f.event('Enter')),true);
+ assert.equal(f.search.value,'');assert.deepEqual(f.calls,[['composer']]);
 });

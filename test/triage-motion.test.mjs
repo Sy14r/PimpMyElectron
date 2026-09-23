@@ -30,7 +30,7 @@ const startReplySource='async function startReply('+functionSource('async functi
 function openingEnv(){
  const calls=[];let loaded,revealed;
  const loading=new Promise(resolve=>{loaded=resolve;}),reveal=new Promise(resolve=>{revealed=resolve;});
- const env={mode:'queue',quickReply:null,stagedDetail:false,openSequence:0,disposed:false,nativeQueue:Promise.resolve(),filtered:()=>[],filter:'all',snapshot:{},
+ const env={clearInboxFilter:()=>calls.push('clear-filter'),mode:'queue',quickReply:null,stagedDetail:false,openSequence:0,disposed:false,nativeQueue:Promise.resolve(),filtered:()=>[],filter:'all',snapshot:{},
    window:{__PME_REPLY__:{suspend:()=>calls.push('suspend'),open:(_item,options)=>{calls.push(['open',options.focusEditor]);return loading;},focus:()=>calls.push('focus')}},
    transition:async(next,{stage=false}={})=>{env.mode=next;calls.push(stage?'stage':'reveal');if(!stage)await reveal;},render:()=>calls.push('render')};
  vm.runInNewContext(startReplySource,env);
@@ -117,5 +117,15 @@ test('pill and inbox appear before slow background parking finishes, while later
   assert.ok(f.calls.some(c=>c.startsWith('geometry:'+next+':')));assert.equal(complete,false);
   const following=f.env.transition('stock');await flush();assert.equal(f.env.mode,next);
   parked({ok:true});await pending;await following;assert.equal(f.env.mode,'stock');
+ }
+});
+
+
+test('opening a conversation clears search before navigation, but compose and quick replies leave it alone',async()=>{
+ for(const [item,options,clear] of [[{key:'TONE:CONE:',channelId:'CONE'}, {},true],[{key:'TONE:CONE:123',channelId:'CONE',threadTs:'123'}, {},true],[{key:'TONE:compose',kind:'compose'}, {},false],[{key:'TONE:CONE:',channelId:'CONE'},{quick:{}},false]]){
+  const f=openingEnv();const pending=f.env.startReply({...item,workspaceId:'TONE'},options);await flush();
+  assert.equal(f.calls.includes('clear-filter'),clear);
+  if(clear)assert.ok(f.calls.indexOf('clear-filter')<f.calls.indexOf('suspend'));
+  f.loaded();f.revealed();await pending;
  }
 });

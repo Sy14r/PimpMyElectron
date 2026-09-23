@@ -251,6 +251,7 @@
     await nativeQueue.catch(()=>{});if(run!==openSequence||disposed)return;
     const reuseLayout=mode==='reply'&&!!quickReply===!!quick&&!stagedDetail;
     quickReply=quick;
+    if(!quick&&item.channelId)clearInboxFilter(false);
     const stage=mode==='queue'&&!quickReply;
     heldRow=filtered().some(i=>i.key===item.key)?{key:item.key,filter}:null;
     selection=item.key;resumeReply=false;openingKey=item.key;
@@ -430,7 +431,7 @@
   },{signal:abort.signal});
   window.addEventListener('pme-native-reply-state',renderReply,{signal:abort.signal});
   window.addEventListener('pme-native-reply-installed',()=>{const r=window.__PME_REPLY__?.status();if(r?.target&&(r.active||mode==='reply'))void startReply(r.target);},{signal:abort.signal});
-  function openReader(key){++openSequence;openingKey=null;selection=key;void transition('reading');requestHistory();}
+  function openReader(key){clearInboxFilter(false);++openSequence;openingKey=null;selection=key;void transition('reading');requestHistory();}
   function openItem(key,{reader=false}={}){
     const item=items().find(i=>i.key===key)||notificationItems().find(i=>i.key===key);if(!item)return;
     if(viewTeam()!=='*'&&item.workspaceId!==viewTeam())window.__pmeTriageAction?.(JSON.stringify({workspaceId:viewTeam(),action:'switch',target:item.workspaceId}));
@@ -580,7 +581,7 @@
       button.append(el('div','preview',last?.text || (['queued','loading'].includes(item.history?.status)?'Loading messages…':item.history?.status==='error'?'Could not load · open to retry':item.history?.status==='ready'?'No messages returned':'Open to load messages')));
       button.append(el('div','meta',[snapshot.workspaces.length>1?snapshot.workspaces.find(w=>w.id===item.workspaceId)?.name:null,item.kind === 'thread' ? 'Thread' : item.kind === 'channel' ? 'Channel' : 'Direct message', pendingInboxUnread(item)?'Marking unread…':pendingInboxRead(item)?'Marking read…':item.unread === null ? 'Unread unknown' : item.countsStale ? 'Unread state may be stale' : inboxUnread(item) ? 'Unread observed' : 'Read observed',last ? time(last.ts) : null].filter(Boolean).join(' · ')));
       const summary=[displayName(item),threadAlias(item.key)?item.name:null,item.triage?.pinned?'Pinned':null,inboxUnread(item)?'Unread':null,inboxUnread(item)&&item.unreadCount>0?`${item.unreadCount} unread`:null,button.querySelector('.meta')?.textContent,last?.text].filter(Boolean).join(' · ');
-      button.setAttribute('aria-label',summary);button.dataset.pointerTitle=`${summary.slice(0,400)}\nJ/K: move · H/L: filters · /: filter text · Enter: reply · X: toggle read / unread · Option-click: read-only`;button.title=host.getAttribute('data-inbox-input')==='keyboard'?'':button.dataset.pointerTitle;button.setAttribute('aria-keyshortcuts','h j k l ArrowLeft ArrowRight ArrowDown ArrowUp Enter x');
+      button.setAttribute('aria-label',summary);button.dataset.pointerTitle=`${summary.slice(0,400)}\nJ/K: move · H/L: filters · /: filter text · Shift+/: clear filter · Enter: reply · X: toggle read / unread · Option-click: read-only`;button.title=host.getAttribute('data-inbox-input')==='keyboard'?'':button.dataset.pointerTitle;button.setAttribute('aria-keyshortcuts','h j k l ArrowLeft ArrowRight ArrowDown ArrowUp Enter x');
       $('list').append(button);
     }
     $('list').scrollTop = listScroll;
@@ -814,6 +815,11 @@
   const pendingInboxRead=item=>pillReadPending?.unread!==true&&item.key===pillReadPending?.key&&Number(item.latest||0)<=pillReadPending.latest;
   const pendingInboxUnread=item=>pillReadPending?.unread===true&&item.key===pillReadPending.key;
   const inboxUnread=item=>pendingInboxUnread(item)||item.unread===true&&!pendingInboxRead(item);
+  function clearInboxFilter(repaint=true){
+    if(!$('search').value)return;
+    $('search').value='';
+    if(repaint)render();
+  }
   function inboxKeyItem(){
     const rows=filtered(),key=shadow.activeElement?.dataset?.key||selection;
     return rows.find(item=>item.key===key)||rows[0];
@@ -866,7 +872,8 @@
     return true;
   }
   function inboxNavigationKey(event){
-    if(!['queue','reading','reply'].includes(mode)||quickReply||event.defaultPrevented||event.isComposing||event.metaKey||event.ctrlKey||event.altKey||event.shiftKey)return false;
+    const clearFilter=event.shiftKey&&(event.code==='Slash'||event.key==='?'||event.key==='/');
+    if(!['queue','reading','reply'].includes(mode)||quickReply||event.defaultPrevented||event.isComposing||event.metaKey||event.ctrlKey||event.altKey||event.shiftKey&&!clearFilter)return false;
     const path=event.composedPath(),fromInbox=path.includes(host),reply=window.__PME_REPLY__;
     // Native message focus can drive the inbox after Escape would close the
     // detail. Profiles, search overlays and editors retain their own keys.
@@ -877,17 +884,18 @@
       !fromInbox&&document.activeElement?.closest?.(editable);
     const horizontal=['ArrowLeft','ArrowRight'].includes(event.key),arrows=['ArrowDown','ArrowUp'].includes(event.key),enter=event.key==='Enter';
     if(typing&&!(active===$('search')&&(arrows||enter)))return false;
-    if(!arrows&&!horizontal&&!['h','j','k','l','x','/'].includes(key)&&!enter)return false;
+    if(!clearFilter&&!arrows&&!horizontal&&!['h','j','k','l','x','/'].includes(key)&&!enter)return false;
     // Keep Enter's ordinary button activation on header and filter controls.
     if(enter&&fromInbox&&!active?.dataset?.key&&active!==$('search'))return false;
     event.preventDefault();event.stopImmediatePropagation();touch();setInboxInput('keyboard');
-    if(key==='/'){$('search').focus({preventScroll:true});$('search').select();}
+    if(clearFilter)clearInboxFilter();
+    else if(key==='/'){$('search').focus({preventScroll:true});$('search').select();}
     else if(horizontal||key==='h'||key==='l')moveInboxFilter(event.key==='ArrowLeft'||key==='h'?-1:1);
     else if(arrows||key==='j'||key==='k')moveInboxCursor(event.key==='ArrowUp'||key==='k'?-1:1);
     else if(!event.repeat&&key==='x')void readInboxItem();
     else if(!event.repeat&&enter){
       const item=inboxKeyItem(),reply=window.__PME_REPLY__;
-      if(item){if(mode==='reply'&&reply?.status().ready&&reply.status().target?.key===item.key&&!reply.status().auxiliary)reply.focus();else openItem(item.key);}
+      if(item){if(mode==='reply'&&reply?.status().ready&&reply.status().target?.key===item.key&&!reply.status().auxiliary){clearInboxFilter();reply.focus();}else openItem(item.key);}
     }
     return true;
   }

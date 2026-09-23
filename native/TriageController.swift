@@ -706,6 +706,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         shortcutRow("X","Toggle the selected item read / unread")
         shortcutRow("N","Toggle the new-message composer")
         shortcutRow("/","Focus the conversation filter")
+        shortcutRow("⇧/","Clear the conversation filter without moving focus")
         shortcutRow("⌘K","Search Slack and switch conversations")
         shortcutRow("⌥⇧↓ / ⌥⇧↑","Open the next / previous unread item")
         shortcutRow("F6 / ⇧F6","Cycle inbox, messages, and composer focus (Fn may be needed)")
