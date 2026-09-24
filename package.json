@@ -23,6 +23,10 @@
     "shell:restart": "node scripts/devctl.mjs restart-shell",
     "doctor": "node scripts/doctor.mjs",
     "package:pilot": "node scripts/package-pilot.mjs",
-    "dev:debug": "node scripts/dev.mjs --development"
+    "dev:debug": "node scripts/dev.mjs --development",
+    "client:build": "node scripts/build-client.mjs",
+    "client:open": "open dist/PimpMyElectron.app",
+    "client:release": "node scripts/release-client.mjs",
+    "client:smoke": "node scripts/smoke-client.mjs"
   }
 }

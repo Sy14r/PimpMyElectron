@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "apps": [{
+    "id": "slack",
+    "name": "Slack",
+    "bundleId": "com.tinyspeck.slackmacgap",
+    "adapter": "slack",
+    "description": "Messaging, with room for your workflow.",
+    "mods": [{
+      "id": "slack-triage",
+      "name": "Slack Triage",
+      "version": "0.20.0",
+      "author": "PimpMyElectron",
+      "summary": "A quieter way to stay on top of your messages.",
+      "description": "An edge-docked inbox, hover previews, and quick replies. Keep your conversations close without keeping all of Slack open.",
+      "modules": ["state-observer", "native-reply", "triage-surface"],
+      "requires": [],
+      "features": ["An inbox at the edge of your screen", "Native Slack conversations and composer", "Multi-workspace unread notifications", "Keyboard triage and personal thread names", "Density, accent, and translucency controls"],
+      "access": "Uses Slack’s cached state and native interface. Background API polling is disabled.",
+      "defaultEnabled": true
+    }]
+  }]
+}

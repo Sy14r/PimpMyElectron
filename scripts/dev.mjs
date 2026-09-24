@@ -12,7 +12,8 @@ const controlPolicy = createControlPolicy(process.argv.slice(2));
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
-const dir = path.join(root, '.lab/dev');
+const dir = process.env.PME_DATA_DIR || path.join(root, '.lab/dev');
+if(!path.isAbsolute(dir))throw Error('PME_DATA_DIR must be absolute');
 const socketPath = path.join(dir, 'control.sock');
 const installation=inspectInstallation();
 const profile=installation.profile;
@@ -68,7 +69,7 @@ async function loadFeature() {
   feature = undefined;
   try {
     const module = await import(`../src/live-runtime.mjs?revision=${Date.now()}`);
-    feature = await module.createRuntime({ cdp, contextGuard, sessions, root, slackPID: child.pid, slackVersion:installation.version });
+    feature = await module.createRuntime({ cdp, contextGuard, sessions, root, runtimeDir:dir, slackPID: child.pid, slackVersion:installation.version });
     featureError = null;
   } catch {
     featureError = 'Mod runtime could not start. Ordinary Slack remains available; fix the module and reload.';
@@ -76,9 +77,10 @@ async function loadFeature() {
   }
 }
 function startHelper() {
-  const binary = path.join(root, '.lab/bin/SlackTriage');
+  const binary = process.env.PME_HELPER_PATH || path.join(root, '.lab/bin/SlackTriage');
+  if(process.env.PME_HELPER_PATH&&!fs.existsSync(binary)){logStatus('Packaged menu controller is missing.');return;}
   const source = path.join(root, 'native/TriageController.swift');
-  if (!fs.existsSync(binary) || fs.statSync(source).mtimeMs > fs.statSync(binary).mtimeMs) {
+  if (!process.env.PME_HELPER_PATH && (!fs.existsSync(binary) || fs.statSync(source).mtimeMs > fs.statSync(binary).mtimeMs)) {
     const build = spawnSync(process.execPath, ['scripts/build-shell.mjs'], { cwd: root, stdio: 'inherit' });
     if (build.status !== 0) { logStatus('Menu controller build failed. The in-Slack controls remain available.'); return; }
   }

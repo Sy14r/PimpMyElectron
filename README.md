@@ -1,4 +1,12 @@
-# PimpMyElectron: Slack extensibility research
+# PimpMyElectron
+
+The standalone **PME Client** discovers supported apps, manages bundled mods, and
+launches official Slack with Slack Triage in everyday mode.
+
+- [Download PME Client](https://github.com/Sy14r/PimpMyElectron/releases) — Apple Silicon, macOS 13.3+
+- [Install, update, build, and publish the client](docs/CLIENT-RELEASES.md)
+
+## Slack extensibility research
 
 **Yes: arbitrary renderer JavaScript, custom UI, and substantial native window control work inside this installed, unmodified official Slack client.** The most promising foundation is a launcher using a private Chrome DevTools Protocol (CDP) pipe, a small runtime mod loader, and Slack-specific adapters.
 
