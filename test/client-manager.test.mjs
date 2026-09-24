@@ -43,6 +43,6 @@ test('import copies only settings and ownership, preserves existing destination 
 });
 test('client control refuses arbitrary evaluation and launch serialization prevents concurrent mutations',async t=>{
  const f=await fixture(t);await assert.rejects(f.m.dispatch({op:'inspect',expression:'code'}),/Unsupported/);await assert.rejects(f.m.show('slack','inspect'),/Unsupported/);
- f.m.busy=true;await assert.rejects(f.m.dispatch({op:'launch',appId:'slack'}),/wait/);assert.equal((await f.m.dispatch({op:'status'})).apps.length,1);
+ f.m.busy=true;await assert.rejects(f.m.dispatch({op:'launch',appId:'slack'}),/wait/);assert.deepEqual((await f.m.dispatch({op:'status'})).apps.map(a=>a.id),['slack','spotify']);
  const env=cleanEnvironment({PATH:'/bin',NODE_OPTIONS:'--inspect',NODE_PATH:'/bad',DYLD_INSERT_LIBRARIES:'/bad',ELECTRON_RUN_AS_NODE:'1',PME_DATA_DIR:'/data'});assert.deepEqual(env,{PATH:'/bin',PME_DATA_DIR:'/data'});
 });

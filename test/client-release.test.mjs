@@ -5,7 +5,8 @@ test('client versioning fixes tag and artifact names and rejects unsafe metadata
  for(const change of [{version:'../../evil'},{version:'1.2.3-beta'},{build:0},{build:1.2},{minimumMacOS:'13&'}])assert.throws(()=>metadata({...v,...change}));
 });
 test('release entitlements permit JIT only in Node and reject debug/library bypasses',()=>{
- checkEntitlements({},'app');checkEntitlements({},'helper');checkEntitlements({'com.apple.security.cs.allow-jit':true},'node');
+ checkEntitlements({'com.apple.security.automation.apple-events':true},'spotify-menu');assert.throws(()=>checkEntitlements({},'spotify-menu'));checkEntitlements({'com.apple.security.automation.apple-events':true},'app');
+ assert.throws(()=>checkEntitlements({},'app'));for(const kind of ['helper','launcher-slack','launcher-spotify','node'])assert.throws(()=>checkEntitlements({'com.apple.security.automation.apple-events':true},kind));checkEntitlements({},'helper');checkEntitlements({'com.apple.security.cs.allow-jit':true},'node');
  for(const key of ['com.apple.security.get-task-allow','com.apple.security.cs.disable-library-validation','com.apple.security.cs.allow-unsigned-executable-memory'])assert.throws(()=>checkEntitlements({'com.apple.security.cs.allow-jit':true,[key]:true},'node'));
  assert.throws(()=>checkEntitlements({'com.apple.security.cs.allow-jit':true},'app'));assert.throws(()=>checkEntitlements({},'node'));
 });

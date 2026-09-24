@@ -1,0 +1,166 @@
+<div id="spotify-concepts" aria-label="Spotify menu player concepts">
+  <style>
+    #spotify-concepts{--sp-bg:#151a1c;--sp-panel:#202729;--sp-line:#343e40;--sp-text:#f1f6f3;--sp-muted:#aab6b0;--sp-green:#63df91;color:var(--sp-text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark;padding:8px 0 24px}
+    #spotify-concepts *{box-sizing:border-box}
+    #spotify-concepts button,#spotify-concepts input{font:inherit}
+    #spotify-concepts button{border:0;color:inherit;background:transparent;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 11px;border-radius:9px;min-height:36px}
+    #spotify-concepts button:hover{background:#ffffff10}
+    #spotify-concepts button:focus-visible,#spotify-concepts input:focus-visible{outline:2px solid var(--sp-green);outline-offset:3px}
+    #spotify-concepts button[aria-pressed=true]{background:#63df9120;color:var(--sp-green)}
+    #spotify-concepts .concepts{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:16px}
+    #spotify-concepts .concepts button{background:var(--sp-panel);color:var(--sp-muted);font-size:12px}
+    #spotify-concepts .concepts button[aria-pressed=true]{background:#34483b;color:#c4fbd6}
+    #spotify-concepts .stage{max-width:650px;margin:auto;padding:0 14px 22px;background:radial-gradient(ellipse at 20% 100%,#223a36,transparent 70%),#242d31;border-radius:16px;min-height:430px}
+    #spotify-concepts .menubar{height:38px;display:flex;align-items:center;justify-content:flex-end;gap:8px;border-bottom:1px solid #ffffff10;margin:0 -14px 13px;padding:0 15px;font-size:11px;color:#c7d1cb}
+    #spotify-concepts .menubar button{padding:5px 9px;min-height:28px;color:var(--sp-green)}
+    #spotify-concepts .window{width:min(100%,var(--sp-width,390px));margin:0 0 0 auto;border-radius:var(--sp-radius,18px);background:var(--sp-bg);border:1px solid #ffffff12;box-shadow:0 12px 28px #0005;position:relative}
+    #spotify-concepts .window:before{content:"";position:absolute;right:63px;top:-7px;width:12px;height:12px;background:var(--sp-bg);transform:rotate(45deg);border-left:1px solid #ffffff12;border-top:1px solid #ffffff12}
+    #spotify-concepts .top{display:flex;align-items:center;gap:5px;padding:10px 12px 2px}
+    #spotify-concepts .brand{font-size:11px;letter-spacing:1.5px;color:var(--sp-muted);margin-right:auto;padding-left:7px;font-weight:600}
+    #spotify-concepts .top button{padding:7px;min-height:30px}
+    #spotify-concepts .track{display:flex;align-items:center;gap:15px;padding:14px 20px 10px;min-width:0}
+    #spotify-concepts .art{flex-shrink:0;width:82px;height:82px;border-radius:12px;background:radial-gradient(ellipse at 65% 30%,#a2d1b1 0,transparent 42%),linear-gradient(130deg,#304940,#648e76);display:grid;place-items:center;position:relative;overflow:hidden;color:#ffffffb0}
+    #spotify-concepts .art:after{content:"";position:absolute;width:100%;height:55%;left:0;bottom:-8%;border-radius:50%;background:#14291f88;transform:rotate(-23deg)}
+    #spotify-concepts .art[data-cover="1"]{background:radial-gradient(circle at 30% 25%,#ffd396,transparent 45%),linear-gradient(120deg,#c27e61,#654847)}
+    #spotify-concepts .art[data-cover="2"]{background:radial-gradient(circle at 75% 75%,#a5b9eb,transparent 45%),linear-gradient(120deg,#303858,#6e7da6)}
+    #spotify-concepts .art[data-cover="3"]{background:radial-gradient(circle at 70% 25%,#ebbcc8,transparent 45%),linear-gradient(120deg,#65414e,#b2757d)}
+    #spotify-concepts .tracktext{flex:1;min-width:0}
+    #spotify-concepts .title{font-weight:600;font-size:18px;line-height:1.2;margin-bottom:6px}
+    #spotify-concepts .muted{color:var(--sp-muted);font-size:12px}
+    #spotify-concepts .album{color:#82958b;font-size:11px;margin-top:3px}
+    #spotify-concepts .transport{padding:5px 20px 14px}
+    #spotify-concepts input[type=range]{width:100%;accent-color:var(--sp-green);height:15px;display:block;margin:0}
+    #spotify-concepts .time{display:flex;justify-content:space-between;color:var(--sp-muted);font-size:11px;font-variant-numeric:tabular-nums}
+    #spotify-concepts .controls{display:flex;justify-content:space-between;align-items:center;margin:9px 0 8px}
+    #spotify-concepts .play{background:var(--sp-green);color:#112119;width:53px;height:43px;border-radius:24px}
+    #spotify-concepts .play:hover{background:#8cebad}
+    #spotify-concepts .volume{display:flex;align-items:center;gap:12px;color:var(--sp-muted);padding:0 5px}
+    #spotify-concepts .volume input{max-width:130px;margin-right:auto}
+    #spotify-concepts .volume output{font-size:11px;min-width:26px}
+    #spotify-concepts .docknav{display:flex;border-top:1px solid var(--sp-line);padding:7px 10px;gap:3px}
+    #spotify-concepts .docknav button{flex:1;font-size:12px;padding:8px 4px}
+    #spotify-concepts .drawer{border-top:1px solid var(--sp-line);padding:14px 16px 12px;animation:sp-reveal 170ms ease-out}
+    #spotify-concepts .drawer[hidden],#spotify-concepts .window[hidden]{display:none}
+    #spotify-concepts .search{display:flex;align-items:center;gap:9px;background:#293233;border:1px solid #53635a;border-radius:10px;padding:8px 10px;margin-bottom:14px}
+    #spotify-concepts .search input{width:100%;min-width:0;border:0;background:transparent;color:var(--sp-text);outline-offset:4px}
+    #spotify-concepts .search input::placeholder{color:var(--sp-muted)}
+    #spotify-concepts .label{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--sp-muted);margin:12px 0 5px}
+    #spotify-concepts .label button{font-size:11px;min-height:22px;padding:3px 5px}
+    #spotify-concepts .row{display:flex;align-items:center;gap:5px;border-radius:9px}
+    #spotify-concepts .row:hover{background:#ffffff08}
+    #spotify-concepts .row .song{flex:1;min-width:0;justify-content:flex-start;text-align:left;padding:7px 3px;gap:10px}
+    #spotify-concepts .song .art{width:37px;height:37px;border-radius:6px}
+    #spotify-concepts .song .names{min-width:0;flex:1;display:block}
+    #spotify-concepts .song strong{display:block;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    #spotify-concepts .song small{display:block;font-size:11px;color:var(--sp-muted)}
+    #spotify-concepts .row .add{padding:7px;min-width:31px}
+    #spotify-concepts .shortcuts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:9px}
+    #spotify-concepts .shortcuts button{background:var(--sp-panel);padding:12px 6px;display:flex;flex-direction:column;font-size:11px}
+    #spotify-concepts .tabs{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:9px}
+    #spotify-concepts .tabs button{font-size:11px;min-height:28px;padding:6px 9px}
+    #spotify-concepts .collection{display:flex;align-items:center;gap:12px;margin:10px 0 15px}
+    #spotify-concepts .collection .art{width:60px;height:60px}
+    #spotify-concepts .collection strong{font-size:17px;display:block}
+    #spotify-concepts .toast{font-size:11px;min-height:25px;padding:4px 20px 10px;color:var(--sp-green)}
+    #spotify-concepts .foot{font-size:11px;color:#82958b;padding:0 20px 12px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px}
+    #spotify-concepts .mini .track{padding:8px 18px;gap:10px}
+    #spotify-concepts .mini .track>.art{width:44px;height:44px;border-radius:7px}
+    #spotify-concepts .mini .title{font-size:14px;margin-bottom:3px}
+    #spotify-concepts .mini .album{display:none}
+    #spotify-concepts .mini .transport{padding-top:0;padding-bottom:8px}
+    #spotify-concepts .mini .transport .time,#spotify-concepts .mini .volume{display:none}
+    #spotify-concepts .mini .controls{margin:5px 0 0}
+    #spotify-concepts .mini .play{height:34px;width:44px}
+    #spotify-concepts .empty{padding:18px 0;color:var(--sp-muted);font-size:13px}
+    #spotify-concepts .hint{font-size:11px;color:#bdc9c2;text-align:center;margin:12px 0 0}
+    #spotify-concepts svg{width:17px;height:17px;flex-shrink:0}
+    @keyframes sp-reveal{from{opacity:.4;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+    @media(prefers-reduced-motion:reduce){#spotify-concepts .drawer{animation:none}}
+    @media(max-width:400px){#spotify-concepts .stage{padding:0 8px 15px}#spotify-concepts .menubar{margin:0 -8px 12px}#spotify-concepts .track{padding:12px;gap:10px}#spotify-concepts .track>.art{width:65px;height:65px}#spotify-concepts .drawer{padding:12px}#spotify-concepts .title{font-size:16px}#spotify-concepts .transport{padding-left:12px;padding-right:12px}}
+  </style>
+  <div class="concepts" aria-label="Compare concepts">
+    <button data-concept="controls" aria-pressed="false">A · Controls + pins</button>
+    <button data-concept="switcher" aria-pressed="true">B · Quick switcher</button>
+    <button data-concept="library" aria-pressed="false">C · Mini library</button>
+  </div>
+  <div class="stage">
+    <div class="menubar"><span>Menu bar</span><button id="sp-menu" aria-label="Open Spotify widget"><i data-lucide="audio-lines" aria-hidden="true"></i></button><span>12:41</span></div>
+    <section class="window" aria-label="Spotify widget preview">
+      <div class="top"><span class="brand">SPOTIFY / PME</span><button data-action="pin" aria-label="Keep widget open" aria-pressed="false"><i data-lucide="pin" aria-hidden="true"></i></button><button data-action="close" aria-label="Close widget"><i data-lucide="x" aria-hidden="true"></i></button></div>
+      <div id="sp-player"></div>
+      <nav class="docknav" aria-label="Widget views"></nav>
+      <div class="drawer" hidden><div id="sp-drawer"></div></div>
+      <div class="toast" aria-live="polite"></div>
+      <div class="foot"><span id="sp-behavior">Hover preview</span><span>Interactive concept · sample music</span></div>
+    </section>
+    <div class="hint">Hover the menu icon · Click to explore · Esc steps back</div>
+  </div>
+  <script>
+  (()=>{
+    const root=document.getElementById('spotify-concepts'),panel=root.querySelector('.window'),drawer=root.querySelector('.drawer'),content=root.querySelector('#sp-drawer'),player=root.querySelector('#sp-player'),nav=root.querySelector('.docknav');
+    const icon=name=>`<i data-lucide="${name}" aria-hidden="true"></i>`;
+    const tracks=[{name:'New Dawn',artist:'Mira Lane',album:'Soft Focus',cover:0,length:232},{name:'Sunroom',artist:'Low Season',album:'Slow Hours',cover:1,length:198},{name:'Night Drive',artist:'Parallel Lines',album:'After Dark',cover:2,length:267},{name:'Floating',artist:'Mira Lane',album:'Soft Focus',cover:0,length:216},{name:'Small Hours',artist:'Pale North',album:'Still Life',cover:3,length:184},{name:'Tidal',artist:'Parallel Lines',album:'After Dark',cover:2,length:241}];
+    const collections=[{name:'Deep work',detail:'Playlist · Made by you',cover:0,ids:[0,3,4]},{name:'Evening reset',detail:'Playlist · Made by you',cover:2,ids:[2,5,1]},{name:'Soft Focus',detail:'Album · Mira Lane',cover:0,ids:[0,3]},{name:'Slow Hours',detail:'Album · Low Season',cover:1,ids:[1,4]}];
+    const state={concept:'switcher',view:'',current:0,playing:true,position:81,volume:65,pinned:false,open:true,query:'',scope:'All',collection:null,queue:[1,2,4],pins:[0,2],saved:[0,3,4],shuffle:false,repeat:false};
+    const design={width:390,radius:18,returnAfterPlay:true,artwork:true};
+    let closeTimer;
+    const esc=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const time=n=>`${Math.floor(n/60)}:${String(n%60).padStart(2,'0')}`;
+    function save(){window.openai?.setWidgetState?.({modelContent:{concept:state.concept,view:state.view,returnAfterPlay:design.returnAfterPlay,width:design.width},privateContent:{...state,...design}})?.catch(()=>{});}
+    function restore(saved){const s=saved?.privateContent;if(!s)return;for(const k of ['concept','view','scope'])if(typeof s[k]==='string')state[k]=s[k];for(const k of ['returnAfterPlay','artwork'])if(typeof s[k]==='boolean')design[k]=s[k];if(['controls','switcher','library'].includes(state.concept)===false)state.concept='switcher';if(!['','search','library','pins','queue'].includes(state.view))state.view='';}
+    function icons(){if(globalThis.lucide)lucide.createIcons({attrs:{width:17,height:17}});root.querySelectorAll('button').forEach(b=>b.classList.add('cursor-interaction'));}
+    function art(cover){return `<span class="art" data-cover="${cover}" aria-hidden="true"></span>`;}
+    function toast(message){root.querySelector('.toast').textContent=message;}
+    function behavior(){root.querySelector('#sp-behavior').textContent=state.pinned?'Pinned open':state.view?'Stays open while browsing':'Hover preview';root.querySelector('[data-action="pin"]').setAttribute('aria-pressed',state.pinned);}
+    function renderPlayer(){const t=tracks[state.current];player.innerHTML=`<div class="track">${design.artwork?art(t.cover):''}<div class="tracktext"><div class="title">${t.name}</div><div class="muted">${t.artist}</div><div class="album">${t.album}</div></div><button data-action="favorite" aria-label="${state.concept==='controls'?'Pin track in PME':'Save track to library'}" aria-pressed="${(state.concept==='controls'?state.pins:state.saved).includes(state.current)}">${icon(state.concept==='controls'?'pin':'heart')}</button></div><div class="transport"><input id="sp-seek" type="range" min="0" max="${t.length}" value="${state.position}" aria-label="Track position"><div class="time"><span id="sp-elapsed">${time(state.position)}</span><span>${time(t.length)}</span></div><div class="controls"><button data-action="shuffle" aria-label="Shuffle" aria-pressed="${state.shuffle}">${icon('shuffle')}</button><button data-action="previous" aria-label="Previous track">${icon('skip-back')}</button><button class="play" data-action="playpause" aria-label="${state.playing?'Pause':'Play'}">${icon(state.playing?'pause':'play')}</button><button data-action="next" aria-label="Next track">${icon('skip-forward')}</button><button data-action="repeat" aria-label="Repeat" aria-pressed="${state.repeat}">${icon('repeat')}</button></div><div class="volume">${icon('volume-2')}<input id="sp-volume" type="range" min="0" max="100" value="${state.volume}" aria-label="Spotify volume"><output>${state.volume}%</output><span class="muted">Spotify</span></div></div>`;}
+    function row(id,mode='song'){const t=tracks[id];return `<div class="row"><button class="song" data-play="${id}" aria-label="Play ${t.name}">${art(t.cover)}<span class="names"><strong>${t.name}</strong><small>${t.artist}</small></span></button>${mode==='queue'?`<button class="add" data-remove="${id}" aria-label="Remove ${t.name} from queue">${icon('x')}</button>`:state.concept==='controls'?`<button class="add" data-track-pin="${id}" aria-label="Pin ${t.name}" aria-pressed="${state.pins.includes(id)}">${icon('pin')}</button>`:`<button class="add" data-add="${id}" aria-label="Add ${t.name} to queue">${icon('list-plus')}</button>`}</div>`;}
+    function collectionRows(items){return items.map((c)=>`<div class="row"><button class="song" data-collection="${collections.indexOf(c)}">${art(c.cover)}<span class="names"><strong>${c.name}</strong><small>${c.detail}</small></span>${icon('chevron-right')}</button></div>`).join('');}
+    function renderResults(){const dest=content.querySelector('#sp-results');if(!dest)return;const q=state.query.toLowerCase().trim();if(state.view==='search'){
+      const ids=(state.concept==='controls'?[...new Set([...state.pins,0,1,2])]:tracks.map((_,i)=>i)).filter(i=>(tracks[i].name+' '+tracks[i].artist+' '+tracks[i].album).toLowerCase().includes(q));
+      const cs=state.concept==='controls'?[]:collections.filter(c=>c.name.toLowerCase().includes(q));
+      dest.innerHTML=(ids.length?`<div class="label">${q?'Songs':'Recent picks'}</div>`+ids.slice(0,q?5:3).map(i=>row(i)).join(''):'')+(cs.length?`<div class="label">${q?'Albums & playlists':'Your shortcuts'}</div>`+collectionRows(cs.slice(0,2)):'')||'<div class="empty">No matches in this sample collection.</div>';
+    }else if(state.view==='library'){
+      if(state.collection!==null){const c=collections[state.collection];dest.innerHTML=`<button data-action="library-back">${icon('arrow-left')} Your library</button><div class="collection">${art(c.cover)}<div><strong>${c.name}</strong><span class="muted">${c.detail}</span></div></div>${c.ids.map(i=>row(i)).join('')}`;}
+      else if(state.scope==='Liked songs'){dest.innerHTML=state.saved.map(i=>row(i)).join('')||'<div class="empty">No saved songs in this mock.</div>';}
+      else{dest.innerHTML=collectionRows(collections.filter(c=>state.scope==='All'||c.detail.startsWith(state.scope==='Albums'?'Album':'Playlist')));}
+    }icons();}
+    function renderDrawer(){drawer.hidden=!state.view;if(!state.view){content.innerHTML='';return;}
+      if(state.view==='search'){content.innerHTML=`<label class="search">${icon('search')}<input id="sp-query" placeholder="${state.concept==='controls'?'Search PME pins & recent picks':'Songs, artists, albums…'}" aria-label="Search music" value="${esc(state.query)}"><button data-action="clear-search" aria-label="Clear search">${icon('x')}</button></label><div id="sp-results"></div>`;renderResults();}
+      if(state.view==='library'){content.innerHTML=`<div class="tabs" aria-label="Library categories">${['All','Playlists','Albums','Liked songs'].map(s=>`<button data-scope="${s}" aria-pressed="${state.scope===s}">${s}</button>`).join('')}</div><div id="sp-results"></div>`;renderResults();}
+      if(state.view==='pins'){content.innerHTML=`<div class="label">Pinned in PME</div>${state.pins.map(i=>row(i)).join('')||'<div class="empty">Pin a track to keep it here.</div>'}<div class="label">Quick actions</div><div class="shortcuts"><button data-action="quiet">${icon('volume-1')} Quiet · 25%</button><button data-action="focus">${icon('timer')} Pause in 25m</button><button data-view="search">${icon('search')} Find a pin</button></div>`;}
+      if(state.view==='queue'){content.innerHTML=`<div class="label">Up next <span>${state.queue.length} tracks</span></div>${state.queue.map(i=>row(i,'queue')).join('')||'<div class="empty">Queue is empty. Add a song from Search.</div>'}`;}
+    }
+    function render(){root.style.setProperty('--sp-width',design.width+'px');root.style.setProperty('--sp-radius',design.radius+'px');panel.hidden=!state.open;panel.classList.toggle('mini',state.concept==='library'&&!!state.view);root.querySelectorAll('[data-concept]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.concept===state.concept));const views=state.concept==='controls'?[['pins','pin','Pins'],['search','search','Find']]:[['search','search','Search'],['library','library','Library'],['queue','list-music','Queue']];nav.innerHTML=views.map(([v,i,label])=>`<button data-view="${v}" aria-pressed="${state.view===v}">${icon(i)} ${label}</button>`).join('');renderPlayer();renderDrawer();behavior();icons();}
+    function play(id){state.current=id;state.playing=true;state.position=0;if(design.returnAfterPlay&&state.concept!=='library'){state.view='';state.query='';}render();toast('Playing '+tracks[id].name);save();}
+    root.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+      if(b.dataset.concept){state.concept=b.dataset.concept;state.view=state.concept==='controls'?'pins':state.concept==='library'?'library':'';state.open=true;state.query='';state.collection=null;toast('');render();save();return;}
+      if(b.dataset.view){state.view=state.view===b.dataset.view?'':b.dataset.view;state.collection=null;state.query='';render();if(state.view==='search')content.querySelector('input')?.focus();save();return;}
+      if(b.dataset.play!==undefined){play(Number(b.dataset.play));return;}
+      if(b.dataset.add!==undefined){const id=Number(b.dataset.add);if(!state.queue.includes(id))state.queue.push(id);toast('Added '+tracks[id].name+' to queue');save();return;}
+      if(b.dataset.remove!==undefined){state.queue=state.queue.filter(id=>id!==Number(b.dataset.remove));renderDrawer();icons();save();return;}
+      if(b.dataset.collection!==undefined){state.collection=Number(b.dataset.collection);state.view='library';render();save();return;}
+      if(b.dataset.scope){state.scope=b.dataset.scope;state.collection=null;renderDrawer();icons();save();return;}
+      if(b.dataset.trackPin!==undefined){const id=Number(b.dataset.trackPin);state.pins=state.pins.includes(id)?state.pins.filter(x=>x!==id):[...state.pins,id];render();save();return;}
+      const a=b.dataset.action;
+      if(a==='playpause'){state.playing=!state.playing;renderPlayer();icons();}
+      else if(a==='next'||a==='previous'){play((state.current+(a==='next'?1:tracks.length-1))%tracks.length);}
+      else if(a==='shuffle'||a==='repeat'){state[a]=!state[a];renderPlayer();icons();}
+      else if(a==='pin'){state.pinned=!state.pinned;behavior();}
+      else if(a==='close'){state.open=false;state.view='';render();}
+      else if(a==='favorite'){const key=state.concept==='controls'?'pins':'saved';state[key]=state[key].includes(state.current)?state[key].filter(x=>x!==state.current):[...state[key],state.current];renderPlayer();icons();toast(state[key].includes(state.current)?(key==='pins'?'Pinned in PME':'Saved to your library'):'Removed');}
+      else if(a==='clear-search'){state.query='';const input=content.querySelector('input');input.value='';input.focus();renderResults();}
+      else if(a==='library-back'){state.collection=null;renderDrawer();icons();}
+      else if(a==='quiet'){state.volume=25;renderPlayer();icons();toast('Spotify volume set to 25%');}
+      else if(a==='focus'){toast('Spotify will pause in 25 minutes · simulated');}
+      save();
+    });
+    root.addEventListener('input',e=>{if(e.target.id==='sp-query'){state.query=e.target.value;renderResults();}if(e.target.id==='sp-seek'){state.position=Number(e.target.value);const label=root.querySelector('#sp-elapsed');if(label)label.textContent=time(state.position);}if(e.target.id==='sp-volume'){state.volume=Number(e.target.value);root.querySelector('.volume output').textContent=state.volume+'%';}});
+    root.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(state.query){state.query='';renderDrawer();icons();}else if(state.collection!==null){state.collection=null;renderDrawer();icons();}else if(state.view){state.view='';render();}else{state.open=false;render();}save();}if(e.key==='Enter'&&e.target.id==='sp-query'){const first=content.querySelector('[data-play]');if(first)play(Number(first.dataset.play));}});
+    const menu=root.querySelector('#sp-menu');menu.addEventListener('mouseenter',()=>{clearTimeout(closeTimer);if(!state.open){state.open=true;render();}});menu.addEventListener('click',()=>{state.open=true;render();});
+    function scheduleClose(){clearTimeout(closeTimer);closeTimer=setTimeout(()=>{if(!state.pinned&&!state.view&&!panel.matches(':hover')&&!menu.matches(':hover')){state.open=false;render();}},650);}
+    menu.addEventListener('mouseleave',scheduleClose);panel.addEventListener('mouseenter',()=>clearTimeout(closeTimer));panel.addEventListener('mouseleave',scheduleClose);
+    restore(window.openai?.widgetState);render();window.addEventListener('openai:set_globals',e=>{if(e.detail?.globals?.widgetState){restore(e.detail.globals.widgetState);render();}});
+    if(globalThis.Tweak){const tweaks=new Tweak({container:root,onChange:()=>{render();save();}});tweaks.addSlider(design,'width',{label:'Widget width',min:350,max:460,step:10,unit:'px'});tweaks.addSlider(design,'radius',{label:'Corner radius',min:8,max:26,unit:'px'});tweaks.addToggle(design,'returnAfterPlay',{label:'Return to player after choosing a song'});tweaks.addToggle(design,'artwork',{label:'Show album artwork'});}
+  })();
+  </script>
+</div>

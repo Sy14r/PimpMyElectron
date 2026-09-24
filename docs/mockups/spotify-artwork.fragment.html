@@ -1,0 +1,141 @@
+<div id="pme-art-study" aria-label="Artwork-driven Spotify mini player mock">
+  <style>
+    #pme-art-study{font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f3f5f4;--ink:#f3f5f4;--soft:#c3cbc8;--base:#111719;--tone:#a1e1d2;padding:10px 12px 28px;color-scheme:dark}
+    #pme-art-study *{box-sizing:border-box}
+    #pme-art-study button,#pme-art-study input{font:inherit}
+    #pme-art-study button{border:0;background:transparent;color:inherit;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px;border-radius:9px;min-height:34px}
+    #pme-art-study button:hover{background:#ffffff12}
+    #pme-art-study button:focus-visible,#pme-art-study input:focus-visible{outline:2px solid var(--tone);outline-offset:3px}
+    #pme-art-study svg{width:17px;height:17px;flex-shrink:0}
+    #pme-art-study .stage{max-width:400px;margin:auto;position:relative}
+    #pme-art-study .treatments{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:0 auto 14px;max-width:440px}
+    #pme-art-study .treatments button{background:#222c2c;color:#c5d1ca;font-size:12px;padding:9px 12px}
+    #pme-art-study .treatments button[aria-pressed=true]{background:#cde8dd;color:#162820}
+    #pme-art-study .anchor{display:flex;justify-content:flex-end;height:35px;padding-right:31px;margin-bottom:9px}
+    #pme-art-study .anchor button{background:#26312e;border-radius:7px;min-height:28px;height:28px;color:#d8ede3;padding:6px 11px}
+    #pme-art-study .window{position:relative;isolation:isolate;border-radius:21px;background:var(--base);box-shadow:0 14px 35px #0004,inset 0 0 0 1px #ffffff12}
+    #pme-art-study .window:before{content:"";position:absolute;right:44px;top:-5px;width:11px;height:11px;transform:rotate(45deg);background:var(--base);z-index:-1}
+    #pme-art-study .surface{overflow:hidden;border-radius:21px}
+    #pme-art-study .hero{position:relative;isolation:isolate;overflow:hidden;background:var(--base)}
+    #pme-art-study .atmosphere{position:absolute;inset:-48px;z-index:-3;background-image:var(--art);background-size:cover;background-position:center 40%;filter:blur(28px) saturate(1.2);opacity:var(--wash,.6);transform:scale(1.06);pointer-events:none;transition:opacity 250ms}
+    #pme-art-study .veil{position:absolute;inset:0;z-index:-2;background:linear-gradient(110deg,#0c141b66,#0c141b99 70%),linear-gradient(0deg,var(--base),transparent 80%);pointer-events:none}
+    #pme-art-study .glow{position:absolute;inset:0;z-index:-1;box-shadow:inset 0 1px 0 #ffffff18;pointer-events:none}
+    #pme-art-study .chrome{display:flex;align-items:center;padding:12px 13px 4px 19px;gap:2px}
+    #pme-art-study .eyebrow{margin-right:auto;font-size:10px;letter-spacing:1.7px;font-weight:600;color:#dbe8e2;display:flex;gap:7px;align-items:center}
+    #pme-art-study .status-dot{width:5px;height:5px;border-radius:50%;background:var(--tone);box-shadow:0 0 9px color-mix(in srgb,var(--tone) 40%,transparent)}
+    #pme-art-study .chrome button{min-height:27px;padding:5px;color:#d4e0d9}
+    #pme-art-study .chrome svg{width:14px;height:14px}
+    #pme-art-study .track{display:flex;gap:18px;padding:17px 22px 19px;align-items:center;min-width:0}
+    #pme-art-study .cover-wrap{position:relative;flex:none;width:106px;height:106px;transition:width 200ms,height 200ms}
+    #pme-art-study .cover-wrap:before{content:"";position:absolute;inset:12px -4px -7px;background:var(--art) center/cover;filter:blur(20px);opacity:.35;z-index:-1}
+    #pme-art-study .cover{display:block;width:100%;height:100%;object-fit:cover;border-radius:10px;box-shadow:0 8px 22px #0005,inset 0 0 0 1px #fff2}
+    #pme-art-study .track-copy{min-width:0;flex:1}
+    #pme-art-study .title{font-size:21px;font-weight:600;line-height:1.2;letter-spacing:-.5px;margin:0 0 7px}
+    #pme-art-study .artist{font-size:13px;color:#e1e8e4;margin-bottom:4px}
+    #pme-art-study .album{font-size:11px;color:#bbc9c1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #pme-art-study .transport{padding:0 22px 8px}
+    #pme-art-study .progress{display:block;width:100%;height:3px;accent-color:var(--tone);margin:2px 0 8px}
+    #pme-art-study .times{display:flex;justify-content:space-between;font-size:10px;color:#b8c8c0;font-variant-numeric:tabular-nums}
+    #pme-art-study .playback{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 12px 3px}
+    #pme-art-study .playback button{width:35px;height:38px;padding:8px;color:#cbd6d0;position:relative}
+    #pme-art-study .playback .play{width:53px;height:44px;border-radius:24px;background:var(--tone);color:#15211d;box-shadow:0 3px 14px #0002}
+    #pme-art-study .playback .play:hover{filter:brightness(1.1)}
+    #pme-art-study .playback .active{color:var(--tone)}
+    #pme-art-study .playback .active:after{content:"";position:absolute;bottom:0;width:3px;height:3px;border-radius:50%;background:currentColor}
+    #pme-art-study .tabs{display:flex;gap:5px;padding:5px 15px 13px;position:relative}
+    #pme-art-study .tabs button{flex:1;font-size:12px;color:#b8c8c0;padding:8px 3px}
+    #pme-art-study .tabs button[aria-pressed=true]{background:#ffffff10;color:var(--tone)}
+    #pme-art-study .drawer{background:var(--base);padding:15px 18px 16px;border-top:1px solid #ffffff0d}
+    #pme-art-study .drawer-top{display:flex;gap:4px;align-items:center;margin-bottom:11px}
+    #pme-art-study .drawer-top button{font-size:11px;min-height:29px;padding:5px 10px;border-radius:18px;color:#aab7b0}
+    #pme-art-study .drawer-top button[aria-pressed=true]{background:#ffffff12;color:#eef2f0}
+    #pme-art-study .row{display:flex;align-items:center;gap:11px;padding:7px 2px;min-width:0;width:100%;text-align:left;justify-content:flex-start;border-radius:8px}
+    #pme-art-study .row img{width:38px;height:38px;object-fit:cover;border-radius:6px;flex:none}
+    #pme-art-study .row-copy{min-width:0;flex:1}
+    #pme-art-study .row-name{font-size:13px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+    #pme-art-study .row-sub{font-size:11px;color:#9fada5;margin-top:2px}
+    #pme-art-study .row>svg{width:14px;height:14px;color:#8a9990}
+    #pme-art-study .drawer-head{font-size:12px;font-weight:500;display:flex;align-items:center;gap:8px;margin:0 0 10px}
+    #pme-art-study .search{display:flex;gap:9px;align-items:center;background:#ffffff0a;border:1px solid #ffffff15;border-radius:9px;padding:9px 10px;margin-bottom:10px;color:#aebfb4}
+    #pme-art-study .search input{border:0;background:transparent;min-width:0;width:100%;color:var(--ink);font-size:13px}
+    #pme-art-study [hidden]{display:none!important}
+    #pme-art-study .window.expanded .track{padding-top:11px;padding-bottom:14px;gap:13px}
+    #pme-art-study .window.expanded .cover-wrap{width:54px;height:54px}
+    #pme-art-study .window.expanded .title{font-size:16px;margin-bottom:4px;letter-spacing:-.2px}
+    #pme-art-study .window.expanded .artist{font-size:12px;margin-bottom:2px}
+    #pme-art-study .window.expanded .atmosphere{background-position:center 35%}
+    #pme-art-study .window.expanded .tabs{padding-bottom:10px}
+    #pme-art-study .window[data-treatment="bleed"] .atmosphere{inset:0;filter:blur(2px) saturate(.9);background-position:center 48%;opacity:var(--wash);transform:scale(1.12)}
+    #pme-art-study .window[data-treatment="bleed"] .veil{background:linear-gradient(90deg,#07101777,#071017bb),linear-gradient(0deg,var(--base),transparent 90%)}
+    #pme-art-study .window[data-treatment="gallery"] .atmosphere{inset:-20px 35% 0 -70px;filter:blur(35px);opacity:var(--wash)}
+    #pme-art-study .window[data-treatment="gallery"] .veil{background:linear-gradient(90deg,transparent,var(--base) 95%),linear-gradient(0deg,var(--base),transparent 100%)}
+    @media(prefers-reduced-motion:reduce){#pme-art-study *{transition:none!important}}
+    @media(max-width:380px){#pme-art-study{padding:6px 0 20px}#pme-art-study .cover-wrap{width:88px;height:88px}#pme-art-study .track{gap:13px;padding-left:17px;padding-right:17px}#pme-art-study .title{font-size:19px}#pme-art-study .playback{margin-left:0;margin-right:0}}
+  </style>
+  <nav class="treatments" aria-label="Compare artwork treatments">
+    <button class="cursor-interaction" data-treatment="ambient" aria-pressed="true">Ambient wash</button>
+    <button class="cursor-interaction" data-treatment="bleed" aria-pressed="false">Artwork bleed</button>
+    <button class="cursor-interaction" data-treatment="gallery" aria-pressed="false">Gallery glow</button>
+  </nav>
+  <div class="stage">
+    <div class="anchor"><button class="cursor-interaction" data-action="reopen" aria-label="Toggle Spotify mini player"><i data-lucide="audio-lines" aria-hidden="true"></i></button></div>
+    <section class="window" data-treatment="ambient" aria-label="Spotify artwork treatment">
+      <div class="surface">
+        <div class="hero">
+          <div class="atmosphere"></div><div class="veil"></div><div class="glow"></div>
+          <div class="chrome"><span class="eyebrow"><span class="status-dot"></span><span class="state-label">NOW PLAYING</span></span><button class="cursor-interaction" data-action="pin" aria-label="Pin player" aria-pressed="false"><i data-lucide="pin" aria-hidden="true"></i></button><button class="cursor-interaction" data-action="close" aria-label="Close player"><i data-lucide="x" aria-hidden="true"></i></button></div>
+          <div class="track"><div class="cover-wrap"><img class="cover" alt="Sample album artwork"></div><div class="track-copy"><div class="title">Weightless</div><div class="artist">Still North</div><div class="album">Soft Focus · 2026</div></div></div>
+          <div class="transport"><input class="progress" aria-label="Playback position" type="range" min="0" max="254" value="78"><div class="times"><span class="elapsed">1:18</span><span class="duration">4:14</span></div><div class="playback"><button class="cursor-interaction active" data-action="shuffle" aria-label="Turn shuffle off" aria-pressed="true"><i data-lucide="shuffle" aria-hidden="true"></i></button><button class="cursor-interaction" data-action="previous" aria-label="Previous sample track"><i data-lucide="skip-back" aria-hidden="true"></i></button><button class="cursor-interaction play" data-action="play" aria-label="Pause"><i data-lucide="pause" aria-hidden="true"></i></button><button class="cursor-interaction" data-action="next" aria-label="Next sample track"><i data-lucide="skip-forward" aria-hidden="true"></i></button><button class="cursor-interaction" data-action="repeat" aria-label="Enable repeat"><i data-lucide="repeat" aria-hidden="true"></i></button></div></div>
+          <nav class="tabs" aria-label="Mini player views"><button class="cursor-interaction" data-tab="library" aria-pressed="false"><i data-lucide="library" aria-hidden="true"></i>Library</button><button class="cursor-interaction" data-tab="search" aria-pressed="false"><i data-lucide="search" aria-hidden="true"></i>Search</button><button class="cursor-interaction" data-tab="queue" aria-pressed="false"><i data-lucide="list-music" aria-hidden="true"></i>Queue</button></nav>
+        </div>
+        <section class="drawer" aria-label="Music browser" hidden></section>
+      </div>
+    </section>
+  </div>
+  <script>
+    (()=>{
+      const root=document.getElementById('pme-art-study'),win=root.querySelector('.window'),drawer=root.querySelector('.drawer');
+      const state={treatment:'ambient',intensity:68,art:0,tab:'',playing:true,shuffle:true,repeat:0,pin:false,category:'All',collection:null,query:''};
+      const music=[{title:'Weightless',artist:'Still North',album:'Soft Focus',tone:'#b1e5d6',colors:['#143c46','#498f93','#b3e5c1'],duration:254},{title:'Golden Hour',artist:'Mira Sol',album:'Heatwave',tone:'#ffc492',colors:['#4b1728','#da6d45','#ffe1a0'],duration:217},{title:'Night Drive',artist:'Glass Coast',album:'After Hours',tone:'#d1c0ff',colors:['#171636','#695aad','#b9b6ec'],duration:283}];
+      function cover(m,n){
+        const c=document.createElement('canvas');c.width=480;c.height=480;const x=c.getContext('2d');
+        const g=x.createLinearGradient(0,0,480,480);g.addColorStop(0,m.colors[0]);g.addColorStop(.65,m.colors[1]);g.addColorStop(1,m.colors[2]);x.fillStyle=g;x.fillRect(0,0,480,480);
+        if(n===0){for(let j=12;j>=0;j--){x.beginPath();x.ellipse(245,240,150-j*5,190-j*9,-.35,0,Math.PI*2);x.fillStyle=`rgba(198,255,224,${.025+j*.006})`;x.fill()}x.fillStyle='#e7ffdf';x.beginPath();x.ellipse(270,167,58,70,-.35,0,Math.PI*2);x.fill();for(let j=0;j<13;j++){x.beginPath();x.moveTo(-40,288+j*17);x.bezierCurveTo(145,190+j*20,220,390+j*4,530,265+j*17);x.lineTo(530,500);x.lineTo(-40,500);x.fillStyle=j%2?'#164b4b':'#357c74';x.globalAlpha=.16;x.fill()}x.globalAlpha=1;}
+        if(n===1){const glow=x.createRadialGradient(295,175,20,295,175,170);glow.addColorStop(0,'#fff9ce');glow.addColorStop(.4,'#ffcd79');glow.addColorStop(1,'#ef6b3300');x.fillStyle=glow;x.fillRect(0,0,480,480);for(let j=0;j<9;j++){x.beginPath();x.moveTo(-20,270+j*25);x.bezierCurveTo(120,200+j*22,370,440-j*11,510,230+j*26);x.lineTo(510,500);x.lineTo(-20,500);x.fillStyle=j%2?'#732c3b':'#4c2130';x.globalAlpha=.26;x.fill()}x.globalAlpha=1;}
+        if(n===2){x.save();x.translate(240,230);x.rotate(-.3);for(let j=0;j<7;j++){x.beginPath();x.ellipse(0,0,172-j*15,75-j*5,0,0,Math.PI*2);x.strokeStyle=j%2?'#ddd5ff':'#51419c';x.lineWidth=8-j*.5;x.stroke()}x.restore();for(let j=0;j<90;j++){const px=(j*137.51)%480,py=(j*91.77)%480;x.fillStyle='#ded6fb88';x.fillRect(px,py,j%7===0?2:1,j%7===0?2:1)}}
+        x.fillStyle='#ffffffdc';x.font='500 15px Helvetica';x.fillText(m.artist.toUpperCase(),29,40);x.font='500 35px Helvetica';x.fillText(m.album.toUpperCase(),27,437);return c.toDataURL('image/jpeg',.83);
+      }
+      music.forEach((m,i)=>m.art=cover(m,i));
+      const escape=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const icon=(name)=>`<i data-lucide="${name}" aria-hidden="true"></i>`;
+      const icons=()=>{if(globalThis.lucide)lucide.createIcons({attrs:{width:17,height:17}})};
+      function save(){window.openai?.setWidgetState?.({modelContent:{treatment:state.treatment,intensity:state.intensity,sampleArtwork:music[state.art].album,view:state.tab||'compact'},privateContent:{art:state.art,tab:state.tab}})?.catch(()=>{});}
+      function restore(raw){const saved=raw?.modelContent||{},ui=raw?.privateContent||{};if(['ambient','bleed','gallery'].includes(saved.treatment))state.treatment=saved.treatment;if(Number.isFinite(saved.intensity))state.intensity=Math.max(20,Math.min(100,saved.intensity));if([0,1,2].includes(ui.art))state.art=ui.art;if(['','library','search','queue'].includes(ui.tab))state.tab=ui.tab;}
+      function rows(items,collections=false){return items.map((m,i)=>`<button class="cursor-interaction row" data-row="${m.index}" data-collection="${collections}"><img src="${m.art}" alt=""><span class="row-copy"><span class="row-name" style="display:block">${escape(collections?m.album:m.title)}</span><span class="row-sub" style="display:block">${escape(m.artist)}${collections?' · Album':''}</span></span>${icon(collections?'chevron-right':'play')}</button>`).join('');}
+      function renderDrawer(){
+        if(!state.tab){drawer.innerHTML='';return}const indexed=music.map((m,i)=>({...m,index:i}));
+        if(state.tab==='search'){drawer.innerHTML=`<label class="search">${icon('search')}<input aria-label="Search sample music" placeholder="Songs, albums, playlists…" value="${escape(state.query)}"></label><div class="results"></div>`;results();}
+        else if(state.tab==='queue')drawer.innerHTML='<div class="drawer-head">Next up</div>'+rows([...indexed.slice(state.art+1),...indexed.slice(0,state.art+1)]);
+        else if(state.collection!==null){const m=music[state.collection];drawer.innerHTML=`<div class="drawer-head"><button class="cursor-interaction" data-action="back" aria-label="Back to library">${icon('chevron-left')}</button>${escape(m.album)}</div>`+rows(['First Light',m.title,'Slow Motion','Stay Awhile','Home Again'].map(title=>({...m,title,index:state.collection})));}
+        else drawer.innerHTML=`<div class="drawer-top">${['All','Albums','Liked songs'].map(c=>`<button class="cursor-interaction" data-category="${c}" aria-pressed="${state.category===c}">${c}</button>`).join('')}</div>`+rows(indexed,state.category!=='Liked songs');icons();
+      }
+      function results(){const q=state.query.toLowerCase();drawer.querySelector('.results').innerHTML=rows(music.map((m,i)=>({...m,index:i})).filter(m=>(m.title+' '+m.artist+' '+m.album).toLowerCase().includes(q)))||'<div class="row-sub">No matching sample tracks</div>';icons();}
+      function render(){const m=music[state.art];root.style.setProperty('--art',`url("${m.art}")`);root.style.setProperty('--tone',m.tone);root.style.setProperty('--wash',state.intensity/100);win.dataset.treatment=state.treatment;win.classList.toggle('expanded',!!state.tab);root.querySelector('.cover').src=m.art;root.querySelector('.cover').alt=m.album+' sample album artwork';root.querySelector('.title').textContent=m.title;root.querySelector('.artist').textContent=m.artist;root.querySelector('.album').textContent=m.album+' · 2026';root.querySelector('.duration').textContent=Math.floor(m.duration/60)+':'+String(m.duration%60).padStart(2,'0');root.querySelector('.progress').max=m.duration;root.querySelector('.state-label').textContent=state.playing?'NOW PLAYING':'SPOTIFY';
+        root.querySelectorAll('.treatments button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.treatment===state.treatment)));
+        const play=root.querySelector('[data-action=play]');play.innerHTML=icon(state.playing?'pause':'play');play.setAttribute('aria-label',state.playing?'Pause':'Play');const sh=root.querySelector('[data-action=shuffle]');sh.classList.toggle('active',state.shuffle);sh.setAttribute('aria-pressed',String(state.shuffle));sh.setAttribute('aria-label',state.shuffle?'Turn shuffle off':'Turn shuffle on');const re=root.querySelector('[data-action=repeat]');re.classList.toggle('active',state.repeat>0);re.innerHTML=icon(state.repeat===2?'repeat-1':'repeat');re.setAttribute('aria-label',['Enable repeat','Repeat one track','Turn repeat off'][state.repeat]);root.querySelector('[data-action=pin]').setAttribute('aria-pressed',String(state.pin));root.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tab===state.tab)));drawer.hidden=!state.tab;renderDrawer();icons();}
+      root.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const a=b.dataset.action;
+        if(b.dataset.treatment){state.treatment=b.dataset.treatment;win.hidden=false;}
+        if(a==='close')win.hidden=true;if(a==='reopen')win.hidden=!win.hidden;if(a==='pin')state.pin=!state.pin;if(a==='play')state.playing=!state.playing;if(a==='shuffle')state.shuffle=!state.shuffle;if(a==='repeat')state.repeat=(state.repeat+1)%3;
+        if(a==='next'||a==='previous'){state.art=(state.art+(a==='next'?1:2))%3;state.collection=null;root.querySelector('.progress').value=78;root.querySelector('.elapsed').textContent='1:18';}
+        if(a==='back')state.collection=null;
+        if(b.dataset.tab){state.tab=state.tab===b.dataset.tab?'':b.dataset.tab;state.collection=null;state.query='';}
+        if(b.dataset.category){state.category=b.dataset.category;state.collection=null;}
+        if(b.dataset.row!==undefined){if(b.dataset.collection==='true')state.collection=Number(b.dataset.row);else {state.art=Number(b.dataset.row);state.playing=true;}}
+        render();save();
+      });
+      root.addEventListener('input',e=>{if(e.target.matches('.search input')){state.query=e.target.value;results();}if(e.target.matches('.progress')){const n=Number(e.target.value);root.querySelector('.elapsed').textContent=Math.floor(n/60)+':'+String(n%60).padStart(2,'0');}});
+      root.addEventListener('keydown',e=>{if(e.key==='Escape'){if(state.query)state.query='';else if(state.collection!==null)state.collection=null;else state.tab='';render();save();}});
+      restore(window.openai?.widgetState);render();window.addEventListener('openai:set_globals',e=>{if(e.detail?.globals?.widgetState){restore(e.detail.globals.widgetState);render();}});
+    })();
+  </script>
+</div>

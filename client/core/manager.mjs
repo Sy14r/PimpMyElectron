@@ -1,11 +1,13 @@
+import {inspectSpotify} from './spotify.mjs';
+import {supportedApps} from './app-support.mjs';
 import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import {spawn,spawnSync} from 'node:child_process';
 import {validateCatalog,resolveSelection,moduleSelection} from './catalog.mjs';
 import {discoverApps} from './discovery.mjs';import {readJSON,writeJSON} from './state.mjs';import {control} from './control.mjs';
 import {listProfiles,readProfile,createProfile,updateProfile,profileFile,assertShortcut,withLaunchLock,sameSelection} from './shortcuts.mjs';
 import {inspectInstallation,developmentProfile,readProfileOwners} from '../../src/slack-installation.mjs';
 export class ClientManager {
- constructor({root,dataDir=path.join(os.homedir(),'Library/Application Support/PimpMyElectron'),node=process.execPath,helper=path.join(root,'bin/SlackTriage'),scan=discoverApps,inspect=inspectInstallation,request=control,launch=spawn,running=()=>spawnSync('/usr/bin/pgrep',['-x','Slack']).status===0}={}){
-  Object.assign(this,{root,dataDir,node,helper,scan,inspect,request,launch,running});this.installations=[];this.verified=new Map();this.busy=false;this.launching=false;
+ constructor({root,dataDir=path.join(os.homedir(),'Library/Application Support/PimpMyElectron'),node=process.execPath,helper=path.join(root,'bin/SlackTriage'),scan=discoverApps,inspect=inspectInstallation,spotifyInspect=inspectSpotify,spotifyHelper=path.resolve(root,'../../Helpers/SpotifyMenu.app/Contents/MacOS/SpotifyMenu'),request=control,launch=spawn,spotifyRunning=()=>spawnSync('/usr/bin/pgrep',['-x','Spotify']).status===0,running=()=>spawnSync('/usr/bin/pgrep',['-x','Slack']).status===0}={}){
+  Object.assign(this,{root,dataDir,node,helper,scan,inspect,spotifyInspect,spotifyHelper,request,launch,running,spotifyRunning});this.installations=[];this.verified=new Map();this.busy=false;this.launching=false;
  }
  async init(){
   this.clientVersion=await readJSON(path.join(this.root,'client/version.json'));
@@ -19,19 +21,26 @@ export class ClientManager {
  app(id){const app=this.catalog.apps.find(a=>a.id===id);if(!app)throw Error('Unsupported app');return app;}
  runtimeDir(id){this.app(id);return path.join(this.dataDir,'runtime',id);}
  async save(){await writeJSON(path.join(this.dataDir,'client.json'),this.config);}
+ async inspectApp(candidate,appId){
+  if(appId==='spotify')return this.spotifyInspect(candidate);
+  if(appId==='slack')return this.inspect(candidate);
+  const found=await this.scan(this.catalog,{roots:[],extraPaths:[candidate],metadataSearch:false});
+  const app=found.find(a=>a.path===candidate);if(!app)throw Error('Choose a supported official application.');return this.inspectApp(candidate,app.appId);
+ }
  async rescan(extra){
   if(extra){if(typeof extra!=='string'||!path.isAbsolute(extra)||!extra.endsWith('.app'))throw Error('Choose an application bundle.');
    // Verify before persisting manually chosen applications.
-   await this.inspect(extra);if(!this.config.extraPaths.includes(extra))this.config.extraPaths.push(extra);
+   await this.inspectApp(extra);if(!this.config.extraPaths.includes(extra))this.config.extraPaths.push(extra);
   }
   this.installations=await this.scan(this.catalog,{extraPaths:[...this.config.extraPaths,...Object.values(this.config.apps).map(a=>a.path).filter(Boolean)]});
   this.verified.clear();
-  for(const install of this.installations){try{const verified=await this.inspect(install.path);this.verified.set(install.path,verified);install.distribution=verified.distribution;install.verified=true;}catch(error){install.verified=false;install.error=error.message;}}
+  for(const install of this.installations){try{const verified=await this.inspectApp(install.path,install.appId);this.verified.set(install.path,verified);install.distribution=verified.distribution;install.verified=true;}catch(error){install.verified=false;install.error=error.message;}}
   for(const app of this.catalog.apps){const pref=this.config.apps[app.id],matches=this.installations.filter(i=>i.appId===app.id&&i.verified);if(!matches.some(i=>i.path===pref.path))pref.path=matches[0]?.path||null;}
   await this.save();return this.snapshot();
  }
  async runtime(id){
   try{const state=await this.request(path.join(this.runtimeDir(id),'control.sock'),{op:'status'});
+   if(id==='spotify')return state.adapter==='spotify'?{running:true,pid:state.pid,mode:'everyday',helperRunning:true,appRunning:state.appRunning,signedIn:true,error:state.error,appPath:state.appPath}: {running:false};
    return {running:state.running===true,pid:state.pid,mode:state.controlMode,appPath:state.installation?.app,version:state.installation?.version,error:state.featureError,
     helperRunning:state.helperRunning,signedIn:state.pages?.some(p=>p.signedIn)===true,modules:state.feature?.mods?.pages?.[0]?.modules||{},customApiRequests:state.feature?.customApi?.requests||0};
   }catch{return {running:false};}
@@ -39,10 +48,10 @@ export class ClientManager {
  async snapshot(){
   const apps=[];for(const app of this.catalog.apps){const pref=this.config.apps[app.id],runtime=await this.runtime(app.id);const installed=this.installations.filter(i=>i.appId===app.id);
    let profileConflict=false;const verified=this.verified.get(pref.path);
-   if(verified){try{profileConflict=!!(await fs.stat(verified.profile).catch(()=>null))&&!readProfileOwners(path.join(this.runtimeDir(app.id),'profile-owner.json')).some(p=>p.profile===verified.profile);}catch{profileConflict=true;}}
+   if(verified?.profile){try{profileConflict=!!(await fs.stat(verified.profile).catch(()=>null))&&!readProfileOwners(path.join(this.runtimeDir(app.id),'profile-owner.json')).some(p=>p.profile===verified.profile);}catch{profileConflict=true;}}
    const plan=moduleSelection(app,pref.selected,this.modules),applied=await readJSON(path.join(this.runtimeDir(app.id),'mods.json'),null);
    apps.push({...app,shortcuts:(await listProfiles(this.dataDir)).filter(p=>p.appId===app.id),installations:installed,selectedPath:pref.path,selectedMods:pref.selected,runtime,profileConflict,
-    changesPending:runtime.running&&JSON.stringify([...plan.disabled].sort())!==JSON.stringify([...(applied?.disabled||[])].sort())});
+    changesPending:runtime.running&&(app.id==='spotify'?!pref.selected.includes('spotify-menu'):JSON.stringify([...plan.disabled].sort())!==JSON.stringify([...(applied?.disabled||[])].sort()))});
   }
   return {clientVersion:this.clientVersion.version,clientBuild:this.clientVersion.build,catalogVersion:this.catalog.version,apps,launching:this.launching,dataDir:this.dataDir};
  }
@@ -57,6 +66,7 @@ export class ClientManager {
  async startLocked(appId,selection){
   const app=this.app(appId),pref=selection?{path:selection.installationPath,selected:resolveSelection(app,selection.modIds)}:this.config.apps[appId];if(!pref.selected.length)throw Error('Enable at least one mod before launching.');
   if((await this.runtime(appId)).running)throw Error('This app is already running with PME. Stop it before changing mods.');
+  if(appId==='spotify')return this.startSpotify(pref);
   if(this.running())throw Error('Slack is already open. Quit it normally, then launch it here. PME will not close another Slack session.');
   if(!pref.path)throw Error('Choose an installed Slack application first.');
   const installation=await this.inspect(pref.path);this.verified.set(pref.path,installation);
@@ -78,12 +88,43 @@ export class ClientManager {
    throw Error('Slack is taking longer than expected to start. Status will keep updating; check the launch log if it remains closed.');
   }finally{this.launching=false;await log.close();}
  }
+ async startSpotify(pref){
+  if(!pref.path)throw Error('Choose an installed Spotify application first.');
+  const installation=await this.inspectApp(pref.path,'spotify'),dir=this.runtimeDir('spotify');
+  const binary=this.spotifyHelper;await fs.access(binary);
+  await fs.mkdir(dir,{recursive:true,mode:0o700});
+  if(Buffer.byteLength(path.join(dir,'control.sock'))>=104)throw Error('Your home-folder path is too long for the local controller socket.');
+  const log=await fs.open(path.join(dir,'launcher.log'),'w',0o600);this.launching=true;
+  try{
+   // Reuse the private inherited-pipe host when only the widget was stopped.
+   const bridgePath=path.join(dir,'bridge.sock');
+   let bridge=await this.request(bridgePath,{op:'status'}).catch(()=>null);
+   if(bridge?.adapter!=='spotify'||bridge?.mode!=='pipe'){
+    if(this.spotifyRunning())throw Error('Quit Spotify normally, then launch it from PME to enable Mini Library.');
+    const host=this.launch(this.node,[path.join(this.root,'scripts/spotify-host.mjs'),'--app',installation.app,'--data-dir',dir],{cwd:this.root,env:cleanEnvironment(process.env),detached:true,stdio:['ignore',log.fd,log.fd]});
+    let hostError=false;host.once('error',()=>{hostError=true;});host.unref();
+    for(let i=0;i<100;i++){
+     await new Promise(r=>setTimeout(r,200));
+     if(hostError||host.exitCode!=null)throw Error('The Spotify library bridge could not start. Check its launch log in the PME data folder.');
+     bridge=await this.request(bridgePath,{op:'status'}).catch(()=>null);
+     if(bridge?.adapter==='spotify'&&bridge.mode==='pipe'&&bridge.ready)break;
+    }
+   }
+   if(!bridge?.ready)throw Error('Spotify is still starting or needs sign-in. Wait for its Home view, then launch again from PME.');
+   // Launch as an application; macOS attributes nested-helper consent to PME.
+   const child=this.launch('/usr/bin/open',['-g','-n','-a',path.resolve(binary,'../../..'),'--args','--data-dir',dir,'--spotify-app',installation.app],{cwd:this.root,env:cleanEnvironment(process.env),detached:true,stdio:['ignore',log.fd,log.fd]});
+   let failure=false;child.once('error',()=>{failure=true;});child.unref();
+   for(let i=0;i<60;i++){await new Promise(r=>setTimeout(r,200));if(failure||(child.exitCode!=null&&child.exitCode!==0))throw Error('The Spotify menu helper could not start. Check its launch log in the PME data folder.');
+    const state=await this.runtime('spotify');if(state.running){await writeJSON(path.join(dir,'launch-selection.json'),{pid:state.pid,installationPath:installation.app,modIds:pref.selected});return this.snapshot();}}
+   throw Error('The Spotify menu helper did not respond. Check its launch log in the PME data folder.');
+  }finally{this.launching=false;await log.close();}
+ }
  async createShortcut(appId,destination){
   const app=this.app(appId),pref=this.config.apps[appId];if(!pref.path||!pref.selected.length)throw Error('Choose an installation and enable at least one mod.');
-  await this.inspect(pref.path);const resources=path.resolve(this.root,'..'),template=path.resolve(resources,'../Helpers/SlackLauncher.app');await fs.access(template);
+  await this.inspectApp(pref.path,appId);const resources=path.resolve(this.root,'..'),template=path.resolve(resources,'../Helpers',supportedApps[appId].template);await fs.access(template);
   await createProfile({dataDir:this.dataDir,template,appId,installationPath:pref.path,modIds:resolveSelection(app,pref.selected),destination,clientPath:path.resolve(resources,'../..')});return this.snapshot();
  }
- async updateShortcut(appId,id){const p=await readProfile(this.dataDir,id);if(p.appId!==appId)throw Error('Wrong app for shortcut');const pref=this.config.apps[appId];if(!pref.path||!pref.selected.length)throw Error('Choose an installation and enable at least one mod.');await this.inspect(pref.path);await updateProfile(this.dataDir,id,{installationPath:pref.path,modIds:resolveSelection(this.app(appId),pref.selected)});return this.snapshot();}
+ async updateShortcut(appId,id){const p=await readProfile(this.dataDir,id);if(p.appId!==appId)throw Error('Wrong app for shortcut');const pref=this.config.apps[appId];if(!pref.path||!pref.selected.length)throw Error('Choose an installation and enable at least one mod.');await this.inspectApp(pref.path,appId);await updateProfile(this.dataDir,id,{installationPath:pref.path,modIds:resolveSelection(this.app(appId),pref.selected)});return this.snapshot();}
  async shortcutLocation(id,newPath){const p=await readProfile(this.dataDir,id);await assertShortcut(newPath,id);await updateProfile(this.dataDir,id,{shortcutPath:newPath,name:path.basename(newPath,'.app')});return this.snapshot();}
  async launchShortcut(id,shortcutPath){
   const p=await readProfile(this.dataDir,id);await assertShortcut(shortcutPath,id);
@@ -92,16 +133,16 @@ export class ClientManager {
   return withLaunchLock(this.dataDir,async()=>{
    const state=await this.runtime(p.appId);
    if(state.running){const active=await readJSON(path.join(this.runtimeDir(p.appId),'launch-selection.json'),null);
-    if(state.mode!=='everyday'||active?.pid!==state.pid||!sameSelection(active,p))throw Error('Slack is already running with a different launch selection. Stop it from PME before using this shortcut.');
+    if(state.mode!=='everyday'||active?.pid!==state.pid||!sameSelection(active,p))throw Error('This app is already running with a different launch selection. Stop its mod from PME before using this shortcut.');
     const deadline=Date.now()+12000;while(true){try{await this.show(p.appId,'queue');return;}catch(error){if(Date.now()>=deadline)throw error;await new Promise(r=>setTimeout(r,250));}}
    }
    await this.startLocked(p.appId,p);
   });
  }
  async stop(appId){const dir=this.runtimeDir(appId),state=await this.runtime(appId);if(!state.running)return this.snapshot();if(state.mode!=='everyday')throw Error('This session was not started in everyday mode. Stop it from its original launcher.');await this.request(path.join(dir,'control.sock'),{op:'stop'});for(let i=0;i<40;i++){await new Promise(r=>setTimeout(r,150));if(!(await this.runtime(appId)).running)break;}return this.snapshot();}
- async show(appId,op){if(!['queue','preferences','stock'].includes(op))throw Error('Unsupported view');const state=await this.runtime(appId);if(!state.running||state.mode!=='everyday')throw Error('Launch the app with PME first.');await this.request(path.join(this.runtimeDir(appId),'shell.sock'),{op});return this.snapshot();}
+ async show(appId,op){if(!['queue','preferences','stock'].includes(op))throw Error('Unsupported view');const state=await this.runtime(appId);if(!state.running||state.mode!=='everyday')throw Error('Launch the app with PME first.');await this.request(path.join(this.runtimeDir(appId),appId==='spotify'?'control.sock':'shell.sock'),{op:appId==='spotify'?'show':op});return this.snapshot();}
  async importSetup(appId,source){
-  this.app(appId);if((await this.runtime(appId)).running)throw Error('Stop the PME-managed app before importing settings.');
+  this.app(appId);if(appId!=='slack')throw Error('Import is only supported for Slack.');if((await this.runtime(appId)).running)throw Error('Stop the PME-managed app before importing settings.');
   if(!path.isAbsolute(source))throw Error('Choose your existing PME project folder.');
   const nested=path.join(source,'.lab/dev');if(await fs.stat(nested).catch(()=>null))source=nested;
   const owners=readProfileOwners(path.join(source,'profile-owner.json'));if(!owners.length)throw Error('That folder does not contain an existing PME setup.');

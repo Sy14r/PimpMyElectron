@@ -1,10 +1,10 @@
 # PME client releases
 
 PME Client is a native macOS mod manager with a bundled Node runtime and native
-triage helper. This first release supports Apple Silicon, macOS 13.3+, and the
-official Slack app. It does not contain Slack itself. The client always launches
-mods through the everyday private-pipe controller, with developer evaluation and
-custom background API polling disabled.
+helpers. It supports Apple Silicon, macOS 13.3+, and the official Slack and Spotify
+apps, which must be installed separately. Slack uses the everyday private-pipe
+controller with developer evaluation and custom background API polling disabled.
+Spotify Menu Player uses native macOS Automation and a private inherited-pipe library bridge; see [Spotify setup](SPOTIFY-MENU.md).
 
 ## Install and update
 
@@ -53,8 +53,9 @@ local to this Mac; copying only the shortcut app to another Mac is insufficient.
 Slack shortcuts use a dark Slack tile with an orange PME plus badge. The icon is
 built into the Slack launcher template before signing; creating a shortcut never
 patches its icon or other signed resources. Previously created shortcuts retain
-their original icon; recreate them to adopt the new one. Additional supported apps
-will need their own icon and launcher template.
+their original icon; recreate them to adopt the new one. Spotify shortcuts use a matching dark Spotify tile with the orange PME plus badge,
+also bundled in a dedicated signed launcher template. Choose **Create shortcut…**
+on the Spotify page to save **Spotify — PME.app** with the current mod selection.
 
 The launcher template is an immutable nested app, signed and notarized with PME.
 The saved profile is stored under the user's PME data folder, and an opaque UUID
@@ -124,9 +125,10 @@ running development app. The builder verifies the pinned Node download checksum
 and allowlists packaged source/resources; it does not copy `.lab`, profiles,
 logs, signing credentials, or developer data. Node's license is bundled.
 
-The pipeline signs Node, the native helper, and the shortcut template first, then the outer app. All have
-hardened runtime and secure timestamps. Only Node gets `allow-jit`; the native
-client/helper have no extra entitlements. This is **not App Sandbox**: the manager
+The pipeline signs Node, the Slack helper, Spotify Menu Player, and each app’s shortcut template first, then the outer app. All have
+hardened runtime and secure timestamps. Only Node gets `allow-jit`; Spotify Menu Player and its containing native manager get
+`com.apple.security.automation.apple-events`, required for the nested helper’s
+Spotify permission request. The Slack helper and launcher templates have no extra entitlements. This is **not App Sandbox**: the manager
 needs to launch and manage another application. Notarization does not certify the
 safety or compatibility of Slack's private interfaces.
 

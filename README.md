@@ -4,6 +4,7 @@ The standalone **PME Client** discovers supported apps, manages bundled mods, an
 launches official Slack with Slack Triage in everyday mode.
 
 - [Download PME Client](https://github.com/Sy14r/PimpMyElectron/releases) — Apple Silicon, macOS 13.3+
+- [Spotify Menu Player](docs/SPOTIFY-MENU.md) — hoverable player, Mini Library, search, and queue for the official Spotify Mac app (client 0.3.0 development build)
 - [Install, update, build, and publish the client](docs/CLIENT-RELEASES.md)
 
 ## Slack extensibility research

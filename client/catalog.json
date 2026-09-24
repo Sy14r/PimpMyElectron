@@ -1,24 +1,67 @@
 {
   "schemaVersion": 1,
-  "version": "0.1.0",
-  "apps": [{
-    "id": "slack",
-    "name": "Slack",
-    "bundleId": "com.tinyspeck.slackmacgap",
-    "adapter": "slack",
-    "description": "Messaging, with room for your workflow.",
-    "mods": [{
-      "id": "slack-triage",
-      "name": "Slack Triage",
-      "version": "0.20.0",
-      "author": "PimpMyElectron",
-      "summary": "A quieter way to stay on top of your messages.",
-      "description": "An edge-docked inbox, hover previews, and quick replies. Keep your conversations close without keeping all of Slack open.",
-      "modules": ["state-observer", "native-reply", "triage-surface"],
-      "requires": [],
-      "features": ["An inbox at the edge of your screen", "Native Slack conversations and composer", "Multi-workspace unread notifications", "Keyboard triage and personal thread names", "Density, accent, and translucency controls"],
-      "access": "Uses Slack’s cached state and native interface. Background API polling is disabled.",
-      "defaultEnabled": true
-    }]
-  }]
+  "version": "0.2.0",
+  "apps": [
+    {
+      "id": "slack",
+      "name": "Slack",
+      "bundleId": "com.tinyspeck.slackmacgap",
+      "adapter": "slack",
+      "description": "Messaging, with room for your workflow.",
+      "mods": [
+        {
+          "id": "slack-triage",
+          "name": "Slack Triage",
+          "version": "0.20.0",
+          "author": "PimpMyElectron",
+          "summary": "A quieter way to stay on top of your messages.",
+          "description": "An edge-docked inbox, hover previews, and quick replies. Keep your conversations close without keeping all of Slack open.",
+          "modules": [
+            "state-observer",
+            "native-reply",
+            "triage-surface"
+          ],
+          "requires": [],
+          "features": [
+            "An inbox at the edge of your screen",
+            "Native Slack conversations and composer",
+            "Multi-workspace unread notifications",
+            "Keyboard triage and personal thread names",
+            "Density, accent, and translucency controls"
+          ],
+          "access": "Uses Slack\u2019s cached state and native interface. Background API polling is disabled.",
+          "defaultEnabled": true
+        }
+      ]
+    },
+    {
+      "id": "spotify",
+      "name": "Spotify",
+      "bundleId": "com.spotify.client",
+      "adapter": "spotify",
+      "description": "Your music, a hover away.",
+      "mods": [
+        {
+          "id": "spotify-menu",
+          "name": "Menu Player",
+          "version": "0.2.0",
+          "author": "PimpMyElectron",
+          "summary": "Your player and mini library in the menu bar.",
+          "description": "Hover for playback controls, then expand to browse liked songs, playlists, albums, search, and queue without leaving your work.",
+          "modules": [],
+          "requires": [],
+          "features": [
+            "Now playing in a hoverable menu-bar widget",
+            "Play, pause, previous, and next track",
+            "Browse your library, liked songs, playlists, and albums",
+            "Search music and add tracks to your queue",
+            "Works with your existing Spotify sign-in",
+            "Keeps working after the manager closes"
+          ],
+          "access": "Playback controls use macOS Automation. Mini Library uses Spotify\u2019s own client interfaces through a private inherited pipe, with no debugging port or separate Spotify Web API credentials. Browsing and search can fetch data through Spotify. Artwork loads from Spotify\u2019s image CDN.",
+          "defaultEnabled": true
+        }
+      ]
+    }
+  ]
 }

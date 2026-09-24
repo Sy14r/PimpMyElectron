@@ -93,7 +93,7 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         for key in ["appId","modIds","installationPath","view","profileId"] {if let value=raw[key] {request[key]=value}}
         if op=="shortcut-create" || op=="shortcut-rename" {
             let panel=NSSavePanel();panel.allowedContentTypes=[.applicationBundle];panel.canCreateDirectories=true
-            panel.nameFieldStringValue="Slack — PME.app";panel.prompt=op=="shortcut-create" ? "Create shortcut" : "Rename"
+            panel.nameFieldStringValue=raw["appId"] as? String == "spotify" ? "Spotify — PME.app" : "Slack — PME.app";panel.prompt=op=="shortcut-create" ? "Create shortcut" : "Rename"
             panel.message="Launch with this saved mod selection without opening the PME window. Keep PME installed."
             let applications=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")
             try? FileManager.default.createDirectory(at:applications,withIntermediateDirectories:true)
@@ -115,7 +115,7 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         if op=="add-app" || op=="import" {
             let panel=NSOpenPanel();panel.canChooseDirectories=op=="import";panel.canChooseFiles=op=="add-app";panel.allowsMultipleSelection=false
             panel.treatsFilePackagesAsDirectories=false;panel.prompt=op=="import" ? "Import setup" : "Add app"
-            panel.message=op=="import" ? "Choose your existing PimpMyElectron project folder. Settings stay on this Mac; no Slack account data is copied." : "Choose an installed official Slack application."
+            panel.message=op=="import" ? "Choose your existing PimpMyElectron project folder. Settings stay on this Mac; no Slack account data is copied." : "Choose an installed official Slack or Spotify application."
             panel.directoryURL=op=="import" ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Projects") : URL(fileURLWithPath:"/Applications")
             panel.beginSheetModal(for:window){ [weak self] result in
                 guard let self else{return};if result == .OK,let url=panel.url {request["path"]=url.path;self.send(request)}else{self.reply(["id":id,"ok":true])}

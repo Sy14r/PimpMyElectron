@@ -1,14 +1,14 @@
 import AppKit
 let folder=CommandLine.arguments[1]
 let variant=CommandLine.arguments.count>2 ? CommandLine.arguments[2] : "pme"
-precondition(["pme","slack"].contains(variant),"Unknown icon variant")
+precondition(["pme","slack","spotify"].contains(variant),"Unknown icon variant")
 try FileManager.default.createDirectory(atPath:folder,withIntermediateDirectories:true)
 for size in [16,32,64,128,256,512,1024] {
     let bitmap=NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:size,pixelsHigh:size,bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0)!
     NSGraphicsContext.saveGraphicsState();NSGraphicsContext.current=NSGraphicsContext(bitmapImageRep:bitmap)
     let context=NSGraphicsContext.current!.cgContext;context.scaleBy(x:CGFloat(size)/128,y:CGFloat(size)/128)
     let outer=NSBezierPath(roundedRect:NSRect(x:4,y:4,width:120,height:120),xRadius:29,yRadius:29)
-    let gradient = variant == "slack"
+    let gradient = variant != "pme"
         ? NSGradient(starting:NSColor(calibratedRed:0.125,green:0.133,blue:0.169,alpha:1),ending:NSColor(calibratedRed:0.188,green:0.153,blue:0.200,alpha:1))!
         : NSGradient(starting:NSColor(calibratedRed:0.10,green:0.11,blue:0.14,alpha:1),ending:NSColor(calibratedRed:0.23,green:0.23,blue:0.27,alpha:1))!
     gradient.draw(in:outer,angle:90)
@@ -18,7 +18,16 @@ for size in [16,32,64,128,256,512,1024] {
     context.saveGState();context.translateBy(x:0,y:128);context.scaleBy(x:1,y:-1)
     let cyan=NSColor(calibratedRed:0.62,green:0.88,blue:0.93,alpha:1)
     let peach=NSColor(calibratedRed:1,green:0.65,blue:0.46,alpha:1)
-    if variant == "slack" {
+    if variant == "spotify" {
+        NSColor(calibratedRed:0.12,green:0.84,blue:0.39,alpha:1).setFill();NSBezierPath(ovalIn:NSRect(x:25,y:25,width:73,height:73)).fill()
+        NSColor(calibratedRed:0.07,green:0.12,blue:0.09,alpha:1).setStroke()
+        for (y,width) in [(49.0,47.0),(61.0,39.0),(73.0,31.0)] {
+            let curve=NSBezierPath();curve.move(to:NSPoint(x:38,y:y));curve.curve(to:NSPoint(x:38+width,y:y+3),controlPoint1:NSPoint(x:51,y:y-6),controlPoint2:NSPoint(x:70,y:y-5));curve.lineWidth=5.0;curve.lineCapStyle = .round;curve.stroke()
+        }
+        let badge=NSBezierPath(roundedRect:NSRect(x:86,y:86,width:32,height:32),xRadius:10,yRadius:10)
+        NSColor(calibratedRed:0.13,green:0.14,blue:0.17,alpha:1).setStroke();badge.lineWidth=5;badge.stroke();peach.setFill();badge.fill()
+        let plus=NSBezierPath();plus.move(to:NSPoint(x:95,y:102));plus.line(to:NSPoint(x:109,y:102));plus.move(to:NSPoint(x:102,y:95));plus.line(to:NSPoint(x:102,y:109));plus.lineWidth=3.5;plus.lineCapStyle = .round;NSColor(calibratedRed:0.13,green:0.16,blue:0.20,alpha:1).setStroke();plus.stroke()
+    } else if variant == "slack" {
         // Same dark tile and Slack mark as the app library, with PME's plus badge.
         context.saveGState();context.translateBy(x:23,y:23);context.scaleBy(x:3,y:3)
         for (color,rects) in [
