@@ -8,7 +8,8 @@ try{
  for(const file of ['src/live-runtime.mjs','src/mod-loader.mjs'])await import(pathToFileURL(path.join(runtime,file)));
  const modules=JSON.parse(await fs.readFile(path.join(runtime,'mods/runtime.json'),'utf8'));for(const mod of modules.modules){if(mod.entry)await fs.access(path.join(runtime,mod.entry));}
  const {createProfile,assertShortcut}=await import(pathToFileURL(path.join(runtime,'client/core/shortcuts.mjs')));
- const shortcut=await createProfile({dataDir,template:path.resolve(resources,'../Helpers/PMELauncher.app'),destination:path.join(dataDir,'Smoke.app'),appId:'slack',installationPath:'/Applications/Slack.app',modIds:['slack-triage'],clientPath:app});await assertShortcut(shortcut.shortcutPath,shortcut.id);
+ assert.notDeepEqual(await fs.readFile(path.join(resources,'AppIcon.icns')),await fs.readFile(path.resolve(resources,'../Helpers/SlackLauncher.app/Contents/Resources/AppIcon.icns')),'Slack shortcut must carry its app-specific icon');
+ const shortcut=await createProfile({dataDir,template:path.resolve(resources,'../Helpers/SlackLauncher.app'),destination:path.join(dataDir,'Smoke.app'),appId:'slack',installationPath:'/Applications/Slack.app',modIds:['slack-triage'],clientPath:app});await assertShortcut(shortcut.shortcutPath,shortcut.id);
  const output=await new Promise((resolve,reject)=>{
   const child=spawn(path.join(resources,'bin/node'),[path.join(runtime,'client/service.mjs')],{env:{...process.env,PME_CLIENT_DATA_DIR:path.join(dataDir,'service')},stdio:['pipe','pipe','pipe']});let text='',errors='';
   const timeout=setTimeout(()=>{child.kill();reject(Error('Bundled service timed out'));},10000);

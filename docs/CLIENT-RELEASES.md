@@ -27,7 +27,7 @@ Closing the manager alone intentionally leaves a running modded Slack session up
 
 ## Launch shortcuts (client 0.2.0)
 
-On the Slack page, choose **Create shortcut…** under Launch shortcuts. Save it in
+On the Slack page, choose **Create shortcut…** beside **Launch Slack** (or **Open inbox** while running). Save it in
 `~/Applications` (the default) or another folder you own. Finder and Spotlight
 recognize it as an app; it can also be dragged onto the Dock. Its default name is
 **Slack — PME**. Launching it runs PME's bundled service in the background and
@@ -44,11 +44,17 @@ PME session with different mods is left alone, with an explanation to stop it fi
 Concurrent launches are serialized across the manager and shortcut processes.
 Sessions started before 0.2.0 need one restart before selection matching is known.
 
-**Reveal**, **Rename**, and **Remove** manage the saved shortcut. Remove moves the
+The **Manage shortcuts** section contains **Reveal**, **Update selection**, **Rename**, and **Remove**. Remove moves the
 app to Trash and removes its saved profile. A Finder rename/move retains its
 profile ID; launching it updates the displayed name/location in PME. If a copying
 or sync tool strips extended attributes, recreate the shortcut. Profiles are
 local to this Mac; copying only the shortcut app to another Mac is insufficient.
+
+Slack shortcuts use a dark Slack tile with an orange PME plus badge. The icon is
+built into the Slack launcher template before signing; creating a shortcut never
+patches its icon or other signed resources. Previously created shortcuts retain
+their original icon; recreate them to adopt the new one. Additional supported apps
+will need their own icon and launcher template.
 
 The launcher template is an immutable nested app, signed and notarized with PME.
 The saved profile is stored under the user's PME data folder, and an opaque UUID

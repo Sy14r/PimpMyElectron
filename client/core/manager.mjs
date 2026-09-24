@@ -80,7 +80,7 @@ export class ClientManager {
  }
  async createShortcut(appId,destination){
   const app=this.app(appId),pref=this.config.apps[appId];if(!pref.path||!pref.selected.length)throw Error('Choose an installation and enable at least one mod.');
-  await this.inspect(pref.path);const resources=path.resolve(this.root,'..'),template=path.resolve(resources,'../Helpers/PMELauncher.app');await fs.access(template);
+  await this.inspect(pref.path);const resources=path.resolve(this.root,'..'),template=path.resolve(resources,'../Helpers/SlackLauncher.app');await fs.access(template);
   await createProfile({dataDir:this.dataDir,template,appId,installationPath:pref.path,modIds:resolveSelection(app,pref.selected),destination,clientPath:path.resolve(resources,'../..')});return this.snapshot();
  }
  async updateShortcut(appId,id){const p=await readProfile(this.dataDir,id);if(p.appId!==appId)throw Error('Wrong app for shortcut');const pref=this.config.apps[appId];if(!pref.path||!pref.selected.length)throw Error('Choose an installation and enable at least one mod.');await this.inspect(pref.path);await updateProfile(this.dataDir,id,{installationPath:pref.path,modIds:resolveSelection(this.app(appId),pref.selected)});return this.snapshot();}
