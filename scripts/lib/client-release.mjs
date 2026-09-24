@@ -30,7 +30,7 @@ export function verifyApp(app,team){
  if(plist.CFBundleIdentifier!=='com.pimpmyElectron.client')throw Error('Not a PME client');
  const requirement=`anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "${team}"`;
  const hashes={};
- for(const [kind,target] of [['node',path.join(app,'Contents/Resources/bin/node')],['helper',path.join(app,'Contents/Resources/runtime/bin/SlackTriage')],['app',app]]){
+ for(const [kind,target] of [['node',path.join(app,'Contents/Resources/bin/node')],['helper',path.join(app,'Contents/Resources/runtime/bin/SlackTriage')],['launcher',path.join(app,'Contents/Resources/PMELauncher.app')],['app',app]]){
   run('/usr/bin/codesign',['--verify','--deep','--strict','--all-architectures',`-R=${requirement}`,target]);
   const details=spawnSync('/usr/bin/codesign',['-d','--verbose=4',target],{encoding:'utf8'});if(details.status!==0)throw Error('Could not inspect signature');
   hashes[kind]=signatureInfo(details.stderr);

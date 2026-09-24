@@ -1,5 +1,6 @@
 import AppKit
 import WebKit
+import UniformTypeIdentifiers
 
 final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, NSWindowDelegate {
     var window:NSWindow!
@@ -29,9 +30,26 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         let edit=NSMenuItem();edit.title="Edit";menu.addItem(edit);let edits=NSMenu(title:"Edit");edit.submenu=edits
         for (title,selector,key) in [("Copy","copy:","c"),("Paste","paste:","v"),("Select All","selectAll:","a")] { edits.addItem(withTitle:title,action:NSSelectorFromString(selector),keyEquivalent:key) }
         NSApp.mainMenu=menu
-        do { try startWorker(resources) } catch { showError("PME could not start its bundled runtime.",error.localizedDescription) }
+        do { try recordLocation();try startWorker(resources) } catch { showError("PME could not start its bundled runtime.",error.localizedDescription) }
         web.loadFileURL(uiURL.appendingPathComponent("index.html"),allowingReadAccessTo:uiURL)
         window.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
+    }
+    func recordLocation() throws {
+        try FileManager.default.createDirectory(at:dataURL,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
+        let bytes=try JSONSerialization.data(withJSONObject:["path":Bundle.main.bundleURL.path]);let file=dataURL.appendingPathComponent("client-location.json")
+        try bytes.write(to:file,options:.atomic);try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:file.path)
+    }
+    func shortcutProfile(_ id:String)throws->[String:Any] {
+        guard UUID(uuidString:id) != nil else{throw NSError(domain:"PME",code:1,userInfo:[NSLocalizedDescriptionKey:"Invalid shortcut"])}
+        let data=try Data(contentsOf:dataURL.appendingPathComponent("shortcuts/\(id).json"))
+        guard let profile=try JSONSerialization.jsonObject(with:data) as? [String:Any],profile["id"] as? String==id else{throw NSError(domain:"PME",code:1,userInfo:[NSLocalizedDescriptionKey:"Invalid shortcut profile"])};return profile
+    }
+    func shortcutURL(_ id:String)throws->URL {
+        let profile=try shortcutProfile(id)
+        guard let path=profile["shortcutPath"] as? String else{throw NSError(domain:"PME",code:1,userInfo:[NSLocalizedDescriptionKey:"Missing shortcut location"])}
+        let url=URL(fileURLWithPath:path),p=Process(),pipe=Pipe();p.executableURL=URL(fileURLWithPath:"/usr/bin/xattr");p.arguments=["-p","com.pimpmyElectron.launch-profile",path];p.standardOutput=pipe;p.standardError=FileHandle.nullDevice
+        try p.run();let result=pipe.fileHandleForReading.readDataToEndOfFile();p.waitUntilExit()
+        guard p.terminationStatus==0,String(data:result,encoding:.utf8)?.trimmingCharacters(in:.whitespacesAndNewlines)==id else{throw NSError(domain:"PME",code:1,userInfo:[NSLocalizedDescriptionKey:"Shortcut not found at its saved location. If you moved it, launch it once to update its location."])};return url
     }
     func startWorker(_ resources:URL) throws {
         try FileManager.default.createDirectory(at:dataURL,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
@@ -69,10 +87,31 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage) {
         guard message.frameInfo.isMainFrame,message.frameInfo.request.url?.standardizedFileURL==uiURL.appendingPathComponent("index.html").standardizedFileURL,
               let raw=message.body as? [String:Any],let id=raw["id"] as? Int,let op=raw["op"] as? String else{return}
-        guard ["status","scan","select","launch","stop","show","add-app","import","data-folder"].contains(op) else {fail(id,"Unsupported client action");return}
+        guard ["status","scan","select","launch","stop","show","add-app","import","data-folder","shortcut-create","shortcut-update","shortcut-rename","shortcut-remove","shortcut-reveal"].contains(op) else {fail(id,"Unsupported client action");return}
         if op=="data-folder" {NSWorkspace.shared.open(dataURL);reply(["id":id,"ok":true]);return}
         var request:[String:Any]=["id":id,"op":op]
-        for key in ["appId","modIds","installationPath","view"] {if let value=raw[key] {request[key]=value}}
+        for key in ["appId","modIds","installationPath","view","profileId"] {if let value=raw[key] {request[key]=value}}
+        if op=="shortcut-create" || op=="shortcut-rename" {
+            let panel=NSSavePanel();panel.allowedContentTypes=[.applicationBundle];panel.canCreateDirectories=true
+            panel.nameFieldStringValue="Slack — PME.app";panel.prompt=op=="shortcut-create" ? "Create shortcut" : "Rename"
+            panel.message="Launch with this saved mod selection without opening the PME window. Keep PME installed."
+            let applications=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")
+            try? FileManager.default.createDirectory(at:applications,withIntermediateDirectories:true)
+            panel.directoryURL=applications
+            var old:URL?
+            if op=="shortcut-rename" {do {guard let profileID=raw["profileId"] as? String else{return};old=try shortcutURL(profileID);panel.directoryURL=old!.deletingLastPathComponent();panel.nameFieldStringValue=old!.lastPathComponent}catch{fail(id,error.localizedDescription);return}}
+            panel.beginSheetModal(for:window){[weak self] result in
+                guard let self else{return};guard result == .OK,let url=panel.url else{self.reply(["id":id,"ok":true]);return}
+                if let old {do {if old != url {try FileManager.default.moveItem(at:old,to:url)};request["op"]="shortcut-location"}catch{self.fail(id,error.localizedDescription);return}}
+                request["path"]=url.path;self.send(request)
+            };return
+        }
+        if op=="shortcut-reveal" || op=="shortcut-remove" {
+            do {guard let profileID=raw["profileId"] as? String else{return};let url=try shortcutURL(profileID)
+                if op=="shortcut-reveal" {NSWorkspace.shared.activateFileViewerSelecting([url]);reply(["id":id,"ok":true]);return}
+                NSWorkspace.shared.recycle([url]){[weak self] _,error in DispatchQueue.main.async {guard let self else{return};if let error {self.fail(id,error.localizedDescription)}else{request["op"]="shortcut-forget";self.send(request)}}};return
+            }catch{fail(id,error.localizedDescription);return}
+        }
         if op=="add-app" || op=="import" {
             let panel=NSOpenPanel();panel.canChooseDirectories=op=="import";panel.canChooseFiles=op=="add-app";panel.allowsMultipleSelection=false
             panel.treatsFilePackagesAsDirectories=false;panel.prompt=op=="import" ? "Import setup" : "Add app"

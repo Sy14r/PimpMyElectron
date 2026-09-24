@@ -25,6 +25,47 @@ app in Applications, and reopen it. Settings live outside the app at
 `~/Library/Application Support/PimpMyElectron/`. There is no automatic updater yet.
 Closing the manager alone intentionally leaves a running modded Slack session up.
 
+## Launch shortcuts (client 0.2.0)
+
+On the Slack page, choose **Create shortcut…** under Launch shortcuts. Save it in
+`~/Applications` (the default) or another folder you own. Finder and Spotlight
+recognize it as an app; it can also be dragged onto the Dock. Its default name is
+**Slack — PME**. Launching it runs PME's bundled service in the background and
+never opens the manager window.
+
+A shortcut saves the chosen Slack installation and enabled mod IDs. Changing the
+manager's selection later does not change existing shortcuts; **Update selection**
+copies the current selection into that shortcut. It uses the mod implementation
+shipped with the installed PME version, not an archived copy of old mod code.
+Settings/sign-in remain shared with the normal PME-managed Slack session.
+
+A matching running session is brought forward. An ordinary Slack session or a
+PME session with different mods is left alone, with an explanation to stop it first.
+Concurrent launches are serialized across the manager and shortcut processes.
+Sessions started before 0.2.0 need one restart before selection matching is known.
+
+**Reveal**, **Rename**, and **Remove** manage the saved shortcut. Remove moves the
+app to Trash and removes its saved profile. A Finder rename/move retains its
+profile ID; launching it updates the displayed name/location in PME. If a copying
+or sync tool strips extended attributes, recreate the shortcut. Profiles are
+local to this Mac; copying only the shortcut app to another Mac is insufficient.
+
+The launcher template is an immutable nested app, signed and notarized with PME.
+The saved profile is stored under the user's PME data folder, and an opaque UUID
+is attached as a bundle-root extended attribute. Creation and renaming do not
+change signed resources. The release pipeline signs the launcher before the outer
+app and staples/validates both. The distributed launcher only runs a PME client
+signed by the same Apple Developer ID team; it revalidates the app's sealed code
+and resources before executing the bundled runtime. No arbitrary command or
+script path can be supplied by a profile.
+
+Keep PME installed. The shortcut checks `/Applications`, `~/Applications`, the
+last-opened PME location, its creation location, and Launch Services for a compatible
+signed client. Replacing PME at its usual location keeps shortcuts working; if you
+move it to a custom location, open PME there once. Ad-hoc development launchers
+accept only ad-hoc development clients; that fallback is absent for Developer ID
+signed shortcuts.
+
 ## Versions
 
 `client/version.json` is the client version/build/minimum macOS source of truth.
@@ -77,7 +118,7 @@ running development app. The builder verifies the pinned Node download checksum
 and allowlists packaged source/resources; it does not copy `.lab`, profiles,
 logs, signing credentials, or developer data. Node's license is bundled.
 
-The pipeline signs Node and the native helper first, then the outer app. All have
+The pipeline signs Node, the native helper, and the shortcut template first, then the outer app. All have
 hardened runtime and secure timestamps. Only Node gets `allow-jit`; the native
 client/helper have no extra entitlements. This is **not App Sandbox**: the manager
 needs to launch and manage another application. Notarization does not certify the

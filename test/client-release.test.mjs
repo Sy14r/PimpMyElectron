@@ -20,5 +20,5 @@ test('notarization pending/rejection/uncertain upload never counts as accepted',
 test('manifest prevents publishing wrong repository, unsafe filenames, or substituted app',()=>{
  const m={schemaVersion:1,...metadata(),repo:'Sy14r/PimpMyElectron',commit:'a'.repeat(40),uploadSHA256:'b'.repeat(64),signatures:{node:'n',helper:'h',app:'a'}};
  assertManifest(m);for(const change of [{repo:'Sy14r/Ledge'},{asset:'../../oops'},{tag:'v0.1.0'},{commit:'HEAD'},{uploadSHA256:'missing'}])assert.throws(()=>assertManifest({...m,...change}));
- const actual={version:m.version,build:m.build,hashes:m.signatures};assertSameApp(m,actual);assert.throws(()=>assertSameApp(m,{...actual,build:2}));assert.throws(()=>assertSameApp(m,{...actual,hashes:{...m.signatures,node:'other'}}));
+ const actual={version:m.version,build:m.build,hashes:m.signatures};assertSameApp(m,actual);assert.throws(()=>assertSameApp(m,{...actual,build:m.build+1}));assert.throws(()=>assertSameApp(m,{...actual,hashes:{...m.signatures,node:'other'}}));
 });
