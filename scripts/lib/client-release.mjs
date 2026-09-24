@@ -29,8 +29,11 @@ export function verifyApp(app,team){
  const plist=JSON.parse(run('/usr/bin/plutil',['-convert','json','-o','-',path.join(app,'Contents/Info.plist')]));
  if(plist.CFBundleIdentifier!=='com.pimpmyElectron.client')throw Error('Not a PME client');
  const requirement=`anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = "${team}"`;
+ const seal=run('/usr/bin/plutil',['-convert','xml1','-o','-',path.join(app,'Contents/_CodeSignature/CodeResources')]);
+ const nested=seal.split('<key>Helpers/PMELauncher.app</key>')[1]?.split('</dict>')[0];
+ if(!nested?.includes('<key>cdhash</key>'))throw Error('Shortcut template must be sealed as nested code, not an ordinary resource');
  const hashes={};
- for(const [kind,target] of [['node',path.join(app,'Contents/Resources/bin/node')],['helper',path.join(app,'Contents/Resources/runtime/bin/SlackTriage')],['launcher',path.join(app,'Contents/Resources/PMELauncher.app')],['app',app]]){
+ for(const [kind,target] of [['node',path.join(app,'Contents/Resources/bin/node')],['helper',path.join(app,'Contents/Resources/runtime/bin/SlackTriage')],['launcher',path.join(app,'Contents/Helpers/PMELauncher.app')],['app',app]]){
   run('/usr/bin/codesign',['--verify','--deep','--strict','--all-architectures',`-R=${requirement}`,target]);
   const details=spawnSync('/usr/bin/codesign',['-d','--verbose=4',target],{encoding:'utf8'});if(details.status!==0)throw Error('Could not inspect signature');
   hashes[kind]=signatureInfo(details.stderr);

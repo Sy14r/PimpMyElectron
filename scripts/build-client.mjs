@@ -31,7 +31,7 @@ run(swift,[...flags,path.join(root,'native/TriageController.swift'),'-o',path.jo
 run(swift,[...flags,path.join(root,'client/native/Client.swift'),'-o',path.join(app,'Contents/MacOS/PimpMyElectron')]);
 const iconMaker=path.join(cache,'make-icon'),iconset=path.join(cache,'PME.iconset');
 run(swift,[...flags,path.join(root,'client/native/Icon.swift'),'-o',iconMaker]);run(iconMaker,[iconset]);run('/usr/bin/iconutil',['-c','icns',iconset,'-o',path.join(resources,'AppIcon.icns')]);
-const launcher=path.join(resources,'PMELauncher.app');
+const launcher=path.join(app,'Contents/Helpers/PMELauncher.app');
 await fs.mkdir(path.join(launcher,'Contents/MacOS'),{recursive:true});await fs.mkdir(path.join(launcher,'Contents/Resources'),{recursive:true});
 run(swift,[...flags,path.join(root,'client/native/Launcher.swift'),'-o',path.join(launcher,'Contents/MacOS/PMELauncher')]);
 await fs.copyFile(path.join(resources,'AppIcon.icns'),path.join(launcher,'Contents/Resources/AppIcon.icns'));

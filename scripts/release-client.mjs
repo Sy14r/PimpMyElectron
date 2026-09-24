@@ -22,7 +22,7 @@ const tool=name=>run('/usr/bin/xcrun',['--find',name]);
 function need(name){if(!process.env[name])throw Error(`Set ${name} (a name/identifier, never a secret).`);return process.env[name];}
 function load(dir){dir=fs.realpathSync(dir);const m=assertManifest(read(path.join(dir,'manifest.json')));return {dir,m,app:path.join(dir,'PimpMyElectron.app')};}
 function verifyPrepared(r){assertSameApp(r.m,verifyApp(r.app,r.m.teamID));if(hash(path.join(r.dir,'notarization-upload.zip'))!==r.m.uploadSHA256)throw Error('Upload archive changed');}
-function gatekeeper(app){run(tool('stapler'),['validate',app]);const launcher=path.join(app,'Contents/Resources/PMELauncher.app');if(fs.existsSync(launcher)){run(tool('stapler'),['validate',launcher]);run('/usr/sbin/spctl',['--assess','--type','execute',launcher]);}run('/usr/sbin/spctl',['--assess','--type','execute','--verbose=2',app]);if(fs.existsSync('/usr/bin/syspolicy_check'))run('/usr/bin/syspolicy_check',['distribution',app]);}
+function gatekeeper(app){run(tool('stapler'),['validate',app]);const launcher=path.join(app,'Contents/Helpers/PMELauncher.app');if(fs.existsSync(launcher)){run(tool('stapler'),['validate',launcher]);run('/usr/sbin/spctl',['--assess','--type','execute',launcher]);}run('/usr/sbin/spctl',['--assess','--type','execute','--verbose=2',app]);if(fs.existsSync('/usr/bin/syspolicy_check'))run('/usr/bin/syspolicy_check',['distribution',app]);}
 function extractVerified(zip,destination,m){run('/usr/bin/ditto',['-x','-k',zip,destination]);const app=path.join(destination,'PimpMyElectron.app');assertSameApp(m,verifyApp(app,m.teamID));gatekeeper(app);return app;}
 function finalArtifact(r){
  verifyPrepared(r);if(r.m.notarizationStatus!=='Accepted'||!r.m.notarizationID||!r.m.artifactSHA256)throw Error('Not an accepted, finalized release');
@@ -40,7 +40,7 @@ function prepare(){
  console.log(`Preparing ${dir}`);
  run(process.execPath,['scripts/build-client.mjs'],{stdio:'inherit',env:{...env,PME_CLIENT_OUTPUT:app}});
  const node=path.join(app,'Contents/Resources/bin/node'),helper=path.join(app,'Contents/Resources/runtime/bin/SlackTriage');
- for(const [target,id,entitlements] of [[node,'com.pimpmyElectron.client.node',path.join(root,'client/native/Node.entitlements')],[helper,'com.pimpmyElectron.client.triage',null],[path.join(app,'Contents/Resources/PMELauncher.app'),'com.pimpmyElectron.launcher',null],[app,'com.pimpmyElectron.client',null]]){
+ for(const [target,id,entitlements] of [[node,'com.pimpmyElectron.client.node',path.join(root,'client/native/Node.entitlements')],[helper,'com.pimpmyElectron.client.triage',null],[path.join(app,'Contents/Helpers/PMELauncher.app'),'com.pimpmyElectron.launcher',null],[app,'com.pimpmyElectron.client',null]]){
   run('/usr/bin/codesign',['--force','--options','runtime','--timestamp','--identifier',id,...(entitlements?['--entitlements',entitlements]:[]),'--sign',identity,target]);
  }
  const signatures=verifyApp(app,teamID).hashes;
@@ -71,7 +71,7 @@ function notarize(dir){
   const status=JSON.parse(run(notary,['info',submission,'--keychain-profile',profile,'--output-format','json']));write(path.join(r.dir,'status.json'),status);
   if(['Accepted','Invalid','Rejected'].includes(status.status))run(notary,['log',submission,'--keychain-profile',profile,path.join(r.dir,'notarization-log.json')]);
   if(submissionAction({submission,status:status.status})!=='staple'){console.log(`Apple status: ${status.status}. Resume: npm run client:release -- notarize '${r.dir}'`);return false;}
-  run(tool('stapler'),['staple',path.join(r.app,'Contents/Resources/PMELauncher.app')]);run(tool('stapler'),['staple',r.app]);gatekeeper(r.app);assertSameApp(r.m,verifyApp(r.app,r.m.teamID));
+  run(tool('stapler'),['staple',path.join(r.app,'Contents/Helpers/PMELauncher.app')]);run(tool('stapler'),['staple',r.app]);gatekeeper(r.app);assertSameApp(r.m,verifyApp(r.app,r.m.teamID));
   const candidate=path.join(r.dir,'validated-candidate.zip');run('/usr/bin/ditto',['-c','-k','--keepParent',r.app,candidate]);
   const validation=fs.mkdtempSync(path.join(r.dir,'extracted-check-'));extractVerified(candidate,validation,r.m);fs.rmSync(validation,{recursive:true});
   fs.renameSync(candidate,path.join(r.dir,r.m.asset));
