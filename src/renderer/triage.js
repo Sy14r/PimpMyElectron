@@ -13,6 +13,39 @@
   const host = document.createElement('div'); host.id = 'pme-live-triage';
   host.style.cssText = 'position:fixed;inset:0;z-index:2147483646;pointer-events:none';
   const shadow = host.attachShadow({ mode: 'open' });
+  const reducedTransparency=window.matchMedia('(prefers-reduced-transparency: reduce)');
+  const glassStyle=document.createElement('style');glassStyle.id='pme-inbox-glass-style';
+  glassStyle.textContent=`html[data-pme-inbox-glass],html[data-pme-inbox-glass] body{background:transparent!important;}
+    /* Clip the parked Slack page out of the inbox, including descendants
+       that explicitly set visibility:visible. Keep native detail panes intact. */
+    html[data-pme-inbox-glass] body>.p-client_container{visibility:hidden!important;clip-path:inset(0 0 0 420px)!important;}`;
+  document.head.append(glassStyle);
+  let glassActive=false,glassOriginal=null,glassMaterial=null,glassTail=Promise.resolve();
+  function glassVisible(value){
+    host.toggleAttribute('data-inbox-glass',value);
+    document.documentElement.toggleAttribute('data-pme-inbox-glass',value);
+  }
+  function setInboxGlass(enabled,restoreVibrancy=null){
+    glassTail=glassTail.catch(()=>{}).then(async()=>{
+      const wanted=enabled&&!disposed&&!reducedTransparency.matches&&['queue','reading','reply'].includes(mode)&&!quickReply;
+      if(typeof restoreVibrancy==='boolean')glassOriginal=restoreVibrancy;
+      const material=wanted?'hud':glassOriginal===null?null:glassOriginal?'titlebar':'';
+      if(wanted===glassActive&&(material===null||material===glassMaterial)){glassVisible(wanted);return wanted;}
+      // Start opaque; only expose the backdrop after the native call succeeds.
+      glassVisible(false);
+      const w=window.desktop?.window;if(!w?.callBrowserWindowMethod)return false;
+      const id=await w.getWindowId(),call=(...args)=>w.callBrowserWindowMethod(id,...args);
+      if(wanted){
+        if(glassOriginal===null)return false;
+        await call('setVibrancy',material);glassActive=true;glassMaterial=material;
+        glassVisible(!disposed&&['queue','reading','reply'].includes(mode)&&!quickReply);
+        return true;
+      }
+      await call('setVibrancy',material||null);
+      glassActive=false;glassMaterial=material;return false;
+    });return glassTail;
+  }
+  reducedTransparency.addEventListener('change',()=>{if(reducedTransparency.matches)glassVisible(false);reportShell();},{signal:abort.signal});
   const accentProperties=new Set();let accentSignature='';
   function applyAccent(theme){
     const signature=JSON.stringify(theme||{});if(signature===accentSignature)return;
@@ -32,6 +65,8 @@
       button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--pme-accent-text,#b7a8ec);outline-offset:2px}button:disabled{opacity:.4;cursor:default}
       [hidden]{display:none!important}#opener{position:fixed;right:18px;bottom:18px;pointer-events:auto;padding:10px 15px;background:var(--pme-accent-surface,#262337);border:1px solid var(--pme-accent-muted,#827097);border-radius:24px;box-shadow:0 4px 20px #0006;display:flex;gap:9px;align-items:center;font-weight:600}
       .signal{width:7px;height:7px;border-radius:50%;background:#99d3b9}.shell{pointer-events:auto;position:fixed;inset:0;background:#141925;display:flex;box-shadow:0 0 60px #0007}
+      :host([data-inbox-glass]) .shell{background:transparent;box-shadow:none}
+      :host([data-inbox-glass]) .shell>.queue{background:rgba(20,25,37,.28);background-image:linear-gradient(rgba(var(--pme-accent-rgb,188,169,240),.045),transparent 65%);border-right-color:#ffffff20}
       .shell,#edge-tab,#quick-card{-webkit-app-region:no-drag}
       .rail{width:44px;flex-shrink:0;background:#10141f;border-right:1px solid #ffffff0c;display:flex;flex-direction:column;align-items:center;gap:9px;padding:12px 0}.rail button{width:32px;height:32px;font-size:13px;background:#ffffff07;color:#a4adc0}.rail .brand{background:var(--pme-accent,#b6a5e8);color:var(--pme-accent-contrast,#20182b);font-weight:800}.spacer{flex:1}
       .queue{width:420px;max-width:100vw;flex-shrink:0;display:flex;flex-direction:column;padding:22px 16px 12px;border-right:1px solid #ffffff10;min-height:0}.eyebrow{font-size:10px;font-weight:600;letter-spacing:1.7px;color:var(--pme-accent-muted,#b3a4d5);text-transform:uppercase}h1{font-size:25px;line-height:1.2;letter-spacing:-.6px;margin:8px 0}
@@ -76,10 +111,14 @@
       @media(prefers-reduced-motion:no-preference){.row{transition:background .12s}#edge-tab{transition:background .16s,box-shadow .16s}.shell.cluster .rail{animation:pill-reveal .18s ease-out}@keyframes pill-reveal{from{opacity:.5}to{opacity:1}}}@media(max-width:650px){.shell.reading .queue{display:none}.reader{width:calc(100vw - 44px)}}
       :host([data-detail-motion]) .shell.reply{width:420px!important;right:auto;z-index:2}
       :host([data-detail-motion]) .reply-chrome,:host([data-detail-motion]) .reply-placeholder{z-index:1}
-      :host([data-detail-motion]) .shell .queue{display:flex!important;position:relative;z-index:2;background:#141925}
+      :host([data-detail-motion]) .shell .queue{display:flex!important;position:relative;z-index:2}
+      :host([data-detail-motion]:not([data-inbox-glass])) .shell .queue{background:#141925}
       :host([data-detail-motion]) .shell>.rail{display:none}
       :host([data-detail-motion]) .reader,:host([data-detail-motion]) .reply-chrome,:host([data-detail-motion]) .reply-placeholder{position:fixed;left:420px;right:auto;width:var(--pme-detail-width,400px);transform:translateX(calc(100vw - 420px - var(--pme-detail-width,400px)))}
       :host([data-detail-motion]) .reader{top:0;bottom:0;z-index:1}
+      /* The pane's translated left edge is viewport width minus detail width.
+         Clip its hidden part instead of painting an opaque cover over the inbox. */
+      :host([data-inbox-glass][data-detail-motion]) .reader,:host([data-inbox-glass][data-detail-motion]) .reply-chrome,:host([data-inbox-glass][data-detail-motion]) .reply-placeholder{clip-path:inset(0 0 0 max(0px,calc(420px + var(--pme-detail-width,400px) - 100vw)))}
       :host([data-quick]) .shell{display:none!important}
       #quick-card{pointer-events:auto;position:fixed;inset:0;background:#191f2c;color:#cdd4e4;padding:16px;border:1px solid #343c50;border-radius:12px;display:flex;flex-direction:column}
       #quick-card header{display:flex;align-items:start;gap:8px}#quick-card header>div{flex:1;min-width:0}#quick-title{font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#quick-subtitle{display:block;font-size:11px;color:#94a2b8;margin-top:3px}#quick-close{color:#94a2b8;width:24px;height:24px;padding:0;font-size:20px}
@@ -647,6 +686,7 @@
     }
   }
   function applyLayout() {
+    glassVisible(glassActive&&['queue','reading','reply'].includes(mode)&&!quickReply&&!reducedTransparency.matches);
     closeInboxMenu();
     closeWorkspacePicker(false);
     host.dataset.edge=edge;
@@ -755,6 +795,7 @@
         // Keep the current pane mounted while it slides back under the queue.
         if(closing&&animate){setDetailMotion(innerWidth-420);await geometry(next,{animate:true});}
         if(from==='reply'&&next!=='reply'){resumeReply=false;window.__PME_REPLY__?.suspend();}
+        if(!['queue','reading','reply'].includes(next))await setInboxGlass(false);
         if(next==='stock')resumeReply=false;
         if(['stock','queue'].includes(next))heldRow=null;
         if(stage){stagedDetail=true;setDetailMotion();}
@@ -1061,7 +1102,7 @@
 
   },{capture:true,signal:abort.signal});
 
-  function reportShell(returnFocus=false,resumed=false){window.__pmeShellState?.(JSON.stringify({workspaceId:team(),mode,focused:document.hasFocus(),returnFocus,resumed,online:navigator.onLine,displays:displayInfo,edgeStrip:mode==='strip'?nativeStripRequest:null,preview:pillPreview}));}
+  function reportShell(returnFocus=false,resumed=false){window.__pmeShellState?.(JSON.stringify({workspaceId:team(),mode,quickReply:!!quickReply,reduceTransparency:reducedTransparency.matches,focused:document.hasFocus(),returnFocus,resumed,online:navigator.onLine,displays:displayInfo,edgeStrip:mode==='strip'?nativeStripRequest:null,preview:pillPreview}));}
   function syncNativeStrip(){
     const hide=mode==='strip'&&connected()&&!!nativeStripRequest&&snapshot.nativeStripReady===nativeStripRequest.id;
     if(disposed||mode!=='strip'||stripSyncPending||hide===nativeStripHidden)return;
@@ -1188,10 +1229,10 @@
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
   idle=setInterval(observe,10000);
-  window.__PME_TRIAGE__={threadAlias,version:'0.20.0',update:value=>{const activity=detectPillActivity(value,{reset:!connected()});lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined}),previewWasHeld=snapshot.previewHeld;snapshot=value;acceptAliasResult();if(value.previewHeld||previewWasHeld!==value.previewHeld)touch();syncNativeStrip();acceptLocalResult();settings={...settings,...value.settings};applyAccent(value.accentTheme);edge=settings.edge;render();if(before!==JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined})&&!['stock','hidden'].includes(mode))void transition(mode);if(activity)revealPillActivity();},transition,command,quick,readFromPill,activity:startActivity,open:openItem,
-    status:()=>({mode,edge,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
+  window.__PME_TRIAGE__={setInboxGlass,threadAlias,version:'0.20.0',update:value=>{const activity=detectPillActivity(value,{reset:!connected()});lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,inboxGlass:undefined}),previewWasHeld=snapshot.previewHeld;snapshot=value;acceptAliasResult();if(value.previewHeld||previewWasHeld!==value.previewHeld)touch();syncNativeStrip();acceptLocalResult();settings={...settings,...value.settings};applyAccent(value.accentTheme);edge=settings.edge;render();if(before!==JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,inboxGlass:undefined})&&!['stock','hidden'].includes(mode))void transition(mode);if(activity)revealPillActivity();},transition,command,quick,readFromPill,activity:startActivity,open:openItem,
+    status:()=>({mode,edge,inboxGlass:glassActive,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
     dispose:async()=>{if(disposed)return;setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);clearTimeout(pillIdleTimer);
-      window.__PME_REPLY__?.cancelSwitcher?.({restore:false});window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});clearDetailMotion();document.body.removeAttribute('data-pme-quick');document.body.removeAttribute('data-pme-quick-read');document.body.removeAttribute('data-pme-background-read');++pillReadRun;await geometry('stock').catch(()=>{});applyAccent(null);host.remove();delete window.__PME_TRIAGE__;
+      window.__PME_REPLY__?.cancelSwitcher?.({restore:false});window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});await setInboxGlass(false).catch(()=>{});glassStyle.remove();clearDetailMotion();document.body.removeAttribute('data-pme-quick');document.body.removeAttribute('data-pme-quick-read');document.body.removeAttribute('data-pme-background-read');++pillReadRun;await geometry('stock').catch(()=>{});applyAccent(null);host.remove();delete window.__PME_TRIAGE__;
     }};
   observe();render();
   if(window.__PME_REPLY__?.status().active&&window.__PME_REPLY__.status().target)void startReply(window.__PME_REPLY__.status().target);

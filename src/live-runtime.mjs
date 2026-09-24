@@ -11,6 +11,7 @@ const { createHistoryLoader } = await import(`./history-loader.mjs?revision=${Da
 const { createReadMarker } = await import(`./read-marker.mjs?revision=${Date.now()}`);
 const { createShellServer } = await import(`./shell-server.mjs?revision=${Date.now()}`);
 const { createModLoader } = await import(`./mod-loader.mjs?revision=${Date.now()}`);
+const {createWindowBackdrop}=await import(`./window-backdrop.mjs?revision=${Date.now()}`);
 const { TriageState } = await import(`./triage-state.mjs?revision=${Date.now()}`);
 
 const teamFromURL = value => { try { const url = new URL(value); if (url.origin !== 'https://app.slack.com') return null;
@@ -24,6 +25,7 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   const previewSession=createPreviewSession(),sendConfirmation=createSendConfirmation(),quickTargets=new Map(),previewReads=new Map();
   const uiStates=new Map(),actionResults=new Map();let lastSnapshot={workspaces:[]};
   const sessionInfo=JSON.parse(await fs.readFile(path.join(runtimeDir,'session.json'),'utf8').catch(()=>'{}'));
+  const backdrop=createWindowBackdrop({cdp,file:path.join(runtimeDir,'native-appearance.json'),launchId:String(sessionInfo.launchId||`${sessionInfo.runtimePid}:${slackPID||sessionInfo.slackPid}`),profile:sessionInfo.profile||'default'});
 
   const requests = new Map(), attached = new Set();
   const observedMethods = new Map(), shapes = new Map();
@@ -90,6 +92,12 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
     }
     return null;
   }
+  function syncBackdrop(entry){
+    const ui=uiStates.get(entry.sessionId),context=contextGuard.current(entry);
+    return backdrop.update(entry,{identity:context?.uniqueId||context?.id||null,
+      enabled:!!context&&!!teamFromURL(entry.url)&&mods.enabled('triage-surface')&&local.settings.inboxGlass===true&&
+        ['queue','reading','reply'].includes(ui?.mode)&&!ui?.quickReply&&!ui?.reduceTransparency});
+  }
   async function shellCommand(op,workspaceId){if(op==='preferences'){settingsEpoch++;return {settingsRequested:true};}const entry=pickEntry(workspaceId)||pickEntry();if(!entry)throw Error('No connected workspace');
     if(op==='switch'&&knownWorkspaces.has(workspaceId)){selectedWorkspaces.set(entry.sessionId,workspaceId);await local.configure({workspace:workspaceId});}
     if(['stock','stock-toggle'].includes(op)&&!await evaluate(entry,'!!window.__PME_TRIAGE__')){return evaluate(entry,`(async()=>{const w=desktop.window,id=await w.getWindowId(),call=(method)=>w.callBrowserWindowMethod(id,method);if(${JSON.stringify(op==='stock-toggle')}&&await call('isVisible')&&!await call('isMinimized')){await call('hide');return {mode:'stock',returnFocus:true};}if(await call('isMinimized'))await call('restore');await call('show');await call('focus');return {mode:'stock'};})()`);}
@@ -97,11 +105,11 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   }
   const shell=await createShellServer({file:path.join(runtimeDir,'shell.sock'),
     previewAction,
-    state:request=>{if(typeof request.previewHover==='string'&&shellPreview()?.key===request.previewHover)previewSession.hold(request.previewHover);if(request.edgeStripVersion===1){edgeHelperAt=Date.now();edgeHelperReady=typeof request.stripReady==='string'?request.stripReady:null;}if(typeof request.hotKeyOK==='boolean')nativeHotkey=request.hotKeyOK;if(typeof request.stockHotKeyOK==='boolean')nativeStockHotkey=request.stockHotKeyOK;return {slackPID:slackPID||sessionInfo.slackPid||0,returnEpoch,settingsEpoch,settings:local.settings,accentTheme:accentTheme(local.settings.accentColor),
+    state:request=>{if(typeof request.previewHover==='string'&&shellPreview()?.key===request.previewHover)previewSession.hold(request.previewHover);if(request.edgeStripVersion===1){edgeHelperAt=Date.now();edgeHelperReady=typeof request.stripReady==='string'?request.stripReady:null;}if(typeof request.hotKeyOK==='boolean')nativeHotkey=request.hotKeyOK;if(typeof request.stockHotKeyOK==='boolean')nativeStockHotkey=request.stockHotKeyOK;return {slackPID:slackPID||sessionInfo.slackPid||0,returnEpoch,settingsEpoch,settings:local.settings,backdrop:backdrop.status(),accentTheme:accentTheme(local.settings.accentColor),
       mode:pickEntry()?uiStates.get(pickEntry().sessionId)?.mode||'stock':'stock',attention:unreadItemCount(notificationWorkspaces()),inboxWorkspace:pickEntry()?scopeFor(pickEntry()):null,preview:shellPreview(),edgeStrip:shellEdgeStrip(),
       displays:[...uiStates.values()].find(s=>s.displays?.length)?.displays||[],
       workspaces:[...knownWorkspaces.values()].map(w=>({...w,connected:true}))};},
-    configure:async patch=>{await local.configure(patch);return {settings:local.settings,accentTheme:accentTheme(local.settings.accentColor)};},command:shellCommand});
+    configure:async patch=>{await local.configure(patch);const entry=pickEntry();if(entry&&contextGuard.current(entry))await backdrop.prepare(entry,mods.enabled('triage-surface')&&local.settings.inboxGlass===true);await Promise.all([...sessions.values()].map(syncBackdrop));return {settings:local.settings,backdrop:backdrop.status(),accentTheme:accentTheme(local.settings.accentColor)};},command:shellCommand});
   const refreshes=createActivityRefresher({load:async request=>{
     const entry=pickEntry(request.workspaceId)||pickEntry();
     if(!entry||!mods.enabled('history-reader'))return {ok:false,error:'adapter_disabled'};
@@ -138,6 +146,7 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
     await cdp.send('Network.enable', { maxTotalBufferSize: 12 * 1024 * 1024, maxResourceBufferSize: 4 * 1024 * 1024 }, entry.sessionId);
     await bindContext(entry);
     await mods.reconcile(entry);
+    if(teamFromURL(entry.url)&&contextGuard.current(entry))await backdrop.prepare(entry,mods.enabled('triage-surface')&&local.settings.inboxGlass===true);
     attached.add(entry.sessionId);
   }
   function event(message) {
@@ -173,9 +182,10 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
       try{const r=JSON.parse(p.payload);if(r.workspaceId!==teamFromURL(entry.url))return;
         const previous=uiStates.get(entry.sessionId)||{};
         previewSession.update(entry.sessionId,r.mode,r.preview||null);
-        uiStates.set(entry.sessionId,{...previous,mode:r.mode,edgeStrip:r.edgeStrip||null,preview:r.preview||null,previewAt:Date.now(),online:typeof r.online==='boolean'?r.online:previous.online,activeAt:r.focused?Date.now():previous.activeAt,
+        uiStates.set(entry.sessionId,{...previous,mode:r.mode,quickReply:r.quickReply===true,reduceTransparency:r.reduceTransparency===true,edgeStrip:r.edgeStrip||null,preview:r.preview||null,previewAt:Date.now(),online:typeof r.online==='boolean'?r.online:previous.online,activeAt:r.focused?Date.now():previous.activeAt,
           displays:Array.isArray(r.displays)?r.displays.filter(d=>typeof d.id==='string'&&/^\d+$/.test(d.id)&&typeof d.name==='string').slice(0,12):previous.displays});
         if(r.mode!=='reply'&&r.mode!=='cluster'){quickTargets.delete(entry.sessionId);sendConfirmation.clear(entry.sessionId);}
+        void syncBackdrop(entry).catch(()=>{});
         syncConnectivity();if(r.resumed===true)refreshes.resume();
         if(r.returnFocus===true)returnEpoch++;
       }catch{}return;
@@ -314,6 +324,7 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
         const scoped = { ...snapshot, nativeStripReady, previewHeld:!!shellPreview()&&previewSession.held(entry.sessionId), notificationScope, notificationWorkspaces:notificationSummaries(notificationWorkspaces(entry)), actionResult:actionResults.get(entry.sessionId)||null,selectedWorkspace:scope,workspaces: snapshot.workspaces.filter(w => scope==='*'?knownWorkspaces.has(w.id):w.id===scope).map(withPendingReads) };
         await bindContext(entry);
         await mods.reconcile(entry);
+        if(contextGuard.current(entry)){await backdrop.prepare(entry,mods.enabled('triage-surface')&&local.settings.inboxGlass===true);await syncBackdrop(entry);}
         await evaluate(entry, `if(location.origin==='https://app.slack.com' && location.pathname.match(/^\\/client\\/([TE][A-Z0-9]+)(?:\\/|$)/)?.[1]===${JSON.stringify(workspace)})window.__PME_TRIAGE__?.update(${JSON.stringify(scoped)})`);
       }
       stats.lastPush = Date.now();
@@ -322,13 +333,13 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   }, 1500);
   return {
     attach,
-    async detach(entry) {sendConfirmation.clear(entry.sessionId);quickTargets.delete(entry.sessionId);attached.delete(entry.sessionId);boundContexts.delete(entry.sessionId);uiStates.delete(entry.sessionId);actionResults.delete(entry.sessionId);selectedWorkspaces.delete(entry.sessionId);mods.detach(entry);syncConnectivity(); },
-    status: () => ({ quickSend:sendConfirmation.status(),callbackSecurity:{rejected:rejectedCallbacks,ready:[...sessions.values()].filter(e=>contextGuard.current(e)).length}, ...store.status(), ...stats, customApi:{...customApi,methods:{...customApi.methods}}, methods: Object.fromEntries(observedMethods), shapes: Object.fromEntries(shapes), socketTypes: Object.fromEntries(socketTypes),
+    async detach(entry) {sendConfirmation.clear(entry.sessionId);quickTargets.delete(entry.sessionId);attached.delete(entry.sessionId);boundContexts.delete(entry.sessionId);uiStates.delete(entry.sessionId);actionResults.delete(entry.sessionId);selectedWorkspaces.delete(entry.sessionId);backdrop.detach(entry);mods.detach(entry);syncConnectivity(); },
+    status: () => ({ backdrop:backdrop.status(),quickSend:sendConfirmation.status(),callbackSecurity:{rejected:rejectedCallbacks,ready:[...sessions.values()].filter(e=>contextGuard.current(e)).length}, ...store.status(), ...stats, customApi:{...customApi,methods:{...customApi.methods}}, methods: Object.fromEntries(observedMethods), shapes: Object.fromEntries(shapes), socketTypes: Object.fromEntries(socketTypes),
       shell:{connected:shell.connected(),hotkeyRegistered:nativeHotkey,stockHotkeyRegistered:nativeStockHotkey},network:refreshes.status().online?'available':'offline',apiPolicy:'manual-only',refreshQueue:{active:refreshes.status().active,queued:refreshes.status().queued},activity:refreshes.status().workspaces.map(a=>({status:a.status,at:a.at,attemptAt:a.attemptAt,nextAt:a.nextAt,hasMore:a.hasMore,countsAvailable:a.countsAvailable,threadsAvailable:a.threadsAvailable})),history:history.status(),mode: 'triage-with-native-reply', mods:mods.status(),liveUI:mods.enabled('triage-surface'), partial: true }),
     async dispose() {
       if(disposed)return;
       disposed = true; clearInterval(timer); cdp.off('event', event);
-      sendConfirmation.dispose();quickTargets.clear();history.dispose();readMarker.dispose();refreshes.dispose();await shell.close();await mods.dispose(sessions);
+      sendConfirmation.dispose();quickTargets.clear();history.dispose();readMarker.dispose();refreshes.dispose();await shell.close();await backdrop.dispose(sessions);await mods.dispose(sessions);
       for (const e of sessions.values()) {
         await cdp.send('Runtime.removeBinding', { name: '__pmeReadOnlySnapshot' }, e.sessionId).catch(() => {});
         await cdp.send('Runtime.removeBinding', { name: '__pmeLoadHistory' }, e.sessionId).catch(() => {});

@@ -210,7 +210,8 @@ child.on('exit', () => { stopping = true;clearTimeout(networkTest?.timer);networ
   fs.closeSync(log); logStatus('Slack closed. Development sign-in preserved.');
 });
 process.on('SIGINT', () => void stop()); process.on('SIGTERM', () => void stop());
+// Publish this launch before the runtime reads its appearance recovery record.
+fs.writeFileSync(path.join(dir, 'session.json'), JSON.stringify({ launchId: `${Date.now()}-${child.pid}`, runtimePid: process.pid, slackPid: child.pid, profile, socketPath }, null, 2), { mode: 0o600 });
 await serial(loadFeature);
 if (!stopping) startHelper();
 server.listen(socketPath, () => { fs.chmodSync(socketPath, 0o600); logStatus(controlPolicy.mode === 'development' ? 'DEVELOPMENT MODE: arbitrary evaluation and screenshots enabled. Use test workspaces.' : 'Triage started with everyday controls. Developer evaluation and screenshots are disabled.'); });
-fs.writeFileSync(path.join(dir, 'session.json'), JSON.stringify({ runtimePid: process.pid, slackPid: child.pid, profile, socketPath }, null, 2), { mode: 0o600 });

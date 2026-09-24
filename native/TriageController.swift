@@ -227,6 +227,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var lastReturn = 0
     var settings: [String: Any] = [:]
     var accentTheme: [String:String] = [:]
+    var backdrop: [String:Any] = [:]
     var currentAccent: NSColor { accentColor(accentTheme["--pme-accent-text"]) }
     var workspaces: [[String: Any]] = []
     var displays: [[String: Any]] = []
@@ -322,6 +323,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.shellMode = state["mode"] as? String ?? self.shellMode
             self.slackPID = pid_t(state["slackPID"] as? Int ?? 0)
             self.settings = state["settings"] as? [String: Any] ?? [:]
+            self.backdrop = state["backdrop"] as? [String:Any] ?? [:]
             self.accentTheme = state["accentTheme"] as? [String:String] ?? [:]
             self.workspaces = state["workspaces"] as? [[String: Any]] ?? []
             self.displays = state["displays"] as? [[String: Any]] ?? []
@@ -638,7 +640,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     func renderSettings() {
         guard let window=settingsWindow else { return }
-        let data: [String:Any] = ["settings":settings,"accentTheme":accentTheme,"workspaces":workspaces,"displays":displays,"inbox":inboxWorkspace ?? "","online":shellOnline,"saving":settingsSaving,"error":settingsError,"triageHotkey":hotKeyOK,"stockHotkey":stockHotKeyOK]
+        let data: [String:Any] = ["settings":settings,"backdrop":backdrop,"accentTheme":accentTheme,"workspaces":workspaces,"displays":displays,"inbox":inboxWorkspace ?? "","online":shellOnline,"saving":settingsSaving,"error":settingsError,"triageHotkey":hotKeyOK,"stockHotkey":stockHotKeyOK]
         let signature=String(data:(try? JSONSerialization.data(withJSONObject:data,options:[.sortedKeys])) ?? Data(),encoding:.utf8) ?? ""
         if signature == settingsSignature { return };settingsSignature=signature
         let oldOffset=settingsScrollView?.contentView.bounds.origin.y ?? 0
@@ -702,6 +704,13 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let colorLabel=label(selectedAccent.uppercased());colorLabel.setAccessibilityLabel("Current accent color: \(selectedAccent)");accentRow.addArrangedSubview(colorLabel)
         stack.addArrangedSubview(accentRow)
         note("Applies to triage, the pill, and embedded Slack views. Dark colors are lightened for text and indicators to keep them readable.")
+        checkbox("Translucent inbox (experimental)",key:"inboxGlass",defaultValue:false)
+        note("Adds macOS background blur behind the inbox list. Conversation panes stay opaque. The first activation enables Slack’s native transparency and needs a restart. Turning this off restores your previous preference. Respects Reduce Transparency.")
+        if backdrop["state"] as? String == "restart-required" {
+            note("Restart Slack with your usual Pimp My Electron launcher to finish enabling translucency. The inbox stays opaque until then.")
+        } else if backdrop["state"] as? String == "unavailable" {
+            note("Native translucency is unavailable. The inbox stays opaque; turn this option off to retry restoring the native preference.")
+        }
         note("Inbox density — choose a preview")
         let densityChoices=NSStackView();densityChoices.orientation = .horizontal;densityChoices.spacing=10;densityChoices.distribution = .fillEqually
         for (value,title,caption) in [("expanded","Expanded","Two-line previews"),("cozy","Cozy","One-line previews"),("compact","Compact","Names and status")] {
@@ -800,6 +809,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         call(["op":"settings","patch":patch]) { [weak self] result in
             guard let self else { return };self.settingsSaving=false
             if let updated=result?["settings"] as? [String:Any] { self.settings=updated } else { self.settingsError="Could not save. Please try again." }
+            if let status=result?["backdrop"] as? [String:Any] { self.backdrop=status }
             if let theme=result?["accentTheme"] as? [String:String] { self.accentTheme=theme }
             self.renderSettings();self.refresh()
             if let next=self.pendingAccent { self.pendingAccent=nil;self.saveSetting(["accentColor":next]) }
