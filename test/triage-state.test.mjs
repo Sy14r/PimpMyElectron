@@ -75,3 +75,19 @@ test('global shortcuts and activity expansion migrate, persist, and reject dupli
  await loaded.configure({shortcut:'ctrl-option-space',stockShortcut:'option-space'});assert.equal(loaded.settings.shortcut,'ctrl-option-space');assert.equal(loaded.settings.stockShortcut,'option-space');
  await loaded.configure({stockShortcut:'invalid',expandOnActivity:'yes'});assert.equal(loaded.settings.stockShortcut,'option-space');assert.equal(loaded.settings.expandOnActivity,false);
 });
+
+test('inbox background opacity migrates to 28%, persists endpoints and rejects malformed values',async t=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'pme-opacity-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+ const file=path.join(dir,'state.json'),state=await new TriageState(file).load();
+ assert.equal(state.settings.inboxOpacity,28);
+ for(const inboxOpacity of [0,28,70,100]){await state.configure({inboxOpacity});assert.equal((await new TriageState(file).load()).settings.inboxOpacity,inboxOpacity);}
+ for(const inboxOpacity of [-1,101,NaN,Infinity,12.5,'40',null,true]){await state.configure({inboxOpacity});assert.equal(state.settings.inboxOpacity,100);}
+});
+
+test('detail opacity boost persists separately and validates percentage points',async t=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'pme-detail-opacity-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+ const file=path.join(dir,'state.json'),state=await new TriageState(file).load();assert.equal(state.settings.detailOpacityBoost,35);
+ await state.configure({inboxOpacity:45,detailOpacityBoost:20});const restored=await new TriageState(file).load();
+ assert.equal(restored.settings.inboxOpacity,45);assert.equal(restored.settings.detailOpacityBoost,20);
+ for(const detailOpacityBoost of [-1,101,NaN,'30',null]){await state.configure({detailOpacityBoost});assert.equal(state.settings.detailOpacityBoost,20);}
+});

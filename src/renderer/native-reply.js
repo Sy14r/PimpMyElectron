@@ -128,6 +128,16 @@
     [data-pme-native-auxiliary] .p-flexpane_header{padding:8px 12px!important;}
     [data-pme-native-auxiliary] .p-flexpane__title_container{font-size:15px!important;}
     [data-pme-native-auxiliary] .c-scrollbar__hider{max-width:100%;}
+    /* One tint at the pane boundary; clear structural layers beneath it so
+       nested message lists do not compound opacity into a solid surface. */
+    html[data-pme-inbox-glass] [data-pme-native-reply-pane]{background:rgba(25,31,44,var(--pme-detail-opacity,.63))!important;}
+    html[data-pme-inbox-glass] [data-pme-native-reply-pane] :is(
+      .p-channel_header,.p-view_header,.p-threads_flexpane__header,[data-pme-native-header],[data-qa="channel_header"],.p-composer_page__header,[role="toolbar"][aria-label="Primary view actions"],[role="tablist"],
+      .p-message_pane,.p-message_pane__foreword,.p-message_pane__body,.c-message_list,.c-virtual_list__scroll_container,.c-scrollbar__hider,[class*="channel_tab_bar__"],
+      .c-message_kit__background:not(:hover):not(.c-message_kit__background--hovered):not(.c-message_kit__background--highlighted),
+      [data-qa="composer_page"],[data-qa="search_view"],.p-home_header,.activity_layout_header__contents,.activity_layout_header__tabs,.p-view_sidebar,.p-activity_ia4_page__filter_bar,
+      .p-flexpane_header,.p-flexpane__body,.p-r_member_profile__container,.p-search_in_channel
+    ){background:transparent!important;}
     `;
   document.head.append(style);
   const path=()=>location.pathname.split('/');
@@ -320,6 +330,16 @@
       await pause(50);
     }
     return run!==generation||disposed?{cancelled:true}:{ok:false,error:'Slack could not leave the conversation. Open Normal Slack and close its detail pane.'};
+  }
+  async function home(){
+    suspend();const run=generation,deadline=Date.now()+5000;let clicked=false;
+    while(!disposed&&run===generation&&Date.now()<deadline){
+      const tab=document.querySelector('[data-qa="tab_rail_home_button"]');
+      if(tab?.getAttribute('aria-selected')==='true')return {ok:true};
+      if(tab&&!clicked){clicked=true;tab.click();}
+      await pause(50);
+    }
+    return disposed||run!==generation?{cancelled:true}:{ok:false};
   }
   async function park(){
     // Pill/inbox visibility changes do not require another timed navigation
@@ -894,7 +914,7 @@
     }
     fail('The Slack destination changed. Reopen the conversation to continue.');
   },250);
-  window.__PME_REPLY__={openSwitcher,cancelSwitcher,switcherOpen,open,status,suspend,park,jumpToLatest,focus,focusMessages,confirmSend,markReadNative,markUnreadNative,overlayOpen,closeAuxiliary,
+  window.__PME_REPLY__={openSwitcher,cancelSwitcher,switcherOpen,open,status,suspend,home,park,jumpToLatest,focus,focusMessages,confirmSend,markReadNative,markUnreadNative,overlayOpen,closeAuxiliary,
     dispose(){if(disposed)return;cancelSwitcher({restore:false});suspend();disposed=true;abort.abort();clearInterval(timer);style.remove();delete window.__PME_REPLY__;window.dispatchEvent(new CustomEvent('pme-native-reply-state'));}};
   window.dispatchEvent(new CustomEvent('pme-native-reply-installed'));
 })();

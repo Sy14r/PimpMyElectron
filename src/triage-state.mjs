@@ -5,7 +5,7 @@ import {DEFAULT_ACCENT,validAccent} from './accent-theme.mjs';
 export const validKey=k=>typeof k==='string'&&/^[TE][A-Z0-9]+:[CDG][A-Z0-9]+:(?:\d+\.\d+)?$/.test(k);
 export const validThreadKey=k=>validKey(k)&&/:[0-9]+\.[0-9]+$/.test(k);
 const validAlias=value=>typeof value==='string'&&value.length<=120&&!/[\u0000-\u001f\u007f]/.test(value);
-const defaults={edge:'right',rest:'strip',display:'main',inboxDensity:'expanded',accentColor:DEFAULT_ACCENT,inboxGlass:false,idleSeconds:60,shortcut:'cmd-shift-y',stockShortcut:'cmd-shift-u',expandOnActivity:true,reopenNew:true,workspace:null,notificationMode:'all',notificationWorkspaces:[]};
+const defaults={edge:'right',rest:'strip',display:'main',inboxDensity:'expanded',accentColor:DEFAULT_ACCENT,inboxGlass:false,inboxOpacity:28,detailOpacityBoost:35,idleSeconds:60,shortcut:'cmd-shift-y',stockShortcut:'cmd-shift-u',expandOnActivity:true,reopenNew:true,workspace:null,notificationMode:'all',notificationWorkspaces:[]};
 export class TriageState {
   records=new Map();aliases=new Map();settings={...defaults};undo=null;error=null;tail=Promise.resolve();
   constructor(file,{now=Date.now}={}){this.file=file;this.now=now;}
@@ -22,6 +22,8 @@ export class TriageState {
     ...(['expanded','cozy','compact'].includes(patch.inboxDensity)?{inboxDensity:patch.inboxDensity}:{}),
     ...(validAccent(patch.accentColor)?{accentColor:patch.accentColor.toLowerCase()}:{}),
     ...(typeof patch.inboxGlass==='boolean'?{inboxGlass:patch.inboxGlass}:{}),
+    ...(Number.isInteger(patch.detailOpacityBoost)&&patch.detailOpacityBoost>=0&&patch.detailOpacityBoost<=100?{detailOpacityBoost:patch.detailOpacityBoost}:{}),
+    ...(Number.isInteger(patch.inboxOpacity)&&patch.inboxOpacity>=0&&patch.inboxOpacity<=100?{inboxOpacity:patch.inboxOpacity}:{}),
     ...(['strip','cluster','hidden'].includes(patch.rest)?{rest:patch.rest}:{}),
     ...(typeof patch.display==='string'&&/^(main|\d+)$/.test(patch.display)?{display:patch.display}:{}),
     ...([0,5,15,30,60,300].includes(patch.idleSeconds)?{idleSeconds:patch.idleSeconds}:{}),

@@ -65,18 +65,32 @@ test('renderer scopes material, restores the original preference, and honors acc
  const fragment=source.slice(source.indexOf('  const reducedTransparency='),source.indexOf('  const accentProperties='));
  const attrs=new Map(),calls=[],media={matches:false,addEventListener(){}};
  const node=()=>({toggleAttribute:(k,v)=>attrs.set(k,v),remove(){}});
- const env={window:{matchMedia:()=>media},document:{createElement:()=>node(),head:{append(){}},documentElement:node()},host:node(),abort:new AbortController(),disposed:false,mode:'queue',quickReply:null,reportShell(){},desktop:{window:{getWindowId:async()=>1,callBrowserWindowMethod:async(...args)=>{calls.push(args);return args[1]==='hasShadow'?true:undefined;}}}};env.window.desktop=env.desktop;
+ const env={window:{matchMedia:()=>media},document:{createElement:()=>node(),head:{append(){}},body:{classList:{contains:()=>true}},documentElement:node()},host:node(),abort:new AbortController(),disposed:false,mode:'queue',quickReply:null,reportShell(){},desktop:{window:{getWindowId:async()=>1,callBrowserWindowMethod:async(...args)=>{calls.push(args);return args[1]==='hasShadow'?true:undefined;}}}};env.window.desktop=env.desktop;
  vm.createContext(env);vm.runInContext(fragment,env);
  assert.equal(await env.setInboxGlass(true),false); // Unknown restoration state: stay opaque.
- assert.equal(await env.setInboxGlass(true,true),true);assert.deepEqual(calls.at(-1),[1,'setVibrancy','hud']);assert.equal(attrs.get('data-inbox-glass'),true);
- await env.setInboxGlass(true,true);assert.equal(calls.length,3);
- await env.setInboxGlass(true,true,true);assert.deepEqual(calls.at(-1),[1,'setVibrancy',null]);
+ assert.equal(await env.setInboxGlass(true,true),true);assert.deepEqual(calls.filter(c=>c[1]==='setVibrancy').at(-1),[1,'setVibrancy','hud']);assert.equal(attrs.get('data-inbox-glass'),true);
+ await env.setInboxGlass(true,true);assert.equal(calls.length,4);
+ await env.setInboxGlass(true,true,true);assert.deepEqual(calls.filter(c=>c[1]==='setVibrancy').at(-1),[1,'setVibrancy',null]);
  const readyCalls=calls.length;await env.setInboxGlass(true,true,true);assert.equal(calls.length,readyCalls);
- await env.setInboxGlass(true,true,false);assert.deepEqual(calls.at(-1),[1,'setVibrancy','hud']);
+ await env.setInboxGlass(true,true,false);assert.deepEqual(calls.filter(c=>c[1]==='setVibrancy').at(-1),[1,'setVibrancy','hud']);
  env.mode='stock';await env.setInboxGlass(true);assert.deepEqual(calls.filter(c=>c[1]==='setVibrancy').at(-1),[1,'setVibrancy','titlebar']);assert.deepEqual(calls.at(-1),[1,'setHasShadow',true]);assert.equal(attrs.get('data-inbox-glass'),false);
- env.mode='queue';await env.setInboxGlass(true);assert.deepEqual(calls.at(-1),[1,'setVibrancy','hud']);assert.equal(attrs.get('data-inbox-glass'),true);
+ env.mode='queue';await env.setInboxGlass(true);assert.deepEqual(calls.filter(c=>c[1]==='setVibrancy').at(-1),[1,'setVibrancy','hud']);assert.equal(attrs.get('data-inbox-glass'),true);
  env.mode='reply';env.quickReply={};assert.equal(await env.setInboxGlass(true),false);
  env.quickReply=null;media.matches=true;assert.equal(await env.setInboxGlass(true),false);
  media.matches=false;await env.setInboxGlass(true,false);await env.setInboxGlass(false);assert.equal(calls.filter(c=>c[1]==='setVibrancy').at(-1)[2],null);assert.deepEqual(calls.at(-1),[1,'setHasShadow',true]);
- assert.doesNotMatch(fragment,/setOpacity|setBackgroundColor|setPreference|backdrop-filter/);
+ assert.deepEqual(calls.filter(c=>c[1]==='setBackgroundColor').at(-1),[1,'setBackgroundColor','#1a1d21']);
+ env.document.body.classList.contains=()=>false;await env.setInboxGlass(false);
+ assert.deepEqual(calls.filter(c=>c[1]==='setBackgroundColor').at(-1),[1,'setBackgroundColor','#ffffff']);
+ env.mode='queue';await env.setInboxGlass(true,false,true);
+ assert.deepEqual(calls.filter(c=>c[1]==='setBackgroundColor').at(-1),[1,'setBackgroundColor','#00000000']);
+ assert.doesNotMatch(fragment,/setOpacity|setPreference|backdrop-filter/);
+});
+
+test('detail opacity derives from inbox opacity, caps at opaque, and never changes text opacity',async()=>{
+ const source=await fs.readFile(new URL('../src/renderer/triage.js',import.meta.url),'utf8');
+ const fragment=source.slice(source.indexOf('  function applyGlassOpacity('),source.indexOf('  function setInboxGlass('));
+ const host=new Map(),body=new Map(),env={settings:{},host:{style:{setProperty:(k,v)=>host.set(k,v)}},document:{body:{style:{setProperty:(k,v)=>body.set(k,v)}}}};
+ vm.runInNewContext(fragment,env);env.applyGlassOpacity();assert.equal(host.get('--pme-inbox-opacity'),'0.28');assert.equal(body.get('--pme-detail-opacity'),'0.63');
+ for(const [inbox,boost,result] of [[35,35,'0.7'],[80,35,'1'],[0,10,'0.1'],[60,0,'0.6']]){env.settings={inboxOpacity:inbox,detailOpacityBoost:boost};env.applyGlassOpacity();assert.equal(body.get('--pme-detail-opacity'),result);assert.equal(host.get('--pme-detail-opacity'),result);}
+ assert.equal([...host.keys(),...body.keys()].some(k=>k==='opacity'),false);
 });

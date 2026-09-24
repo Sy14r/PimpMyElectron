@@ -27,7 +27,8 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   const previewSession=createPreviewSession(),sendConfirmation=createSendConfirmation(),quickTargets=new Map(),previewReads=new Map();
   const uiStates=new Map(),actionResults=new Map();let lastSnapshot={workspaces:[]};
   const sessionInfo=JSON.parse(await fs.readFile(path.join(runtimeDir,'session.json'),'utf8').catch(()=>'{}'));
-  const backdrop=createWindowBackdrop({cdp,file:path.join(runtimeDir,'native-appearance.json'),launchId:String(sessionInfo.launchId||`${sessionInfo.runtimePid}:${slackPID||sessionInfo.slackPid}`),profile:sessionInfo.profile||'default'});
+  const launchId=String(sessionInfo.launchId||`${sessionInfo.runtimePid}:${slackPID||sessionInfo.slackPid}`);
+  const backdrop=createWindowBackdrop({cdp,file:path.join(runtimeDir,'native-appearance.json'),launchId,profile:sessionInfo.profile||'default'});
 
   const requests = new Map(), attached = new Set();
   const observedMethods = new Map(), shapes = new Map();
@@ -336,6 +337,7 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
         await mods.reconcile(entry);
         if(contextGuard.current(entry)){await backdrop.prepare(entry,mods.enabled('triage-surface')&&local.settings.inboxGlass===true);await syncBackdrop(entry);}
         await evaluate(entry, `if(location.origin==='https://app.slack.com' && location.pathname.match(/^\\/client\\/([TE][A-Z0-9]+)(?:\\/|$)/)?.[1]===${JSON.stringify(workspace)})window.__PME_TRIAGE__?.update(${JSON.stringify(scoped)})`);
+        await evaluate(entry, `window.__PME_TRIAGE__?.startup(${JSON.stringify(launchId)})`);
       }
       stats.lastPush = Date.now();
     } catch { /* Reloads destroy execution contexts; next tick recovers. */ }

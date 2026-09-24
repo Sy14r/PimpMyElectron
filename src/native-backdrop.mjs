@@ -7,5 +7,7 @@ export function nativeBackdrop({id,slackPID,geometry,enabled=false}){
  if(w.width<420||w.width>820||w.height<240||w.height>8192||r.width<1||r.width>420||r.height<1||r.height>w.height+1)return null;
  if(r.x<w.x-1||r.y<w.y-1||r.x+r.width>w.x+w.width+1||r.y+r.height>w.y+w.height+1)return null;
  const rect=v=>Object.fromEntries(['x','y','width','height'].map(k=>[k,v[k]]));
- return {id,slackPID,window:rect(w),inbox:rect(r)};
+ const surface=geometry.surface;
+ if(surface!==undefined&&(!valid(surface)||surface.width<r.width||surface.width>820||surface.x!==r.x||surface.y!==r.y||surface.height!==r.height||surface.x+surface.width>w.x+w.width+1))return null;
+ return {id,slackPID,window:rect(w),inbox:rect(r),...(surface?{surface:rect(surface)}:{})};
 }

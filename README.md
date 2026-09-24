@@ -108,7 +108,7 @@ open until explicitly dismissed.
 
 Before moving to another Mac, run `npm run doctor` there. It checks the installed Slack distribution, version, signature, profile ownership and build prerequisites without launching Slack or reading account data. The launcher detects Mac App Store and official direct-download distributions and selects their separate development profiles. See the setup guide for the current validation status. Build a clean source transfer with `npm run package:pilot`; the zip under `dist/` includes Start/Stop command files and excludes private state and send experiments. See [pilot setup](pilot/README.md) and [next pilot proof points](research/pilot-next.md).
 
-Quit Slack normally, then run `npm run dev`. The launcher starts official Slack in its owned development profile and automatically builds/starts the native menu controller. Existing development sign-ins persist. Press **⌘⇧Y from another app**, open or triage an item, then **⌘⇧Y** back to your work. Local triage decisions do not change Slack unread state. **Selecting an item opens Slack’s own conversation or thread pane alongside the queue immediately**, including its composer. There is no separate Reply click or custom-reader load first. **Option-click on an item** opens the lightweight cached reader. The ready native pane uses Slack’s own header; local triage actions remain in the cached reader and through keyboard shortcuts when focus is on the queue. **⌘⇧Y** collapses/reopens it while Slack keeps the draft. Opening the native view may mark the conversation read; **Done** remains local. **Open in Slack** is the ordinary-window fallback.
+Quit Slack normally, then run `npm run dev`. The launcher starts official Slack in its owned development profile and automatically builds/starts the native menu controller. Existing development sign-ins persist. Each fresh launch selects Slack’s Home tab and then opens the triage inbox. Reloading the mod does not repeat startup navigation. Conversation-free Activity remains parked behind the inbox to prevent background auto-reads. Press **⌘⇧Y from another app**, open or triage an item, then **⌘⇧Y** back to your work. Local triage decisions do not change Slack unread state. **Selecting an item opens Slack’s own conversation or thread pane alongside the queue immediately**, including its composer. There is no separate Reply click or custom-reader load first. **Option-click on an item** opens the lightweight cached reader. The ready native pane uses Slack’s own header; local triage actions remain in the cached reader and through keyboard shortcuts when focus is on the queue. **⌘⇧Y** collapses/reopens it while Slack keeps the draft. Opening the native view may mark the conversation read; **Done** remains local. **Open in Slack** is the ordinary-window fallback.
 
 Use the **Inbox density** button beside the conversation filter to choose **Expanded** (the original two-line preview cards), **Cozy** (one-line previews with timestamps), or **Compact** (slim name/status rows). Compact rows keep their cached preview and full status in the hover tooltip and accessible label. Workspace labels remain visible in All workspaces. The choice is saved across launches and also appears in Settings → Appearance & behavior → Inbox density. Changing density affects the inbox list without resizing or reopening the native side pane.
 
@@ -140,10 +140,12 @@ pill and edge strip, embedded native panes and composer, and Settings previews.
 It saves on this Mac and updates without reopening the conversation. Accent text
 and indicators are lightened when needed for contrast; normal Slack keeps its own theme.
 **Translucent inbox (experimental)** is off by default. It uses one macOS native
-blur material behind the inbox list, supplied by the menu-bar helper so it stays
-active when Slack loses focus. Messages, the composer, popups, and the pill stay
-opaque. The inbox's native window shadow is hidden to avoid outlining the detail
-pane before it slides into view. First activation prepares Slack’s native window transparency. If
+blur material behind the inbox and its detail pane, supplied by the menu-bar helper
+so it stays active when Slack loses focus. **Background opacity** controls the inbox
+tint (default 28%). **Detail opacity increase** adds percentage points to that value
+(default +35, capped at 100%); it follows future inbox-opacity changes. Text stays
+fully opaque, as do composer controls, popups, and the pill. The inbox's native window shadow is hidden to avoid outlining the detail
+pane before it slides into view. The blur grows with the revealed content. Returning to standard Slack restores an opaque backing in the current Slack theme before resizing, unless native transparency was already enabled before the mod. First activation prepares Slack’s native window transparency. If
 Settings says a restart is needed, stop and relaunch with the usual Pimp My
 Electron launcher (a mod reload is not enough). Subsequent on/off changes apply
 live. Turning it off restores the previous native transparency preference.

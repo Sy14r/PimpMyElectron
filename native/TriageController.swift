@@ -89,6 +89,8 @@ final class InboxBackdrop {
               let request,let id=request["id"] as? String,request["slackPID"] as? Int==Int(expectedPID),expectedPID>0,
               let expected=rect(request["window"]),let inbox=rect(request["inbox"]),inbox.width<=420,
               expected.insetBy(dx:-1,dy:-1).contains(inbox),
+              let surface=rect(request["surface"] ?? request["inbox"]),surface.minX==inbox.minX,surface.minY==inbox.minY,surface.height==inbox.height,surface.width>=inbox.width,
+              expected.insetBy(dx:-1,dy:-1).contains(surface),
               let windows=CGWindowListCopyWindowInfo([.optionOnScreenOnly,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]],
               let target=windows.first(where:{ value in
                   guard value[kCGWindowOwnerPID as String] as? Int==Int(expectedPID),let b=value[kCGWindowBounds as String] as? [String:Double] else{return false}
@@ -96,7 +98,7 @@ final class InboxBackdrop {
                       (windowNumber==0 || value[kCGWindowNumber as String] as? Int==windowNumber)
               }),let number=target[kCGWindowNumber as String] as? Int,let b=target[kCGWindowBounds as String] as? [String:Double],
               let x=b["X"],let y=b["Y"],let screen=NSScreen.screens.first else {hide();return}
-        let frame=NSRect(x:x+inbox.minX-expected.minX,y:screen.frame.maxY-y-(inbox.minY-expected.minY)-inbox.height,width:inbox.width,height:inbox.height)
+        let frame=NSRect(x:x+surface.minX-expected.minX,y:screen.frame.maxY-y-(surface.minY-expected.minY)-surface.height,width:surface.width,height:surface.height)
         if panel==nil {
             let p=EdgePanel(contentRect:frame,styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
             p.isReleasedWhenClosed=false;p.hidesOnDeactivate=false;p.isOpaque=false;p.backgroundColor = .clear;p.hasShadow=false;p.ignoresMouseEvents=true
@@ -790,7 +792,27 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         stack.addArrangedSubview(accentRow)
         note("Applies to triage, the pill, and embedded Slack views. Dark colors are lightened for text and indicators to keep them readable.")
         checkbox("Translucent inbox (experimental)",key:"inboxGlass",defaultValue:false)
-        note("Keeps macOS background blur behind the inbox list, including when Slack is unfocused. Conversation panes stay opaque. The first activation enables Slack’s native transparency and needs a restart. Turning this off restores your previous preference. Respects Reduce Transparency.")
+        note("Keeps macOS background blur behind the inbox list, including when Slack is unfocused. Detail panes use a stronger background tint. The first activation enables Slack’s native transparency and needs a restart. Turning this off restores your previous preference. Respects Reduce Transparency.")
+        let opacityRow=NSStackView();opacityRow.orientation = .horizontal;opacityRow.spacing=12;opacityRow.alignment = .centerY
+        let opacityName=label("Background opacity");opacityRow.addArrangedSubview(opacityName)
+        let opacity=NSSlider(value:Double(settings["inboxOpacity"] as? Int ?? 28),minValue:0,maxValue:100,target:self,action:#selector(changeSetting(_:)))
+        opacity.identifier=NSUserInterfaceItemIdentifier("inboxOpacity");opacity.isContinuous=false
+        opacity.isEnabled=enabled && (settings["inboxGlass"] as? Bool ?? false)
+        opacity.setAccessibilityLabel("Inbox background opacity");opacity.toolTip="0% shows the most blur; 100% is opaque. Text and controls stay fully opaque."
+        opacityRow.addArrangedSubview(opacity);opacity.widthAnchor.constraint(greaterThanOrEqualToConstant:140).isActive=true
+        let opacityValue=label("\(settings["inboxOpacity"] as? Int ?? 28)%");opacityValue.alignment = .right;opacityValue.widthAnchor.constraint(equalToConstant:40).isActive=true;opacityRow.addArrangedSubview(opacityValue)
+        stack.addArrangedSubview(opacityRow);opacityRow.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        note("Less opaque ← → More opaque. Adjusts the inbox background tint only; text and controls stay fully opaque. Applies when you release the slider.")
+        let boostRow=NSStackView();boostRow.orientation = .horizontal;boostRow.spacing=12;boostRow.alignment = .centerY
+        boostRow.addArrangedSubview(label("Detail opacity increase"))
+        let boostValue=settings["detailOpacityBoost"] as? Int ?? 35
+        let boost=NSSlider(value:Double(boostValue),minValue:0,maxValue:100,target:self,action:#selector(changeSetting(_:)))
+        boost.identifier=NSUserInterfaceItemIdentifier("detailOpacityBoost");boost.isContinuous=false;boost.isEnabled=opacity.isEnabled
+        boost.setAccessibilityLabel("Detail opacity increase in percentage points")
+        boostRow.addArrangedSubview(boost);boost.widthAnchor.constraint(greaterThanOrEqualToConstant:100).isActive=true
+        boostRow.addArrangedSubview(label("+\(boostValue) → \(min(100,(settings["inboxOpacity"] as? Int ?? 28)+boostValue))%"))
+        stack.addArrangedSubview(boostRow);boostRow.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        note("Adds percentage points to the inbox opacity for conversations, threads, and other detail panes, capped at 100%. Composer controls and popups keep a solid background.")
         if backdrop["state"] as? String == "restart-required" {
             note("Restart Slack with your usual Pimp My Electron launcher to finish enabling translucency. The inbox stays opaque until then.")
         } else if backdrop["state"] as? String == "unavailable" {
@@ -871,6 +893,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let id=String(key.dropFirst("workspace:".count));var ids=settings["notificationWorkspaces"] as? [String] ?? []
             ids.removeAll(where:{$0 == id});if button.state == .on { ids.append(id) };patch["notificationWorkspaces"]=ids
         } else if let popup=sender as? NSPopUpButton,let value=popup.selectedItem?.representedObject { patch[key]=value }
+        else if let slider=sender as? NSSlider { patch[key]=Int(slider.doubleValue.rounded()) }
         else if let swatch=sender as? AccentSwatch { patch[key]=swatch.hex }
         else if let preview=sender as? InboxDensityPreview { patch[key]=preview.density }
         else if let button=sender as? NSButton { patch[key]=button.state == .on }

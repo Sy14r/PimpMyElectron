@@ -5,10 +5,13 @@ September 23, 2026. Default off; local testing only, not a broad performance qua
 ## Implementation
 
 Settings → Appearance & behavior → **Translucent inbox (experimental)** enables
-one helper-owned macOS HUD material behind the inbox only. Its visual effect state
+one helper-owned macOS HUD material behind the inbox and revealed detail pane. Its visual effect state
 is `.active`, so it remains blurred when Slack loses focus. A lightly tinted,
-accent-aware background covers it in the custom inbox. Text keeps its full opacity. The native conversation
-pane, composer, loading covers, menus, pill and strip remain opaque. The sliding
+accent-aware background covers it in the custom inbox. Text keeps its full opacity. Background tint is configurable from 0–100% (default 28%). The detail tint adds
+35 percentage points by default, independently adjustable as an offset and capped
+at 100%. Native structural backgrounds are cleared only inside the glass-enabled
+embedded pane; a single tint at its boundary avoids compounded opacity. Text,
+composer controls, menus, pill and strip remain opaque. The sliding
 reader and loading covers are clipped at the inbox boundary, so the inbox keeps
 the same tint throughout the animation. The parked Slack page is hidden and
 clipped out of the inbox region, including its native detail descendants.
@@ -38,7 +41,7 @@ Only this appearance preference is read/changed; the record contains no messages
 or credentials. Keep the record until opting out so the prior value can be restored.
 
 The original Electron material spanned the whole BrowserWindow. The helper's
-click-through, nonactivating panel confines it to the inbox instead. The existing
+click-through, nonactivating panel confines it to the inbox plus the actually revealed detail region instead. The existing
 private Unix socket streams only validated geometry and the owned Slack PID;
 no messages, credentials, screenshots or executable commands are sent. The helper
 independently verifies the visible Slack window and hides if the window disappears,
@@ -174,3 +177,34 @@ isolating its cost. These are short local samples, not a battery-life guarantee.
 - [Electron native macOS material implementation](https://github.com/electron/electron/blob/v44.0.0/shell/browser/native_window_mac.mm#L1299)
 - [Electron custom window styles and transparency limitations](https://www.electronjs.org/docs/latest/tutorial/custom-window-styles)
 - [Slack theme and window transparency preferences](https://slack.com/help/articles/205166337-Change-your-Slack-theme)
+
+## Stock-window restoration and startup
+
+Slack skips its ordinary `#1A1D21` / `#FFFFFF` backing-color initialization when
+`windowVibrancy` is enabled. Turning off vibrancy alone therefore leaves clear
+pixels ahead of Chromium during ordinary window resizing. We now set the backing
+to the current Slack theme before stock geometry is restored, and explicitly
+clear it on entry to translucent triage. An originally enabled native vibrancy
+preference still restores its transparent titlebar material. No compositor or
+whole-window opacity override is used. Electron documents this backing-color API
+in [BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window#winsetbackgroundcolorbackgroundcolor).
+
+A fresh launch selects Home through Slack's own tab control, waits for its selected
+state, and opens the inbox. It then parks Activity as before to avoid hidden
+conversation auto-reads. A per-launch marker prevents mod reloads from repeating
+Home navigation; newer user navigation cancels the pending startup. Missing native
+Home controls time out without stranding the inbox.
+
+The helper validates the visible backdrop union separately from the 420 px inbox.
+During expansion and collapse it follows the same content progress; it never fills
+the entire newly allocated window before the detail begins to appear. The width
+remains bounded to 820 px. No extra Slack API calls or per-pixel capture are used.
+
+With both inbox and detail translucency enabled, the follow-up six-second expanded
+Activity sample recorded p95 frame intervals of 9.8 ms (8.4 ms opaque), with zero
+frames above 33.4 ms. Helper idle CPU was approximately 1.7%; WindowServer reached
+49% during scrolling versus 45% opaque, with other desktop activity present.
+This remains a short local sample, not a battery or multi-display qualification.
+Cold-launch inspection confirmed Home selection completed before inbox entry,
+with Activity parked afterward. DM, channel, and thread styling keep text opacity
+at 1 while applying the derived background tint at the pane boundary.

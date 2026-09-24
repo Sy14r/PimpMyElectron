@@ -21,17 +21,27 @@
        that explicitly set visibility:visible. Keep native detail panes intact. */
     html[data-pme-inbox-glass] body>.p-client_container{visibility:hidden!important;clip-path:inset(0 0 0 420px)!important;}`;
   document.head.append(glassStyle);
-  let glassActive=false,glassOriginal=null,glassMaterial=null,glassHelper=false,glassShadow=null,glassBounds=null,glassConcealed=false,glassTail=Promise.resolve();
+  let glassActive=false,glassOriginal=null,glassMaterial=null,glassHelper=false,glassShadow=null,glassBounds=null,glassConcealed=false,glassBacking=null,glassTail=Promise.resolve();
   function glassVisible(value){
     host.toggleAttribute('data-inbox-glass',value);
     document.documentElement.toggleAttribute('data-pme-inbox-glass',value);
+  }
+  function applyGlassOpacity(){
+    const percent=(value,fallback)=>Number.isInteger(value)&&value>=0&&value<=100?value:fallback;
+    const inbox=percent(settings.inboxOpacity,28),detail=Math.min(100,inbox+percent(settings.detailOpacityBoost,35));
+    host.style.setProperty('--pme-inbox-opacity',String(inbox/100));
+    host.style.setProperty('--pme-detail-opacity',String(detail/100));
+    document.body.style.setProperty('--pme-detail-opacity',String(detail/100));
   }
   function setInboxGlass(enabled,restoreVibrancy=null,helperReady=false){
     glassTail=glassTail.catch(()=>{}).then(async()=>{
       const wanted=enabled&&!disposed&&!reducedTransparency.matches&&['queue','reading','reply'].includes(mode)&&!quickReply;
       if(typeof restoreVibrancy==='boolean')glassOriginal=restoreVibrancy;
       const material=wanted?(helperReady?'':'hud'):glassOriginal===null?null:glassOriginal?'titlebar':'';
-      if(wanted===glassActive&&(material===null||material===glassMaterial)){glassVisible(wanted);return wanted;}
+      // A window created with vibrancy has a transparent Chromium backing.
+      // Removing the material alone leaves clear pixels during native resizing.
+      const backing=glassOriginal===null?null:wanted||glassOriginal?'#00000000':document.body.classList.contains('sk-client-theme--dark')?'#1a1d21':'#ffffff';
+      if(wanted===glassActive&&(material===null||material===glassMaterial)&&backing===glassBacking){glassVisible(wanted);return wanted;}
       // Start opaque; only expose the backdrop after the native call succeeds.
       glassVisible(false);
       const w=window.desktop?.window;if(!w?.callBrowserWindowMethod)return false;
@@ -40,12 +50,13 @@
         if(glassOriginal===null)return false;
         if(glassShadow===null)glassShadow=await call('hasShadow');
         await call('setHasShadow',false);
-        await call('setVibrancy',material||null);glassActive=true;glassMaterial=material;glassHelper=helperReady;
+        await call('setVibrancy',material||null);await call('setBackgroundColor',backing);glassBacking=backing;glassActive=true;glassMaterial=material;glassHelper=helperReady;
         glassVisible(!disposed&&['queue','reading','reply'].includes(mode)&&!quickReply);
         reportShell();
         return true;
       }
       await call('setVibrancy',material||null);
+      if(backing!==null){await call('setBackgroundColor',backing);glassBacking=backing;}
       if(typeof glassShadow==='boolean')await call('setHasShadow',glassShadow);
       glassActive=false;glassHelper=false;glassMaterial=material;reportShell();return false;
     });return glassTail;
@@ -71,7 +82,7 @@
       [hidden]{display:none!important}#opener{position:fixed;right:18px;bottom:18px;pointer-events:auto;padding:10px 15px;background:var(--pme-accent-surface,#262337);border:1px solid var(--pme-accent-muted,#827097);border-radius:24px;box-shadow:0 4px 20px #0006;display:flex;gap:9px;align-items:center;font-weight:600}
       .signal{width:7px;height:7px;border-radius:50%;background:#99d3b9}.shell{pointer-events:auto;position:fixed;inset:0;background:#141925;display:flex;box-shadow:0 0 60px #0007}
       :host([data-inbox-glass]) .shell{background:transparent;box-shadow:none}
-      :host([data-inbox-glass]) .shell>.queue{background:rgba(20,25,37,.28);background-image:linear-gradient(rgba(var(--pme-accent-rgb,188,169,240),.045),transparent 65%);border-right-color:#ffffff20}
+      :host([data-inbox-glass]) .shell>.queue{background:rgba(20,25,37,var(--pme-inbox-opacity,.28));background-image:linear-gradient(rgba(var(--pme-accent-rgb,188,169,240),.045),transparent 65%);border-right-color:#ffffff20}
       .shell,#edge-tab,#quick-card{-webkit-app-region:no-drag}
       .rail{width:44px;flex-shrink:0;background:#10141f;border-right:1px solid #ffffff0c;display:flex;flex-direction:column;align-items:center;gap:9px;padding:12px 0}.rail button{width:32px;height:32px;font-size:13px;background:#ffffff07;color:#a4adc0}.rail .brand{background:var(--pme-accent,#b6a5e8);color:var(--pme-accent-contrast,#20182b);font-weight:800}.spacer{flex:1}
       .queue{width:420px;max-width:100vw;flex-shrink:0;display:flex;flex-direction:column;padding:22px 16px 12px;border-right:1px solid #ffffff10;min-height:0}.eyebrow{font-size:10px;font-weight:600;letter-spacing:1.7px;color:var(--pme-accent-muted,#b3a4d5);text-transform:uppercase}h1{font-size:25px;line-height:1.2;letter-spacing:-.6px;margin:8px 0}
@@ -93,6 +104,8 @@
       :host([data-density="compact"]) .row-head{min-height:20px;gap:6px}
       :host([data-density="compact"]) .name{font-size:12px}
       .empty{padding:24px 10px;color:#8796af;font-size:12px;line-height:1.6}#notice:empty{display:none}
+      :host([data-inbox-glass]) :is(.reader,.reply-chrome,.reply-placeholder){background:rgba(25,31,44,var(--pme-detail-opacity,.63))}
+      :host([data-inbox-glass]) .reply-placeholder[data-state="ready"]{transition:none}
       .reader{flex:1;min-width:0;display:flex;flex-direction:column;background:#191f2c}.reader-header{padding:22px 23px 16px;border-bottom:1px solid #ffffff0a}.reader-header h2{font-size:18px;margin:8px 0 4px;overflow-wrap:anywhere}#coverage{font-size:11px;color:#8494ab;line-height:1.6}.reader-header button{float:right;color:#94a2b8;padding:3px 7px}.messages{flex:1;overflow:auto;padding:8px 23px}.message{padding:17px 0;border-bottom:1px solid #ffffff07}.message-head{display:flex;align-items:baseline;gap:9px}.author{font-weight:650;font-size:12px;color:#cdd4e4}.time{color:#77869d;font-size:10px}.body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.65;color:#bcc6d8;margin-top:6px}.attachment{font-size:10px;color:var(--pme-accent-muted,#9a8eb5);margin-top:7px}.read-only{padding:12px 23px;border-top:1px solid #ffffff0c;color:#829690;font-size:11px;display:flex;gap:8px;align-items:center}#notice{font-size:11px;color:#dbbca1;margin-top:9px;white-space:normal}
       .triage-controls{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.triage-controls button{float:none;background:var(--pme-accent-a20,#ab8cdd20);color:var(--pme-accent-text,#d6c8ef);padding:6px 9px;font-size:11px}.history-controls{display:flex;gap:8px;margin-top:12px}.reader-header .history-controls button{float:none;border:1px solid #ffffff18;padding:5px 10px;font-size:11px}#history-status{font-size:11px;color:var(--pme-accent-muted,#b5a6d5);margin-top:9px}.body a{color:var(--pme-accent-text,#b8c7fa);text-decoration:underline}.body code,.body pre{background:#ffffff0a;border-radius:4px;padding:2px 4px;font-size:12px}.body pre{padding:10px;overflow:auto;white-space:pre-wrap}.mention{color:var(--pme-accent-text,#c3b3ef)}.thread-link{font-size:11px;margin-top:8px;padding:5px 8px;background:var(--pme-accent-a16,#ab8cdd16);color:var(--pme-accent-text,#c5b3ee)}
       #edge-tab{position:fixed;inset:0;pointer-events:auto;background:#18171c;border-radius:0;color:var(--pme-accent-text,#d7ccef);padding:8px 1px;font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;overflow:hidden;box-shadow:inset 0 0 0 1px #ffffff0c}#edge-tab:hover{background:var(--pme-accent-surface-hover,#28232f);box-shadow:inset 0 0 0 1px var(--pme-accent-a33,#cbb5f133)}
@@ -241,7 +254,7 @@
   let snapshot = { workspaces: [] }, mode = 'stock', edge = 'right', filter = 'all', selection = null;
   let resumeReply=false,openSequence=0,openingKey=null,heldRow=null,quickReply=null,pillReadPending=null,pillReadRun=0;
   const detailMode=()=>['reading','reply'].includes(mode);
-  let original = null, disposed = false, nativeQueue = Promise.resolve(), previousFocus = null, spacesApplied = false;
+  let original = null, disposed = false, nativeQueue = Promise.resolve(), transitionEpoch=0, previousFocus = null, spacesApplied = false;
   const viewKey='__pme_triage_view_v1';
   try{const view=JSON.parse(sessionStorage.getItem(viewKey)||'{}');resumeReply=view.resumeReply===true;if(typeof view.selection==='string')selection=view.selection;if(['all','unread','dms','channels','threads','mentions'].includes(view.filter))filter=view.filter;}catch{}
   const layoutKey = '__pme_triage_layout_v1';
@@ -812,6 +825,7 @@
   }
   function transition(next,{stage=false,passive=false,reuseLayout=false}={}) {
     if (disposed || !['stock','hidden','strip','cluster','queue','reading','reply'].includes(next)) return Promise.resolve();
+    ++transitionEpoch;
     if(aliasDialog.open)closeAlias();
     if(workspaceDialog.open)closeWorkspacePicker(false);
     if(densityMenu.matches(':popover-open'))densityMenu.hidePopover();
@@ -1145,7 +1159,13 @@
     let backdropGeometry=null;
     if(glassActive&&glassBounds&&!glassConcealed&&!disposed&&['queue','reading','reply'].includes(mode)&&!quickReply){
       const r=shadow.querySelector('.queue').getBoundingClientRect();
-      backdropGeometry={window:glassBounds,inbox:{x:glassBounds.x+r.x,y:glassBounds.y+r.y,width:r.width,height:r.height}};
+      const inbox={x:glassBounds.x+r.x,y:glassBounds.y+r.y,width:r.width,height:r.height};
+      const progress=host.hasAttribute('data-detail-reveal')?Math.max(0,Math.min(1,parseFloat(getComputedStyle(document.body).getPropertyValue('--pme-detail-progress'))||0)):1;
+      const detail=detailMode()?Math.max(0,Math.min(glassBounds.width,innerWidth)-420)*progress:0;
+      // Grow only as the content is revealed; allocating the Slack window must
+      // not make a full-width glass rectangle pop into view ahead of it.
+      const surface={...inbox,width:Math.min(inbox.width+detail,glassBounds.x+glassBounds.width-inbox.x)};
+      backdropGeometry={window:glassBounds,inbox,surface};
     }
     window.__pmeShellState?.(JSON.stringify({backdropGeometry,workspaceId:team(),mode,quickReply:!!quickReply,reduceTransparency:reducedTransparency.matches,focused:document.hasFocus(),returnFocus,resumed,online:navigator.onLine,displays:displayInfo,edgeStrip:mode==='strip'?nativeStripRequest:null,preview:pillPreview}));}
   function syncNativeStrip(){
@@ -1274,12 +1294,33 @@
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
   idle=setInterval(observe,10000);
-  window.__PME_TRIAGE__={setInboxGlass,threadAlias,version:'0.20.0',update:value=>{const activity=detectPillActivity(value,{reset:!connected()});lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,inboxGlass:undefined}),previewWasHeld=snapshot.previewHeld;snapshot=value;acceptAliasResult();if(value.previewHeld||previewWasHeld!==value.previewHeld)touch();syncNativeStrip();acceptLocalResult();settings={...settings,...value.settings};applyAccent(value.accentTheme);edge=settings.edge;render();if(before!==JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,inboxGlass:undefined})&&!['stock','hidden'].includes(mode))void transition(mode);if(activity)revealPillActivity();},transition,command,quick,readFromPill,activity:startActivity,open:openItem,
+  let startupTask=null;
+  function startup(launchId){
+    if(startupTask)return startupTask;
+    if(typeof launchId!=='string'||!launchId)return Promise.resolve({ok:false});
+    startupTask=(async()=>{
+      if(disposed)return {cancelled:true};
+      const key='__pme_startup_launch_v1';let previous=null;
+      try{previous=sessionStorage.getItem(key);sessionStorage.setItem(key,launchId);}catch{}
+      if(transitionEpoch>0)return {cancelled:true};
+      if(previous===launchId){
+        if(window.__PME_REPLY__?.status().active&&window.__PME_REPLY__.status().target)await startReply(window.__PME_REPLY__.status().target);
+        else if(savedLayout)await transition(['reading','reply'].includes(savedLayout.mode)?'queue':savedLayout.mode);
+        return {ok:true,restored:true};
+      }
+      const epoch=transitionEpoch;
+      let home;try{home=await window.__PME_REPLY__?.home?.();}catch{home={ok:false};}
+      if(disposed||epoch!==transitionEpoch||home?.cancelled)return {cancelled:true};
+      // Home initializes Slack's normal navigation. Queue then parks Activity
+      // so the Home conversation cannot consume unread messages while hidden.
+      await transition('queue');
+      return {ok:true,home:home?.ok===true};
+    })();return startupTask;
+  }
+  window.__PME_TRIAGE__={startup,setInboxGlass,threadAlias,version:'0.20.0',update:value=>{const activity=detectPillActivity(value,{reset:!connected()});lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,inboxGlass:undefined,inboxOpacity:undefined,detailOpacityBoost:undefined}),previewWasHeld=snapshot.previewHeld;snapshot=value;acceptAliasResult();if(value.previewHeld||previewWasHeld!==value.previewHeld)touch();syncNativeStrip();acceptLocalResult();settings={...settings,...value.settings};applyAccent(value.accentTheme);edge=settings.edge;applyGlassOpacity();render();if(before!==JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,inboxGlass:undefined,inboxOpacity:undefined,detailOpacityBoost:undefined})&&!['stock','hidden'].includes(mode))void transition(mode);if(activity)revealPillActivity();},transition,command,quick,readFromPill,activity:startActivity,open:openItem,
     status:()=>({mode,edge,inboxGlass:glassActive,backdropHelper:glassHelper,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
     dispose:async()=>{if(disposed)return;setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);clearTimeout(pillIdleTimer);
-      window.__PME_REPLY__?.cancelSwitcher?.({restore:false});window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});await setInboxGlass(false).catch(()=>{});glassStyle.remove();clearDetailMotion();document.body.removeAttribute('data-pme-quick');document.body.removeAttribute('data-pme-quick-read');document.body.removeAttribute('data-pme-background-read');++pillReadRun;await geometry('stock').catch(()=>{});applyAccent(null);host.remove();delete window.__PME_TRIAGE__;
+      window.__PME_REPLY__?.cancelSwitcher?.({restore:false});window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});await setInboxGlass(false).catch(()=>{});glassStyle.remove();document.body.style.removeProperty('--pme-detail-opacity');clearDetailMotion();document.body.removeAttribute('data-pme-quick');document.body.removeAttribute('data-pme-quick-read');document.body.removeAttribute('data-pme-background-read');++pillReadRun;await geometry('stock').catch(()=>{});applyAccent(null);host.remove();delete window.__PME_TRIAGE__;
     }};
   observe();render();
-  if(window.__PME_REPLY__?.status().active&&window.__PME_REPLY__.status().target)void startReply(window.__PME_REPLY__.status().target);
-  else if(savedLayout)void transition(['reading','reply'].includes(savedLayout.mode)?'queue':savedLayout.mode);
 })();
