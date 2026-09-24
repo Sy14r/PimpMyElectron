@@ -1,4 +1,4 @@
-import {inspectSpotify} from './spotify.mjs';
+import {inspectSpotify,waitForSpotifyHelper} from './spotify.mjs';
 import {supportedApps} from './app-support.mjs';
 import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import {spawn,spawnSync} from 'node:child_process';
 import {validateCatalog,resolveSelection,moduleSelection} from './catalog.mjs';
@@ -94,8 +94,10 @@ export class ClientManager {
   const binary=this.spotifyHelper;await fs.access(binary);
   await fs.mkdir(dir,{recursive:true,mode:0o700});
   if(Buffer.byteLength(path.join(dir,'control.sock'))>=104)throw Error('Your home-folder path is too long for the local controller socket.');
-  const log=await fs.open(path.join(dir,'launcher.log'),'w',0o600);this.launching=true;
+  const log=await fs.open(path.join(dir,'launcher.log'),'a',0o600);this.launching=true;
+  const launchLog=message=>log.write(`[${new Date().toISOString()}] ${message}\n`);
   try{
+   await launchLog('Starting Spotify Menu Player.');
    // Reuse the private inherited-pipe host when only the widget was stopped.
    const bridgePath=path.join(dir,'bridge.sock');
    let bridge=await this.request(bridgePath,{op:'status'}).catch(()=>null);
@@ -112,11 +114,13 @@ export class ClientManager {
    }
    if(!bridge?.ready)throw Error('Spotify is still starting or needs sign-in. Wait for its Home view, then launch again from PME.');
    // Launch as an application; macOS attributes nested-helper consent to PME.
+   await launchLog('Requesting menu helper launch through macOS; waiting up to 60 seconds for its control endpoint.');
    const child=this.launch('/usr/bin/open',['-g','-n','-a',path.resolve(binary,'../../..'),'--args','--data-dir',dir,'--spotify-app',installation.app],{cwd:this.root,env:cleanEnvironment(process.env),detached:true,stdio:['ignore',log.fd,log.fd]});
-   let failure=false;child.once('error',()=>{failure=true;});child.unref();
-   for(let i=0;i<60;i++){await new Promise(r=>setTimeout(r,200));if(failure||(child.exitCode!=null&&child.exitCode!==0))throw Error('The Spotify menu helper could not start. Check its launch log in the PME data folder.');
-    const state=await this.runtime('spotify');if(state.running){await writeJSON(path.join(dir,'launch-selection.json'),{pid:state.pid,installationPath:installation.app,modIds:pref.selected});return this.snapshot();}}
-   throw Error('The Spotify menu helper did not respond. Check its launch log in the PME data folder.');
+   let failure=null;child.once('error',error=>{failure=error.code||error.message;});child.unref();
+   const state=await waitForSpotifyHelper({status:()=>this.runtime('spotify'),launchFailure:()=>failure||(child.exitCode!=null&&child.exitCode!==0?`macOS open exited with status ${child.exitCode}`:child.signalCode?`macOS open ended with signal ${child.signalCode}`:null)});
+   await launchLog(`Menu helper ready (pid ${state.pid}).`);
+   await writeJSON(path.join(dir,'launch-selection.json'),{pid:state.pid,installationPath:installation.app,modIds:pref.selected});return this.snapshot();
+  }catch(error){await launchLog(`Launch failed: ${error.message}`);throw error;
   }finally{this.launching=false;await log.close();}
  }
  async createShortcut(appId,destination){

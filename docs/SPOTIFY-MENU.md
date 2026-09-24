@@ -14,10 +14,23 @@ and installs the Mini Library bridge in memory. Your existing sign-in is reused.
 An ordinary Spotify process that is already open is left alone: the manager asks
 you to quit it first.
 
+The menu helper can take up to 60 seconds to become ready on first launch.
+PME waits for its control endpoint without launching duplicate helpers. Startup
+stages and failures are appended to `runtime/spotify/launcher.log` in the PME
+data folder, including when the launch came from a shortcut.
+
 Hover over the Spotify menu-bar icon to reveal the player. Move into it to interact;
 move away to dismiss the compact player. Clicking the icon toggles it as well.
 Library, Search, or Queue expands to a taller browser with a compact player above.
-While browsing, moving the pointer away does not dismiss the widget. Click outside
+The header, artwork, tab body, and native window resize together over 240 ms.
+AppKit’s automatic popover animation is disabled so it cannot compete with the
+resize driver. The track header keeps fixed text metrics and scales the cover from fixed bounds,
+so titles do not rewrap during the transition. Its text block shrinks by 6% in
+the expanded view using a rendered scale, not changing font layout. The artwork wash stays anchored.
+Animation state is separate from library data to avoid invalidating every row on
+each tick. Closing a tab keeps its content in place while it recedes; switching between
+open tabs does not resize the player. macOS Reduce Motion disables the resize
+animation. While browsing, moving the pointer away does not dismiss the widget. Click outside
 or use Close to dismiss it. Pin prevents the compact player from dismissing on
 pointer exit. Escape clears a search, backs out of a collection, returns to the
 compact player, then closes it.

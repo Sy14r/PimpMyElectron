@@ -27,3 +27,15 @@ test('Spotify normal sessions are preserved and require a normal quit before Min
  const m=await new ClientManager({root,dataDir,spotifyHelper:path.join(root,'package.json'),spotifyRunning:()=>true,spotifyInspect:async()=>({app:'/Applications/Spotify.app'}),request:async()=>{throw Error('No host');},launch:()=>{throw Error('Must not launch or stop an ordinary Spotify session');}}).init();
  await assert.rejects(m.startSpotify({path:'/Applications/Spotify.app',selected:['spotify-menu']}),/Quit Spotify normally/);
 });
+
+test('first-open helper readiness can exceed the former 12-second cutoff',async()=>{
+ const {waitForSpotifyHelper}=await import('../client/core/spotify.mjs');let elapsed=0,checks=0;
+ const state=await waitForSpotifyHelper({now:()=>elapsed,sleep:async ms=>{elapsed+=ms;},launchFailure:()=>null,status:async()=>{checks++;return {running:elapsed>=18000,pid:42};}});
+ assert.equal(state.pid,42);assert.equal(elapsed,18000);assert.ok(checks>60);
+});
+test('helper startup distinguishes OS launch failure from slow readiness',async()=>{
+ const {waitForSpotifyHelper}=await import('../client/core/spotify.mjs');let elapsed=0;
+ await assert.rejects(waitForSpotifyHelper({status:async()=>({running:false}),launchFailure:()=> 'macOS open exited with status 1'}),/macOS open exited with status 1/);
+ await assert.rejects(waitForSpotifyHelper({now:()=>elapsed,sleep:async ms=>{elapsed+=ms;},status:async()=>({running:false}),launchFailure:()=>null}),/existing launch has been left running/);
+ assert.equal(elapsed,60000);
+});

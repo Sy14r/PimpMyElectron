@@ -42,14 +42,16 @@ struct PlayerWidget: View {
     @ObservedObject var model:Player
     @ObservedObject var library:MiniLibrary
     @ObservedObject var preferences:PlayerPreferences
-    init(model:Player){self.model=model;library=model.library;preferences=model.preferences}
+    @ObservedObject var presentation:PlayerPresentation
+    init(model:Player){self.model=model;library=model.library;preferences=model.preferences;presentation=model.library.presentation}
+    var expansion:Double {presentation.layout.expansion}
     var green:Color {model.atmosphere.map{Color(nsColor:$0.accent)} ?? Color(red:0.30,green:0.88,blue:0.52)}
     func time(_ value:Double)->String {let n=max(0,Int(value.isFinite ? value : 0));return "\(n/60):\(String(format:"%02d",n%60))"}
     func modeIcon(_ name:String,active:Bool)->some View {
         ZStack {Image(systemName:name).font(.system(size:17));if active {Circle().frame(width:3,height:3).offset(y:14)}}.frame(width:30,height:38).foregroundStyle(active ? green:Color.secondary)
     }
     var body: some View {
-        VStack(alignment:.leading,spacing:library.expanded ? 8:14) {
+        VStack(alignment:.leading,spacing:14-6*expansion) {
             HStack(spacing:7) {
                 Circle().fill(model.playing ? green : Color.gray).frame(width:6,height:6)
                 Text(model.playing ? "NOW PLAYING" : "SPOTIFY").font(.system(size:10,weight:.bold,design:.rounded)).tracking(1.5).foregroundStyle(Color.white.opacity(0.68))
@@ -61,17 +63,7 @@ struct PlayerWidget: View {
                 Button {model.action?("open")} label:{Image(systemName:"arrow.up.forward.app").font(.system(size:13))}.buttonStyle(.plain).help("Open Spotify").accessibilityLabel("Open Spotify")
                 Button {model.action?("close")} label:{Image(systemName:"xmark").font(.system(size:11))}.buttonStyle(.plain).help("Close player").accessibilityLabel("Close player")
             }
-            HStack(alignment:.center,spacing:15) {
-                ZStack {
-                    RoundedRectangle(cornerRadius:12).fill(LinearGradient(colors:[green.opacity(0.24),Color.white.opacity(0.04)],startPoint:.topLeading,endPoint:.bottomTrailing))
-                    if let image=model.artwork {Image(nsImage:image).resizable().scaledToFill()}else{Image(systemName:"music.note").font(.system(size:28,weight:.medium)).foregroundStyle(green)}
-                }.frame(width:library.expanded ? 48:86,height:library.expanded ? 48:86).clipShape(RoundedRectangle(cornerRadius:12))
-                VStack(alignment:.leading,spacing:5) {
-                    Text(model.title).font(.system(size:library.expanded ? 14:16,weight:.semibold)).lineLimit(2).fixedSize(horizontal:false,vertical:true)
-                    Text(model.artist).font(.system(size:12)).foregroundStyle(Color.white.opacity(0.78)).lineLimit(2)
-                    if !model.album.isEmpty {Text(model.album).font(.system(size:11)).foregroundStyle(Color.white.opacity(0.57)).lineLimit(1)}
-                }.frame(maxWidth:.infinity,alignment:.leading)
-            }
+            PlayerTrackHeader(model:model,expansion:expansion)
             if !model.error.isEmpty {
                 Text(model.error).font(.system(size:11)).foregroundStyle(Color(red:1,green:0.73,blue:0.51)).fixedSize(horizontal:false,vertical:true)
                 Button(model.needsPermission ? "Allow Spotify control":"Try again") {model.action?("retry")}.font(.system(size:11)).buttonStyle(.plain).foregroundStyle(green)
@@ -94,18 +86,46 @@ struct PlayerWidget: View {
                 Spacer()
             }.disabled(!model.ready || model.working)
             LibraryPanel(model:library)
-        }.padding(16).frame(width:400,height:library.expanded ? 640:(model.error.isEmpty ? 280:350),alignment:.top).clipped().preferredColorScheme(.dark)
+        }.padding(16).frame(width:400,height:presentation.layout.height,alignment:.top).clipped().preferredColorScheme(.dark)
+    }
+}
+// Fixed text metrics and artwork bounds avoid rewrapping/re-rasterizing the
+// header at every intermediate width. Only its position and cover scale move.
+struct PlayerTrackHeader:View {
+    @ObservedObject var model:Player
+    let expansion:Double
+    var coverSize:Double {86-38*expansion}
+    var rowHeight:Double {86-16*expansion}
+    var textScale:Double {1-0.06*expansion}
+    var body:some View {
+        ZStack(alignment:.topLeading) {
+            ZStack {
+                RoundedRectangle(cornerRadius:12).fill(Color.white.opacity(0.07))
+                if let image=model.artwork {Image(nsImage:image).resizable().scaledToFill()}
+                else {Image(systemName:"music.note").font(.system(size:28,weight:.medium)).foregroundStyle(.secondary)}
+            }.frame(width:86,height:86).clipShape(RoundedRectangle(cornerRadius:12))
+                .scaleEffect(coverSize/86,anchor:.topLeading).offset(y:(rowHeight-coverSize)/2)
+            VStack(alignment:.leading,spacing:3) {
+                Text(model.title).font(.system(size:15,weight:.semibold)).lineLimit(2).fixedSize(horizontal:false,vertical:true)
+                Text(model.artist).font(.system(size:12)).foregroundStyle(Color.white.opacity(0.78)).lineLimit(1)
+                Text(model.album).font(.system(size:11)).foregroundStyle(Color.white.opacity(0.57)).lineLimit(1)
+            }.frame(width:267,height:70,alignment:.leading)
+                .scaleEffect(textScale,anchor:.topLeading).offset(x:101-38*expansion,y:(rowHeight-70*textScale)/2)
+        }.frame(maxWidth:.infinity,alignment:.leading).frame(height:rowHeight).accessibilityElement(children:.combine)
     }
 }
 struct PlayerFrameBackground:View {
     @ObservedObject var model:Player
     @ObservedObject var library:MiniLibrary
     @ObservedObject var preferences:PlayerPreferences
-    init(model:Player){self.model=model;library=model.library;preferences=model.preferences}
+    @ObservedObject var presentation:PlayerPresentation
+    init(model:Player){self.model=model;library=model.library;preferences=model.preferences;presentation=model.library.presentation}
     var body:some View {
         GeometryReader{geometry in
             Color(red:0.075,green:0.09,blue:0.105).overlay(alignment:.top){
-                ArtworkBackground(atmosphere:model.atmosphere,treatment:preferences.treatment).frame(height:library.expanded ? 258:geometry.size.height)
+                ArtworkBackground(atmosphere:model.atmosphere,treatment:preferences.treatment)
+                    .frame(height:model.error.isEmpty ? 298:368)
+                    .frame(height:(model.error.isEmpty ? 298.0:368.0)*(1-presentation.layout.expansion)+276*presentation.layout.expansion,alignment:.top).clipped()
             }
         }.allowsHitTesting(false)
     }
@@ -157,6 +177,8 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
     var trackKey="",ownsSocket=false,waitingForEntry=false,pointerWasOverIcon=false
     var clickMonitor:Any?,keyMonitor:Any?
     var sizing:AnyCancellable?
+    var layoutTimer:Timer?
+    var layoutTarget:PlayerLayout?
     var automationEntitled:Bool {
         guard let task=SecTaskCreateFromSelf(nil) else{return false}
         return (SecTaskCopyValueForEntitlement(task,"com.apple.security.automation.apple-events" as CFString,nil) as? Bool)==true
@@ -175,8 +197,8 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
         }
         let host=HoverHost(rootView:PlayerWidget(model:model));let controller=NSViewController();controller.view=host
         popover.contentViewController=controller;popover.contentSize=NSSize(width:400,height:280);
-        sizing=model.$error.sink{ [weak self] _ in DispatchQueue.main.async {self?.resizePlayer()} };popover.behavior = .applicationDefined;popover.animates=true;popover.appearance=NSAppearance(named:.darkAqua)
-        model.library.changed={ [weak self] in guard let self else{return};self.resizePlayer();if self.model.library.expanded {NSApp.activate(ignoringOtherApps:true);self.popover.contentViewController?.view.window?.makeKey()};self.refresh() }
+        sizing=model.$error.sink{ [weak self] _ in DispatchQueue.main.async {self?.resizePlayer()} };popover.behavior = .applicationDefined;popover.animates=false;popover.appearance=NSAppearance(named:.darkAqua)
+        model.library.changed={ [weak self] in guard let self else{return};self.resizePlayer();if self.model.library.expanded {NSApp.activate(ignoringOtherApps:true);self.popover.contentViewController?.view.window?.makeKey()};if self.layoutTimer==nil {self.refresh()} }
         model.action={ [weak self] action in self?.perform(action) }
         clickMonitor=NSEvent.addGlobalMonitorForEvents(matching:.leftMouseDown){ [weak self] _ in self?.close() }
         keyMonitor=NSEvent.addLocalMonitorForEvents(matching:.keyDown){ [weak self] event in if event.keyCode==53,self?.popover.isShown==true {if self?.model.settingsOpen==true {self?.model.settingsOpen=false;self?.outsideSince=nil}else if self?.model.library.closeDetail() != true {self?.close()};return nil};return event }
@@ -187,7 +209,7 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
         NSWorkspace.shared.notificationCenter.addObserver(self,selector:#selector(workspaceChanged),name:NSWorkspace.didTerminateApplicationNotification,object:nil)
         // Status visibility uses workspace state; no Spotify calls while the widget is closed.
         refreshVisibility()
-        poll=Timer.scheduledTimer(withTimeInterval:1,repeats:true){ [weak self] _ in guard let self else{return};self.refreshVisibility();if self.popover.isShown {self.refresh()} }
+        poll=Timer.scheduledTimer(withTimeInterval:1,repeats:true){ [weak self] _ in guard let self else{return};self.refreshVisibility();if self.popover.isShown && self.layoutTimer==nil {self.refresh()} }
         // NSStatusBarButton tracking areas are unreliable on some macOS versions.
         // Reading pointer position needs no input-monitoring or Accessibility permission.
         iconHoverTimer=Timer(timeInterval:0.1,repeats:true){ [weak self] _ in self?.checkIconHover() }
@@ -239,7 +261,29 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
         }
         refresh()
     }
-    func resizePlayer(){let size=NSSize(width:400,height:model.library.expanded ? 640:(model.error.isEmpty ? 280:350));if popover.contentSize != size {popover.contentSize=size}}
+    func resizePlayer(animated:Bool=true){
+        let start=model.library.presentation.layout
+        let target=PlayerLayout(height:model.library.expanded ? 640:(model.error.isEmpty ? 280:350),expansion:model.library.expanded ? 1:0)
+        if animated,layoutTimer != nil,layoutTarget==target {return}
+        layoutTimer?.invalidate();layoutTimer=nil;layoutTarget=target
+        guard start.height != target.height || start.expansion != target.expansion else{return}
+        func apply(_ layout:PlayerLayout){
+            // AppKit auto-animation is disabled: intermediate contentSize
+            // assignments must not start another animation behind this driver.
+            self.model.library.presentation.layout=layout
+            self.popover.contentSize=NSSize(width:400,height:layout.height)
+        }
+        guard animated,popover.isShown,!NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else{apply(target);return}
+        let began=ProcessInfo.processInfo.systemUptime,duration=0.24
+        let timer=Timer(timeInterval:1.0/60,repeats:true){[weak self] timer in
+            guard let self else{timer.invalidate();return}
+            let t=min(1,(ProcessInfo.processInfo.systemUptime-began)/duration)
+            let eased=t*t*(3-2*t)
+            apply(PlayerLayout(height:start.height+(target.height-start.height)*eased,expansion:start.expansion+(target.expansion-start.expansion)*eased))
+            if t>=1 {timer.invalidate();self.layoutTimer=nil}
+        }
+        layoutTimer=timer;RunLoop.main.add(timer,forMode:.common)
+    }
     func checkHover() {
         if !model.preferences.openOnHover || model.library.expanded || model.library.pinned || model.settingsOpen {outsideSince=nil;return}
         let point=NSEvent.mouseLocation
@@ -249,7 +293,7 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
     }
     func presentPlayer(){show();waitingForEntry=true;NSApp.activate(ignoringOtherApps:true);popover.contentViewController?.view.window?.makeKey()}
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {presentPlayer();return true}
-    func close(){model.settingsOpen=false;model.library.view="";model.library.collection=nil;model.library.generation+=1;model.library.queryTask?.cancel();resizePlayer();waitingForEntry=false;popover.performClose(nil);hoverTimer?.invalidate();hoverTimer=nil;outsideSince=nil}
+    func close(){model.settingsOpen=false;model.library.expanded=false;model.library.collection=nil;model.library.generation+=1;model.library.queryTask?.cancel();resizePlayer(animated:false);waitingForEntry=false;popover.performClose(nil);hoverTimer?.invalidate();hoverTimer=nil;outsideSince=nil}
     func openSpotify(activate:Bool) {
         let config=NSWorkspace.OpenConfiguration();config.activates=activate
         NSWorkspace.shared.openApplication(at:URL(fileURLWithPath:spotifyPath),configuration:config){ [weak self] _,error in DispatchQueue.main.async {if let error {self?.model.error=error.localizedDescription};self?.refreshVisibility()} }
@@ -365,6 +409,6 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
             }
         }
     }
-    func applicationWillTerminate(_ notification:Notification){poll?.invalidate();hoverTimer?.invalidate();iconHoverTimer?.invalidate();if server>=0 {Darwin.close(server);if ownsSocket {unlink(socketPath)}}}
+    func applicationWillTerminate(_ notification:Notification){poll?.invalidate();hoverTimer?.invalidate();iconHoverTimer?.invalidate();layoutTimer?.invalidate();if server>=0 {Darwin.close(server);if ownsSocket {unlink(socketPath)}}}
 }
 let app=NSApplication.shared,delegate=SpotifyMenu();if CommandLine.arguments.contains("--check-signature"){print(delegate.automationEntitled ? "automation-entitled":"automation-missing");exit(delegate.automationEntitled ? 0:1)};app.delegate=delegate;app.setActivationPolicy(.accessory);app.run()

@@ -13,8 +13,17 @@ struct MusicItem:Identifiable {
         self.uri=uri;self.name=name;subtitle=value["subtitle"] as? String ?? "";type=value["type"] as? String ?? "track";image=value["image"] as? String ?? "";uid=value["uid"] as? String ?? "";playable=value["playable"] as? Bool ?? true
     }
 }
+struct PlayerLayout:Equatable {
+    var height:Double=280
+    var expansion:Double=0
+}
+final class PlayerPresentation:ObservableObject {
+    @Published var layout=PlayerLayout()
+}
 final class MiniLibrary:ObservableObject {
-    @Published var view=""
+    @Published var view="library"
+    @Published var expanded=false
+    let presentation=PlayerPresentation()
     @Published var scope="all"
     @Published var query=""
     @Published var items:[MusicItem]=[]
@@ -27,20 +36,21 @@ final class MiniLibrary:ObservableObject {
     var socketPath="",offset=0,generation=0
     var queryTask:DispatchWorkItem?
     var changed:(()->Void)?
-    var expanded:Bool {!view.isEmpty}
     func select(_ target:String) {
-        generation+=1;queryTask?.cancel();view=view==target ? "":target;collection=nil;query="";items=[];offset=0;error="";notice=""
+        generation+=1;queryTask?.cancel()
+        if expanded && view==target {expanded=false;changed?();return}
+        expanded=true;view=target;collection=nil;query="";items=[];offset=0;error="";notice=""
         changed?();if expanded {load()}
     }
     func closeDetail()->Bool {
         if !query.isEmpty {query="";load();return true}
         if collection != nil {collection=nil;load();return true}
-        if expanded {view="";generation+=1;changed?();return true};return false
+        if expanded {expanded=false;generation+=1;changed?();return true};return false
     }
     func open(_ item:MusicItem) {
         if item.isSong {play(item);return}
         if !["playlist","album","collection"].contains(item.type){return}
-        collection=item;query="";view="library";load();changed?()
+        collection=item;query="";view="library";expanded=true;load();changed?()
     }
     func searchChanged(){queryTask?.cancel();generation+=1;busy=true;let task=DispatchWorkItem{[weak self] in self?.load()};queryTask=task;DispatchQueue.main.asyncAfter(deadline:.now()+0.35,execute:task)}
     func load(more:Bool=false) {
@@ -110,9 +120,26 @@ struct LibraryPanel:View {
     var body:some View {
         VStack(spacing:0){
             HStack(spacing:4){ForEach([("library","books.vertical","Library"),("search","magnifyingglass","Search"),("queue","list.bullet","Queue")],id:\.0){value in
-                Button{model.select(value.0)}label:{Label(value.2,systemImage:value.1).font(.system(size:12,weight:.medium)).frame(maxWidth:.infinity).padding(.vertical,8).background(model.view==value.0 ? green.opacity(0.12):Color.clear,in:RoundedRectangle(cornerRadius:8)).foregroundStyle(model.view==value.0 ? green:Color.secondary)}.buttonStyle(.plain)
+                Button{model.select(value.0)}label:{Label(value.2,systemImage:value.1).font(.system(size:12,weight:.medium)).frame(maxWidth:.infinity).padding(.vertical,8).background(model.expanded && model.view==value.0 ? green.opacity(0.12):Color.clear,in:RoundedRectangle(cornerRadius:8)).foregroundStyle(model.expanded && model.view==value.0 ? green:Color.secondary)}.buttonStyle(.plain)
             }}.padding(.horizontal,14)
-            if model.expanded {
+            LibraryReveal(model:model,presentation:model.presentation)
+        }
+    }
+}
+struct LibraryReveal:View {
+    @ObservedObject var model:MiniLibrary
+    @ObservedObject var presentation:PlayerPresentation
+    var body:some View {
+        GeometryReader { _ in LibraryDetail(model:model) }
+            .clipped().opacity(presentation.layout.expansion).allowsHitTesting(model.expanded).accessibilityHidden(!model.expanded)
+    }
+}
+// Playback transition ticks only invalidate the reveal wrapper, not every row.
+struct LibraryDetail:View {
+    @ObservedObject var model:MiniLibrary
+    let green=Color(red:0.39,green:0.87,blue:0.57)
+    var body:some View {
+        VStack(spacing:0) {
                 Divider().padding(.top,5)
                 VStack(alignment:.leading,spacing:10){
                     if model.view=="search" {TextField("Songs, albums, playlists…",text:$model.query).textFieldStyle(.roundedBorder).onChange(of:model.query){_ in model.searchChanged()}}
@@ -130,8 +157,8 @@ struct LibraryPanel:View {
                         else if model.items.isEmpty && model.error.isEmpty {Text(model.view=="search" && model.query.isEmpty ? "Find your next listen":"Nothing here yet").font(.system(size:12)).foregroundStyle(.secondary).padding(20)}
                     }}.id(model.view+model.scope+(model.collection?.uri ?? "")+model.query).frame(maxHeight:.infinity)
                     if !model.notice.isEmpty {Text(model.notice).font(.system(size:11)).foregroundStyle(green).lineLimit(1)}
-                }.padding(14).frame(maxHeight:.infinity)
-            }
-        }
+                }.padding(14).frame(maxWidth:.infinity,maxHeight:.infinity)
+            }.frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.top)
+
     }
 }
