@@ -1,10 +1,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {compareTs} from './activity-store.mjs';
+import {DEFAULT_ACCENT,validAccent} from './accent-theme.mjs';
 export const validKey=k=>typeof k==='string'&&/^[TE][A-Z0-9]+:[CDG][A-Z0-9]+:(?:\d+\.\d+)?$/.test(k);
 export const validThreadKey=k=>validKey(k)&&/:[0-9]+\.[0-9]+$/.test(k);
 const validAlias=value=>typeof value==='string'&&value.length<=120&&!/[\u0000-\u001f\u007f]/.test(value);
-const defaults={edge:'right',rest:'strip',display:'main',inboxDensity:'expanded',idleSeconds:60,shortcut:'cmd-shift-y',stockShortcut:'cmd-shift-u',expandOnActivity:true,reopenNew:true,workspace:null,notificationMode:'all',notificationWorkspaces:[]};
+const defaults={edge:'right',rest:'strip',display:'main',inboxDensity:'expanded',accentColor:DEFAULT_ACCENT,idleSeconds:60,shortcut:'cmd-shift-y',stockShortcut:'cmd-shift-u',expandOnActivity:true,reopenNew:true,workspace:null,notificationMode:'all',notificationWorkspaces:[]};
 export class TriageState {
   records=new Map();aliases=new Map();settings={...defaults};undo=null;error=null;tail=Promise.resolve();
   constructor(file,{now=Date.now}={}){this.file=file;this.now=now;}
@@ -19,6 +20,7 @@ export class TriageState {
   validateSettings(patch){const next={...defaults,...this.settings,
     ...(['left','right'].includes(patch.edge)?{edge:patch.edge}:{}),
     ...(['expanded','cozy','compact'].includes(patch.inboxDensity)?{inboxDensity:patch.inboxDensity}:{}),
+    ...(validAccent(patch.accentColor)?{accentColor:patch.accentColor.toLowerCase()}:{}),
     ...(['strip','cluster','hidden'].includes(patch.rest)?{rest:patch.rest}:{}),
     ...(typeof patch.display==='string'&&/^(main|\d+)$/.test(patch.display)?{display:patch.display}:{}),
     ...([0,5,15,30,60,300].includes(patch.idleSeconds)?{idleSeconds:patch.idleSeconds}:{}),

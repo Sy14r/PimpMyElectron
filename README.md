@@ -134,6 +134,11 @@ Hide, Minimize, and an explicit Open normal Slack command.
 edge strip after** controls only the pill's idle timer; it never closes the inbox
 or a conversation. **Inbox density** offers clickable Expanded, Cozy, and Compact
 previews with the same sample conversations; selecting one saves and applies it immediately.
+**Accent color** offers Lavender (the default), Blue, Teal, Green, Amber, and Rose,
+plus **Custom…** for the macOS color picker. The choice applies across the inbox,
+pill and edge strip, embedded native panes and composer, and Settings previews.
+It saves on this Mac and updates without reopening the conversation. Accent text
+and indicators are lightened when needed for contrast; normal Slack keeps its own theme.
 Local Done remains separate from Slack read state.
 Personal thread names are always available from their thread headers; no setting enables them. Preferences and names
 save automatically on this Mac.

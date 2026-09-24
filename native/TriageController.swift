@@ -2,12 +2,38 @@ import AppKit
 import Carbon.HIToolbox
 import Darwin
 
+func accentColor(_ value: String?) -> NSColor {
+    let hex=value ?? "#bca9f0"
+    guard hex.range(of:"^#[0-9a-fA-F]{6}$",options:.regularExpression) != nil,
+          let rgb=UInt32(hex.dropFirst(),radix:16) else { return accentColor(nil) }
+    return NSColor(srgbRed:CGFloat((rgb >> 16) & 255)/255,green:CGFloat((rgb >> 8) & 255)/255,blue:CGFloat(rgb & 255)/255,alpha:1)
+}
+
+final class AccentSwatch: NSButton {
+    let hex: String
+    init(name:String,hex:String) {
+        self.hex=hex;super.init(frame:.zero);title=name;isBordered=false;setButtonType(.momentaryPushIn)
+        identifier=NSUserInterfaceItemIdentifier("accentColor")
+        setAccessibilityRole(.radioButton);setAccessibilityLabel("\(name) accent color")
+    }
+    required init?(coder:NSCoder) { fatalError("init(coder:) is not supported") }
+    override func draw(_ dirtyRect:NSRect) {
+        let circle=NSBezierPath(ovalIn:bounds.insetBy(dx:6,dy:6))
+        accentColor(hex).withAlphaComponent(isEnabled ? 1 : 0.45).setFill();circle.fill()
+        if state == .on || isHighlighted {
+            NSColor.white.withAlphaComponent(state == .on ? 0.9 : 0.4).setStroke()
+            let ring=NSBezierPath(ovalIn:bounds.insetBy(dx:2,dy:2));ring.lineWidth=2;ring.stroke()
+        }
+    }
+}
+
 // A borderless panel owns the outline; macOS never clips this into a capsule.
 final class EdgePanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
 final class EdgeStripView: NSView {
+    var accent=accentColor(nil)
     var edge = "left"
     var count = 0
     var action: ((String) -> Void)?
@@ -47,7 +73,7 @@ final class EdgeStripView: NSView {
         path.line(to: NSPoint(x: 0, y: h)); path.close()
         if edge == "right" { var transform = AffineTransform(); transform.translate(x: w, y: 0); transform.scale(x: -1, y: 1); path.transform(using: transform) }
         NSColor(calibratedRed: 0.094, green: 0.09, blue: 0.11, alpha: 1).setFill(); path.fill()
-        NSColor(calibratedRed: 0.78, green: 0.72, blue: 0.89, alpha: count > 0 ? 1 : 0.65).setFill()
+        accent.withAlphaComponent(count > 0 ? 1 : 0.65).setFill()
         if count == 0 { NSBezierPath(roundedRect: NSRect(x: w/2-1, y: h/2-14, width: 2, height: 28), xRadius: 1, yRadius: 1).fill() }
         else {
             let visible = min(count, 48), total = CGFloat(visible)*7-4
@@ -64,6 +90,7 @@ final class EdgeStripView: NSView {
 // Instant local placeholder while Electron prepares the real pill. It has no
 // message content and never claims that a read/reply action has completed.
 final class PillPlaceholderView: NSView {
+    var accent=accentColor(nil)
     var edge = "left"
     var count = 0
     var action: ((String) -> Void)?
@@ -82,7 +109,7 @@ final class PillPlaceholderView: NSView {
     override func accessibilityPerformPress() -> Bool { action?("queue"); return true }
     override func draw(_ dirtyRect: NSRect) {
         let background=NSColor(calibratedRed:0.094,green:0.09,blue:0.11,alpha:1)
-        let tint=NSColor(calibratedRed:0.663,green:0.608,blue:0.733,alpha:1)
+        let tint=accent
         background.setFill()
         NSBezierPath(roundedRect:bounds,xRadius:12,yRadius:12).fill()
         NSBezierPath(rect:NSRect(x:edge == "left" ? 0 : bounds.width-12,y:0,width:12,height:bounds.height)).fill()
@@ -120,6 +147,7 @@ final class SettingsDocumentView: NSView { override var isFlipped: Bool { true }
 
 // Draw sample rows rather than fetching any workspace content for Settings.
 final class InboxDensityPreview: NSButton {
+    var accent=accentColor(nil)
     let density: String
     let caption: String
     override var isFlipped: Bool { true }
@@ -138,7 +166,6 @@ final class InboxDensityPreview: NSButton {
         NSBezierPath(roundedRect:focusRingMaskBounds,xRadius:10,yRadius:10).fill()
     }
     override func draw(_ dirtyRect:NSRect) {
-        let accent=NSColor(calibratedRed:0.737,green:0.663,blue:0.941,alpha:1)
         let foreground=NSColor(calibratedRed:0.929,green:0.941,blue:0.969,alpha:1)
         let muted=NSColor(calibratedRed:0.529,green:0.588,blue:0.682,alpha:1)
         func text(_ value:String,_ rect:NSRect,size:CGFloat=11,color:NSColor?=nil,weight:NSFont.Weight = .regular,lines:Bool=false) {
@@ -199,6 +226,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var slackPID: pid_t = 0
     var lastReturn = 0
     var settings: [String: Any] = [:]
+    var accentTheme: [String:String] = [:]
+    var currentAccent: NSColor { accentColor(accentTheme["--pme-accent-text"]) }
     var workspaces: [[String: Any]] = []
     var displays: [[String: Any]] = []
     var settingsWindow: NSWindow?
@@ -209,6 +238,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var settingsJump: (index: Int, offset: CGFloat)?
     var settingsSignature = ""
     var settingsSaving = false
+    var pendingAccent: String?
     var settingsError = ""
     var shellOnline = false
     var lastSettingsEpoch = 0
@@ -292,6 +322,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.shellMode = state["mode"] as? String ?? self.shellMode
             self.slackPID = pid_t(state["slackPID"] as? Int ?? 0)
             self.settings = state["settings"] as? [String: Any] ?? [:]
+            self.accentTheme = state["accentTheme"] as? [String:String] ?? [:]
             self.workspaces = state["workspaces"] as? [[String: Any]] ?? []
             self.displays = state["displays"] as? [[String: Any]] ?? []
             self.inboxWorkspace = state["inboxWorkspace"] as? String
@@ -339,7 +370,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             panel.contentView = view; edgePanel = panel; edgeView = view
         }
         let wasVisible = edgePanel?.isVisible == true
-        edgeView?.edge = edge; edgeView?.count = count; edgeView?.needsDisplay = true
+        edgeView?.edge = edge; edgeView?.count = count; edgeView?.accent = currentAccent; edgeView?.needsDisplay = true
         edgeView?.setAccessibilityLabel("\(count) unread conversations and threads. Open triage inbox")
         edgeView?.toolTip = "\(count) unread conversations and threads · Hover to reveal · Click for inbox"
         edgePanel?.setFrame(frame, display: true); edgePanel?.orderFrontRegardless()
@@ -366,7 +397,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             panel.contentView=view;pillPlaceholder=panel
         }
-        if let view=pillPlaceholder?.contentView as? PillPlaceholderView { view.edge=edge;view.count=attentionCount;view.needsDisplay=true }
+        if let view=pillPlaceholder?.contentView as? PillPlaceholderView { view.edge=edge;view.count=attentionCount;view.accent=currentAccent;view.needsDisplay=true }
         pillPlaceholder?.setFrame(frame,display:true);pillPlaceholder?.orderFrontRegardless();pillPlaceholder?.displayIfNeeded()
         // A failed/crashed Slack must never leave an inert imitation on screen.
         DispatchQueue.main.asyncAfter(deadline:.now()+5) { [weak self] in
@@ -434,7 +465,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard onAnchor || onCard || Date().timeIntervalSince(previewLastInside) < 0.9 else {
             previewPanel?.orderOut(nil); previewSignature = ""; previewKey = nil; return
         }
-        let signature = String(data: (try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? ""
+        let signature = (String(data: (try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "") + (settings["accentColor"] as? String ?? "")
         if signature == previewSignature && previewPanel?.isVisible == true { return }
         previewSignature = signature; previewKey = value["key"] as? String
         let screen = NSScreen.screens.first(where: { $0.frame.intersects(origin) }) ?? NSScreen.main
@@ -466,6 +497,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let button = NSButton(title: title, target: self, action: #selector(previewClicked(_:)))
             button.isEnabled = action != "read" || readStatus != "pending"
             button.identifier = NSUserInterfaceItemIdentifier(action); button.bezelStyle = .rounded
+            if action == "reply" { button.contentTintColor=currentAccent }
             button.font = .systemFont(ofSize: 12); actions.addArrangedSubview(button)
         }
         stack.addArrangedSubview(actions)
@@ -606,7 +638,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     func renderSettings() {
         guard let window=settingsWindow else { return }
-        let data: [String:Any] = ["settings":settings,"workspaces":workspaces,"displays":displays,"inbox":inboxWorkspace ?? "","online":shellOnline,"saving":settingsSaving,"error":settingsError,"triageHotkey":hotKeyOK,"stockHotkey":stockHotKeyOK]
+        let data: [String:Any] = ["settings":settings,"accentTheme":accentTheme,"workspaces":workspaces,"displays":displays,"inbox":inboxWorkspace ?? "","online":shellOnline,"saving":settingsSaving,"error":settingsError,"triageHotkey":hotKeyOK,"stockHotkey":stockHotKeyOK]
         let signature=String(data:(try? JSONSerialization.data(withJSONObject:data,options:[.sortedKeys])) ?? Data(),encoding:.utf8) ?? ""
         if signature == settingsSignature { return };settingsSignature=signature
         let oldOffset=settingsScrollView?.contentView.bounds.origin.y ?? 0
@@ -655,10 +687,26 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.identifier=NSUserInterfaceItemIdentifier(key);button.state=(settings[key] as? Bool ?? defaultValue) ? .on : .off;button.isEnabled=enabled;stack.addArrangedSubview(button)
         }
         section("Appearance & behavior")
+        note("Accent color")
+        let accentRow=NSStackView();accentRow.orientation = .horizontal;accentRow.spacing=10;accentRow.alignment = .centerY
+        let selectedAccent=settings["accentColor"] as? String ?? "#bca9f0"
+        let presets=[("Lavender","#bca9f0"),("Blue","#86b7ff"),("Teal","#65d6c1"),("Green","#a0d789"),("Amber","#efc477"),("Rose","#ed9cbd")]
+        for (name,hex) in presets {
+            let swatch=AccentSwatch(name:name,hex:hex);swatch.target=self;swatch.action=#selector(changeSetting(_:));swatch.isEnabled=enabled
+            swatch.state=selectedAccent == hex ? .on : .off;swatch.setAccessibilityValue(swatch.state == .on ? 1 : 0)
+            swatch.toolTip="\(name)\(name == "Lavender" ? " (default)" : "") · \(hex.uppercased())"
+            accentRow.addArrangedSubview(swatch);swatch.widthAnchor.constraint(equalToConstant:34).isActive=true;swatch.heightAnchor.constraint(equalToConstant:34).isActive=true
+        }
+        let custom=NSButton(title:"Custom…",target:self,action:#selector(chooseCustomAccent));custom.bezelStyle = .rounded;custom.isEnabled=enabled
+        custom.setAccessibilityLabel("Choose a custom accent color");accentRow.addArrangedSubview(custom)
+        let colorLabel=label(selectedAccent.uppercased());colorLabel.setAccessibilityLabel("Current accent color: \(selectedAccent)");accentRow.addArrangedSubview(colorLabel)
+        stack.addArrangedSubview(accentRow)
+        note("Applies to triage, the pill, and embedded Slack views. Dark colors are lightened for text and indicators to keep them readable.")
         note("Inbox density — choose a preview")
         let densityChoices=NSStackView();densityChoices.orientation = .horizontal;densityChoices.spacing=10;densityChoices.distribution = .fillEqually
         for (value,title,caption) in [("expanded","Expanded","Two-line previews"),("cozy","Cozy","One-line previews"),("compact","Compact","Names and status")] {
             let preview=InboxDensityPreview(density:value,title:title,caption:caption)
+            preview.accent=currentAccent
             preview.target=self;preview.action=#selector(changeSetting(_:));preview.isEnabled=enabled
             preview.state=(settings["inboxDensity"] as? String ?? "expanded") == value ? .on : .off
             preview.setAccessibilityValue(preview.state == .on ? 1 : 0)
@@ -729,13 +777,32 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let id=String(key.dropFirst("workspace:".count));var ids=settings["notificationWorkspaces"] as? [String] ?? []
             ids.removeAll(where:{$0 == id});if button.state == .on { ids.append(id) };patch["notificationWorkspaces"]=ids
         } else if let popup=sender as? NSPopUpButton,let value=popup.selectedItem?.representedObject { patch[key]=value }
+        else if let swatch=sender as? AccentSwatch { patch[key]=swatch.hex }
         else if let preview=sender as? InboxDensityPreview { patch[key]=preview.density }
         else if let button=sender as? NSButton { patch[key]=button.state == .on }
+        saveSetting(patch)
+    }
+    @objc func chooseCustomAccent() {
+        let panel=NSColorPanel.shared;panel.showsAlpha=false;panel.isContinuous=false
+        panel.color=accentColor(settings["accentColor"] as? String)
+        panel.setTarget(self);panel.setAction(#selector(customAccentChanged(_:)))
+        panel.orderFront(nil)
+    }
+    @objc func customAccentChanged(_ panel:NSColorPanel) {
+        guard shellOnline,let color=panel.color.usingColorSpace(.sRGB) else { return }
+        func byte(_ component:CGFloat)->Int { Int((min(1,max(0,component))*255).rounded()) }
+        let hex=String(format:"#%02x%02x%02x",byte(color.redComponent),byte(color.greenComponent),byte(color.blueComponent))
+        if settingsSaving { pendingAccent=hex;return }
+        saveSetting(["accentColor":hex])
+    }
+    func saveSetting(_ patch:[String:Any]) {
         guard !patch.isEmpty else { return };settingsSaving=true;settingsError="";renderSettings()
         call(["op":"settings","patch":patch]) { [weak self] result in
             guard let self else { return };self.settingsSaving=false
             if let updated=result?["settings"] as? [String:Any] { self.settings=updated } else { self.settingsError="Could not save. Please try again." }
+            if let theme=result?["accentTheme"] as? [String:String] { self.accentTheme=theme }
             self.renderSettings();self.refresh()
+            if let next=self.pendingAccent { self.pendingAccent=nil;self.saveSetting(["accentColor":next]) }
         }
     }
     func menu(connected: Bool) {

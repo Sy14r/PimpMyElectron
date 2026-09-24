@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createSendConfirmation} from './send-confirmation.mjs';
 import {createPreviewSession} from './preview-session.mjs';
+import {accentTheme} from './accent-theme.mjs';
 const {nativeEdgeStrip,unreadItemCount,notificationSummaries,filterNotificationWorkspaces}=await import(`./native-edge.mjs?revision=${Date.now()}`);
 const {pillPreview}=await import(`./pill-preview.mjs?revision=${Date.now()}`);
 const { ActivityStore, READ_METHODS, requestMetadata, workspaceID } = await import(`./activity-store.mjs?revision=${Date.now()}`);
@@ -96,11 +97,11 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   }
   const shell=await createShellServer({file:path.join(runtimeDir,'shell.sock'),
     previewAction,
-    state:request=>{if(typeof request.previewHover==='string'&&shellPreview()?.key===request.previewHover)previewSession.hold(request.previewHover);if(request.edgeStripVersion===1){edgeHelperAt=Date.now();edgeHelperReady=typeof request.stripReady==='string'?request.stripReady:null;}if(typeof request.hotKeyOK==='boolean')nativeHotkey=request.hotKeyOK;if(typeof request.stockHotKeyOK==='boolean')nativeStockHotkey=request.stockHotKeyOK;return {slackPID:slackPID||sessionInfo.slackPid||0,returnEpoch,settingsEpoch,settings:local.settings,
+    state:request=>{if(typeof request.previewHover==='string'&&shellPreview()?.key===request.previewHover)previewSession.hold(request.previewHover);if(request.edgeStripVersion===1){edgeHelperAt=Date.now();edgeHelperReady=typeof request.stripReady==='string'?request.stripReady:null;}if(typeof request.hotKeyOK==='boolean')nativeHotkey=request.hotKeyOK;if(typeof request.stockHotKeyOK==='boolean')nativeStockHotkey=request.stockHotKeyOK;return {slackPID:slackPID||sessionInfo.slackPid||0,returnEpoch,settingsEpoch,settings:local.settings,accentTheme:accentTheme(local.settings.accentColor),
       mode:pickEntry()?uiStates.get(pickEntry().sessionId)?.mode||'stock':'stock',attention:unreadItemCount(notificationWorkspaces()),inboxWorkspace:pickEntry()?scopeFor(pickEntry()):null,preview:shellPreview(),edgeStrip:shellEdgeStrip(),
       displays:[...uiStates.values()].find(s=>s.displays?.length)?.displays||[],
       workspaces:[...knownWorkspaces.values()].map(w=>({...w,connected:true}))};},
-    configure:async patch=>{await local.configure(patch);return {settings:local.settings};},command:shellCommand});
+    configure:async patch=>{await local.configure(patch);return {settings:local.settings,accentTheme:accentTheme(local.settings.accentColor)};},command:shellCommand});
   const refreshes=createActivityRefresher({load:async request=>{
     const entry=pickEntry(request.workspaceId)||pickEntry();
     if(!entry||!mods.enabled('history-reader'))return {ok:false,error:'adapter_disabled'};
@@ -292,7 +293,7 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
       if(mods.enabled('history-reader'))refreshes.tick(new Set([...sessions.values()].map(e=>teamFromURL(e.url)).filter(Boolean).concat([...knownWorkspaces.keys()])));
       for (const [key, req] of requests) if (Date.now() - req.at > 30000) requests.delete(key);
       const snapshot = store.snapshot();
-      snapshot.settings=local.settings;snapshot.nativeHotkey=shell.connected()&&nativeHotkey;snapshot.nativeStockHotkey=shell.connected()&&nativeStockHotkey;snapshot.localError=local.error||actionError;
+      snapshot.settings=local.settings;snapshot.accentTheme=accentTheme(local.settings.accentColor);snapshot.nativeHotkey=shell.connected()&&nativeHotkey;snapshot.nativeStockHotkey=shell.connected()&&nativeStockHotkey;snapshot.localError=local.error||actionError;
       snapshot.canUndo=!!local.undo&&Date.now()-local.undo.at<30000;
       snapshot.undoKey=snapshot.canUndo?local.undo.key:null;
       snapshot.apiPolicy='manual-only';snapshot.customReadsAvailable=mods.enabled('history-reader');snapshot.markReadAvailable=mods.enabled('mark-read');snapshot.network=refreshes.status().online?'available':'offline';
