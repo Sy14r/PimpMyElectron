@@ -17,7 +17,7 @@ const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function cpu(){const results={};
  for(const line of execFileSync('/bin/ps',['-axo','pid=,time=,comm='],{encoding:'utf8'}).split('\n')){
   const m=line.trim().match(/^(\d+)\s+([\d:.]+)\s+(.+)$/);if(!m)continue;
-  const type=m[3].endsWith('/WindowServer')?'windowServer':m[3].includes('/Slack.app/Contents/')?(m[3].includes('(Renderer)')?'renderer':m[3].endsWith('/MacOS/Slack')?'main':'helpers'):null;
+  const type=m[3].endsWith('/WindowServer')?'windowServer':m[3].endsWith('/SlackTriage')?'triageHelper':m[3].includes('/Slack.app/Contents/')?(m[3].includes('(Renderer)')?'renderer':m[3].endsWith('/MacOS/Slack')?'main':'helpers'):null;
   if(type){const parts=m[2].split(':').map(Number),seconds=parts.reduce((a,b)=>a*60+b,0);results[m[1]]={type,seconds};}
  }return results;
 }

@@ -32,6 +32,88 @@ final class EdgePanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
+// Owns only a click-through material surface. The private stream carries
+// geometry, never message content, credentials, or executable instructions.
+final class InboxBackdrop {
+    var expectedPID: pid_t = 0
+    private(set) var ready: String?
+    private var panel: EdgePanel?
+    private var request: [String:Any]?
+    private var seen = Date.distantPast
+    private var windowNumber = 0
+    private var watchdog: Timer?
+    private let streamQueue = DispatchQueue(label:"triage.backdrop.stream")
+    func start(_ path:String) {
+        watchdog=Timer.scheduledTimer(withTimeInterval:0.1,repeats:true){ [weak self] _ in self?.drawCurrent() }
+        streamQueue.async { [weak self] in
+            while self != nil {
+                let fd=Darwin.socket(AF_UNIX,SOCK_STREAM,0)
+                guard fd>=0 else { Thread.sleep(forTimeInterval:1);continue }
+                var address=sockaddr_un();address.sun_family=sa_family_t(AF_UNIX)
+                let bytes=Array(path.utf8CString)
+                guard bytes.count<=MemoryLayout.size(ofValue:address.sun_path) else { Darwin.close(fd);return }
+                withUnsafeMutableBytes(of:&address.sun_path){ dest in bytes.withUnsafeBytes{dest.copyBytes(from:$0)} }
+                let connected=withUnsafePointer(to:&address){ $0.withMemoryRebound(to:sockaddr.self,capacity:1){Darwin.connect(fd,$0,socklen_t(MemoryLayout<sockaddr_un>.size))} }
+                if connected==0 {
+                    var noPipe:Int32=1;setsockopt(fd,SOL_SOCKET,SO_NOSIGPIPE,&noPipe,socklen_t(MemoryLayout<Int32>.size))
+                    let hello=Array("{\"op\":\"watch-backdrop\"}\n".utf8)
+                    let sent=hello.withUnsafeBytes{Darwin.write(fd,$0.baseAddress!,$0.count)}
+                    if sent==hello.count {
+                        var data=Data(),buffer=[UInt8](repeating:0,count:4096)
+                        while true {
+                            let count=Darwin.read(fd,&buffer,buffer.count);if count<=0 { break }
+                            data.append(contentsOf:buffer.prefix(count));if data.count>32768 { break }
+                            while let newline=data.firstIndex(of:10) {
+                                let line=data.prefix(upTo:newline);data.removeSubrange(...newline)
+                                let value=(try? JSONSerialization.jsonObject(with:line)) as? [String:Any]
+                                let backdrop=value?["backdrop"] as? [String:Any]
+                                DispatchQueue.main.async { [weak self] in self?.request=backdrop;self?.seen=Date();self?.drawCurrent() }
+                            }
+                        }
+                    }
+                }
+                Darwin.close(fd)
+                DispatchQueue.main.async { [weak self] in self?.request=nil;self?.hide() }
+                Thread.sleep(forTimeInterval:1)
+            }
+        }
+    }
+    func hide(){ready=nil;windowNumber=0;panel?.orderOut(nil)}
+    private func rect(_ raw:Any?) -> CGRect? {
+        guard let b=raw as? [String:Double],let x=b["x"],let y=b["y"],let w=b["width"],let h=b["height"],
+              [x,y,w,h].allSatisfy({$0.isFinite}),abs(x)<100000,abs(y)<100000,w>0,w<=820,h>0,h<=8192 else{return nil}
+        return CGRect(x:x,y:y,width:w,height:h)
+    }
+    private func drawCurrent(){
+        guard Date().timeIntervalSince(seen)<3,!NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency,
+              let request,let id=request["id"] as? String,request["slackPID"] as? Int==Int(expectedPID),expectedPID>0,
+              let expected=rect(request["window"]),let inbox=rect(request["inbox"]),inbox.width<=420,
+              expected.insetBy(dx:-1,dy:-1).contains(inbox),
+              let windows=CGWindowListCopyWindowInfo([.optionOnScreenOnly,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]],
+              let target=windows.first(where:{ value in
+                  guard value[kCGWindowOwnerPID as String] as? Int==Int(expectedPID),let b=value[kCGWindowBounds as String] as? [String:Double] else{return false}
+                  return abs((b["Height"] ?? 0)-expected.height)<2 && (b["Width"] ?? 0)>=420 && (b["Width"] ?? 0)<=820 &&
+                      (windowNumber==0 || value[kCGWindowNumber as String] as? Int==windowNumber)
+              }),let number=target[kCGWindowNumber as String] as? Int,let b=target[kCGWindowBounds as String] as? [String:Double],
+              let x=b["X"],let y=b["Y"],let screen=NSScreen.screens.first else {hide();return}
+        let frame=NSRect(x:x+inbox.minX-expected.minX,y:screen.frame.maxY-y-(inbox.minY-expected.minY)-inbox.height,width:inbox.width,height:inbox.height)
+        if panel==nil {
+            let p=EdgePanel(contentRect:frame,styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
+            p.isReleasedWhenClosed=false;p.hidesOnDeactivate=false;p.isOpaque=false;p.backgroundColor = .clear;p.hasShadow=false;p.ignoresMouseEvents=true
+            p.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary,.ignoresCycle]
+            let effect=NSVisualEffectView(frame:NSRect(origin:.zero,size:frame.size))
+            effect.appearance=NSAppearance(named:.darkAqua);effect.material = .hudWindow;effect.blendingMode = .behindWindow;effect.state = .active;effect.autoresizingMask=[.width,.height]
+            effect.wantsLayer=true;effect.layer?.cornerRadius=10;effect.layer?.masksToBounds=true
+            p.contentView=effect;panel=p
+        }
+        guard let panel else{return}
+        if panel.frame != frame {panel.setFrame(frame,display:true)}
+        panel.level=NSWindow.Level(rawValue:target[kCGWindowLayer as String] as? Int ?? 3)
+        if !panel.isVisible || windowNumber != number {panel.order(.below,relativeTo:number)}
+        windowNumber=number;ready=panel.isVisible ? id:nil
+    }
+}
+
 final class EdgeStripView: NSView {
     var accent=accentColor(nil)
     var edge = "left"
@@ -228,6 +310,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var settings: [String: Any] = [:]
     var accentTheme: [String:String] = [:]
     var backdrop: [String:Any] = [:]
+    let inboxBackdrop=InboxBackdrop()
     var currentAccent: NSColor { accentColor(accentTheme["--pme-accent-text"]) }
     var workspaces: [[String: Any]] = []
     var displays: [[String: Any]] = []
@@ -279,6 +362,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.async { controller.perform(op) }
             return noErr
         }, 1, &type, Unmanaged.passUnretained(self).toOpaque(), &handler)
+        inboxBackdrop.start(socketPath)
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.refresh() }
     }
@@ -316,12 +400,13 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     func refresh() {
         guard !polling else { return }; polling = true
-        call(["op": "state", "hotKeyOK": hotKeyOK, "stockHotKeyOK": stockHotKeyOK, "edgeStripVersion": 1, "stripReady": stripReady ?? "", "previewHover": previewPanel?.isVisible == true && (previewPanel!.frame.contains(NSEvent.mouseLocation) || Date().timeIntervalSince(previewLastInside) < 0.9) ? previewKey ?? "" : ""]) { [weak self] state in
+        call(["op": "state", "hotKeyOK": hotKeyOK, "stockHotKeyOK": stockHotKeyOK, "edgeStripVersion": 1, "backdropVersion":1, "backdropReady":inboxBackdrop.ready ?? "", "stripReady": stripReady ?? "", "previewHover": previewPanel?.isVisible == true && (previewPanel!.frame.contains(NSEvent.mouseLocation) || Date().timeIntervalSince(previewLastInside) < 0.9) ? previewKey ?? "" : ""]) { [weak self] state in
             guard let self else { return }; self.polling = false
-            guard let state else { self.shellOnline = false; self.renderSettings(); self.showPreview(nil); self.showEdgeStrip(nil); self.dismissPillPlaceholder(); self.item.button?.title = "!"; self.item.button?.toolTip = "Triage controller disconnected — normal Slack remains available"; self.menu(connected: false); return }
+            guard let state else { self.shellOnline = false; self.inboxBackdrop.hide(); self.renderSettings(); self.showPreview(nil); self.showEdgeStrip(nil); self.dismissPillPlaceholder(); self.item.button?.title = "!"; self.item.button?.toolTip = "Triage controller disconnected — normal Slack remains available"; self.menu(connected: false); return }
             self.shellOnline = true
             self.shellMode = state["mode"] as? String ?? self.shellMode
             self.slackPID = pid_t(state["slackPID"] as? Int ?? 0)
+            self.inboxBackdrop.expectedPID=self.slackPID
             self.settings = state["settings"] as? [String: Any] ?? [:]
             self.backdrop = state["backdrop"] as? [String:Any] ?? [:]
             self.accentTheme = state["accentTheme"] as? [String:String] ?? [:]
@@ -705,7 +790,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         stack.addArrangedSubview(accentRow)
         note("Applies to triage, the pill, and embedded Slack views. Dark colors are lightened for text and indicators to keep them readable.")
         checkbox("Translucent inbox (experimental)",key:"inboxGlass",defaultValue:false)
-        note("Adds macOS background blur behind the inbox list. Conversation panes stay opaque. The first activation enables Slack’s native transparency and needs a restart. Turning this off restores your previous preference. Respects Reduce Transparency.")
+        note("Keeps macOS background blur behind the inbox list, including when Slack is unfocused. Conversation panes stay opaque. The first activation enables Slack’s native transparency and needs a restart. Turning this off restores your previous preference. Respects Reduce Transparency.")
         if backdrop["state"] as? String == "restart-required" {
             note("Restart Slack with your usual Pimp My Electron launcher to finish enabling translucency. The inbox stays opaque until then.")
         } else if backdrop["state"] as? String == "unavailable" {

@@ -15,21 +15,22 @@
   const shadow = host.attachShadow({ mode: 'open' });
   const reducedTransparency=window.matchMedia('(prefers-reduced-transparency: reduce)');
   const glassStyle=document.createElement('style');glassStyle.id='pme-inbox-glass-style';
-  glassStyle.textContent=`html[data-pme-inbox-glass],html[data-pme-inbox-glass] body{background:transparent!important;}
+  glassStyle.textContent=`@property --pme-detail-progress{syntax:'<number>';inherits:true;initial-value:0;}
+    html[data-pme-inbox-glass],html[data-pme-inbox-glass] body{background:transparent!important;}
     /* Clip the parked Slack page out of the inbox, including descendants
        that explicitly set visibility:visible. Keep native detail panes intact. */
     html[data-pme-inbox-glass] body>.p-client_container{visibility:hidden!important;clip-path:inset(0 0 0 420px)!important;}`;
   document.head.append(glassStyle);
-  let glassActive=false,glassOriginal=null,glassMaterial=null,glassTail=Promise.resolve();
+  let glassActive=false,glassOriginal=null,glassMaterial=null,glassHelper=false,glassShadow=null,glassBounds=null,glassConcealed=false,glassTail=Promise.resolve();
   function glassVisible(value){
     host.toggleAttribute('data-inbox-glass',value);
     document.documentElement.toggleAttribute('data-pme-inbox-glass',value);
   }
-  function setInboxGlass(enabled,restoreVibrancy=null){
+  function setInboxGlass(enabled,restoreVibrancy=null,helperReady=false){
     glassTail=glassTail.catch(()=>{}).then(async()=>{
       const wanted=enabled&&!disposed&&!reducedTransparency.matches&&['queue','reading','reply'].includes(mode)&&!quickReply;
       if(typeof restoreVibrancy==='boolean')glassOriginal=restoreVibrancy;
-      const material=wanted?'hud':glassOriginal===null?null:glassOriginal?'titlebar':'';
+      const material=wanted?(helperReady?'':'hud'):glassOriginal===null?null:glassOriginal?'titlebar':'';
       if(wanted===glassActive&&(material===null||material===glassMaterial)){glassVisible(wanted);return wanted;}
       // Start opaque; only expose the backdrop after the native call succeeds.
       glassVisible(false);
@@ -37,12 +38,16 @@
       const id=await w.getWindowId(),call=(...args)=>w.callBrowserWindowMethod(id,...args);
       if(wanted){
         if(glassOriginal===null)return false;
-        await call('setVibrancy',material);glassActive=true;glassMaterial=material;
+        if(glassShadow===null)glassShadow=await call('hasShadow');
+        await call('setHasShadow',false);
+        await call('setVibrancy',material||null);glassActive=true;glassMaterial=material;glassHelper=helperReady;
         glassVisible(!disposed&&['queue','reading','reply'].includes(mode)&&!quickReply);
+        reportShell();
         return true;
       }
       await call('setVibrancy',material||null);
-      glassActive=false;glassMaterial=material;return false;
+      if(typeof glassShadow==='boolean')await call('setHasShadow',glassShadow);
+      glassActive=false;glassHelper=false;glassMaterial=material;reportShell();return false;
     });return glassTail;
   }
   reducedTransparency.addEventListener('change',()=>{if(reducedTransparency.matches)glassVisible(false);reportShell();},{signal:abort.signal});
@@ -119,6 +124,9 @@
       /* The pane's translated left edge is viewport width minus detail width.
          Clip its hidden part instead of painting an opaque cover over the inbox. */
       :host([data-inbox-glass][data-detail-motion]) .reader,:host([data-inbox-glass][data-detail-motion]) .reply-chrome,:host([data-inbox-glass][data-detail-motion]) .reply-placeholder{clip-path:inset(0 0 0 max(0px,calc(420px + var(--pme-detail-width,400px) - 100vw)))}
+      :host([data-inbox-glass][data-detail-motion][data-detail-reveal]) :is(.reader,.reply-chrome,.reply-placeholder){transform:translateX(calc((var(--pme-detail-progress) - 1)*var(--pme-detail-width,400px)));clip-path:inset(0 0 0 calc((1 - var(--pme-detail-progress))*var(--pme-detail-width,400px)))}
+      :host([data-inbox-glass][data-detail-motion][data-detail-reveal][data-edge="right"]) :is(.reader,.reply-chrome,.reply-placeholder){transform:none}
+      :host([data-inbox-glass][data-detail-motion][data-detail-reveal][data-edge="right"]) .queue{transform:translateX(calc((1 - var(--pme-detail-progress))*var(--pme-detail-width,400px)))}
       :host([data-quick]) .shell{display:none!important}
       #quick-card{pointer-events:auto;position:fixed;inset:0;background:#191f2c;color:#cdd4e4;padding:16px;border:1px solid #343c50;border-radius:12px;display:flex;flex-direction:column}
       #quick-card header{display:flex;align-items:start;gap:8px}#quick-card header>div{flex:1;min-width:0}#quick-title{font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#quick-subtitle{display:block;font-size:11px;color:#94a2b8;margin-top:3px}#quick-close{color:#94a2b8;width:24px;height:24px;padding:0;font-size:20px}
@@ -710,8 +718,37 @@
     document.body.removeAttribute('data-pme-detail-motion');document.body.style.removeProperty('--pme-detail-width');
   }
   async function concealWindow(){
+    glassConcealed=true;reportShell();
     const w=window.desktop?.window;
     if(w?.callBrowserWindowMethod)await w.callBrowserWindowMethod(await w.getWindowId(),'hide');
+  }
+  async function revealDetailContent(call,bounds,closing=false){
+    let animation,frame;
+    host.setAttribute('data-detail-reveal','');document.body.setAttribute('data-pme-detail-reveal',edge);
+    document.body.style.setProperty('--pme-detail-progress',closing?'1':'0');
+    try{
+      // Allocate the complete surface once. Only web content animates after
+      // this point; AppKit cannot expose new pixels ahead of Chromium.
+      if(!closing){await call('setBounds',bounds,false);glassBounds=bounds;}
+      const painted=await new Promise(resolve=>{
+        let first,second;
+        const timer=setTimeout(()=>{cancelAnimationFrame(first);cancelAnimationFrame(second);resolve(false);},120);
+        first=requestAnimationFrame(()=>{second=requestAnimationFrame(()=>{clearTimeout(timer);resolve(closing||innerWidth===bounds.width);});});
+      });
+      if(!painted||disposed)return;
+      animation=document.body.animate([{'--pme-detail-progress':closing?'1':'0'},{'--pme-detail-progress':closing?'0':'1'}],{duration:180,easing:'cubic-bezier(.2,.7,.2,1)',fill:'forwards'});
+      const publish=()=>{reportShell();frame=requestAnimationFrame(publish);};publish();
+      let timer;
+      try{await Promise.race([animation.finished,new Promise(resolve=>{timer=setTimeout(resolve,260);})]);}
+      finally{clearTimeout(timer);}
+    }finally{
+      cancelAnimationFrame(frame);
+      try{if(closing){await call('setBounds',bounds,false);glassBounds=bounds;}}
+      finally{
+        animation?.cancel();host.removeAttribute('data-detail-reveal');document.body.removeAttribute('data-pme-detail-reveal');document.body.style.removeProperty('--pme-detail-progress');
+        reportShell();
+      }
+    }
   }
   async function geometry(next,{animate=false}={}) {
     compactBounds=null;
@@ -758,13 +795,15 @@
     const bounds={x:edge==='right'?area.x+area.width-width:area.x,y,width,height};
     const sideWidth=Math.max(width,innerWidth)-420;
     const moving=animate&&sideWidth>230;
+    const reveal=moving&&glassHelper&&visible&&!minimized;
     if(moving)setDetailMotion(sideWidth);
-    try{await call('setBounds',bounds,moving);}
+    try{if(reveal)await revealDetailContent(call,bounds,width<innerWidth);else await call('setBounds',bounds,moving);}
     catch(error){if(!moving)throw error;await call('setBounds',bounds);}
     // The native callback can precede the renderer's final resize frame.
-    if(moving)await new Promise(resolve=>setTimeout(resolve,50));
+    if(moving&&!reveal)await new Promise(resolve=>setTimeout(resolve,50));
     if(compact)compactBounds=bounds;
     await present();
+    glassBounds=bounds;glassConcealed=false;reportShell();
     if(next==='strip'){
       if(nativeStripRequest?.edge!==edge||JSON.stringify(nativeStripRequest?.bounds)!==JSON.stringify(bounds))
         nativeStripRequest={id:`${Date.now()}-${++stripSequence}`,edge,bounds};
@@ -1102,7 +1141,13 @@
 
   },{capture:true,signal:abort.signal});
 
-  function reportShell(returnFocus=false,resumed=false){window.__pmeShellState?.(JSON.stringify({workspaceId:team(),mode,quickReply:!!quickReply,reduceTransparency:reducedTransparency.matches,focused:document.hasFocus(),returnFocus,resumed,online:navigator.onLine,displays:displayInfo,edgeStrip:mode==='strip'?nativeStripRequest:null,preview:pillPreview}));}
+  function reportShell(returnFocus=false,resumed=false){
+    let backdropGeometry=null;
+    if(glassActive&&glassBounds&&!glassConcealed&&!disposed&&['queue','reading','reply'].includes(mode)&&!quickReply){
+      const r=shadow.querySelector('.queue').getBoundingClientRect();
+      backdropGeometry={window:glassBounds,inbox:{x:glassBounds.x+r.x,y:glassBounds.y+r.y,width:r.width,height:r.height}};
+    }
+    window.__pmeShellState?.(JSON.stringify({backdropGeometry,workspaceId:team(),mode,quickReply:!!quickReply,reduceTransparency:reducedTransparency.matches,focused:document.hasFocus(),returnFocus,resumed,online:navigator.onLine,displays:displayInfo,edgeStrip:mode==='strip'?nativeStripRequest:null,preview:pillPreview}));}
   function syncNativeStrip(){
     const hide=mode==='strip'&&connected()&&!!nativeStripRequest&&snapshot.nativeStripReady===nativeStripRequest.id;
     if(disposed||mode!=='strip'||stripSyncPending||hide===nativeStripHidden)return;
@@ -1230,7 +1275,7 @@
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
   idle=setInterval(observe,10000);
   window.__PME_TRIAGE__={setInboxGlass,threadAlias,version:'0.20.0',update:value=>{const activity=detectPillActivity(value,{reset:!connected()});lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,inboxGlass:undefined}),previewWasHeld=snapshot.previewHeld;snapshot=value;acceptAliasResult();if(value.previewHeld||previewWasHeld!==value.previewHeld)touch();syncNativeStrip();acceptLocalResult();settings={...settings,...value.settings};applyAccent(value.accentTheme);edge=settings.edge;render();if(before!==JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,inboxGlass:undefined})&&!['stock','hidden'].includes(mode))void transition(mode);if(activity)revealPillActivity();},transition,command,quick,readFromPill,activity:startActivity,open:openItem,
-    status:()=>({mode,edge,inboxGlass:glassActive,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
+    status:()=>({mode,edge,inboxGlass:glassActive,backdropHelper:glassHelper,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
     dispose:async()=>{if(disposed)return;setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);clearTimeout(pillIdleTimer);
       window.__PME_REPLY__?.cancelSwitcher?.({restore:false});window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});await setInboxGlass(false).catch(()=>{});glassStyle.remove();clearDetailMotion();document.body.removeAttribute('data-pme-quick');document.body.removeAttribute('data-pme-quick-read');document.body.removeAttribute('data-pme-background-read');++pillReadRun;await geometry('stock').catch(()=>{});applyAccent(null);host.remove();delete window.__PME_TRIAGE__;
     }};

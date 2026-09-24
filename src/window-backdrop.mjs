@@ -48,17 +48,17 @@ export function createWindowBackdrop({cdp,file,launchId,profile='default'}) {
       return state;
     });return preparing;
   }
-  function update(entry,{enabled=false,identity=null}={}){
+  function update(entry,{enabled=false,identity=null,helperReady=false}={}){
     if(disposed)return Promise.resolve(false);
     const wanted=enabled&&state.ready;
     let page=pages.get(entry.sessionId);
     if(!page){if(!wanted&&state.restoreVibrancy===null)return Promise.resolve(false);page={tail:Promise.resolve(),key:null,active:false};pages.set(entry.sessionId,page);}
     const restore=state.restoreVibrancy;
-    const key=JSON.stringify([wanted,identity,restore]);
+    const key=JSON.stringify([wanted,identity,restore,helperReady]);
     if(page.key===key)return page.tail;
     page.key=key;
     page.tail=page.tail.catch(()=>false).then(async()=>{
-      try{page.active=await cdp.evaluate(`window.__PME_TRIAGE__?.setInboxGlass(${wanted},${JSON.stringify(restore)})`,entry.sessionId)===true;}
+      try{page.active=await cdp.evaluate(`window.__PME_TRIAGE__?.setInboxGlass(${wanted},${JSON.stringify(restore)},${helperReady})`,entry.sessionId)===true;}
       catch{page.active=false;}
       return page.active;
     });return page.tail;

@@ -3,6 +3,7 @@ import path from 'node:path';
 import {createSendConfirmation} from './send-confirmation.mjs';
 import {createPreviewSession} from './preview-session.mjs';
 import {accentTheme} from './accent-theme.mjs';
+const {nativeBackdrop}=await import(`./native-backdrop.mjs?revision=${Date.now()}`);
 const {nativeEdgeStrip,unreadItemCount,notificationSummaries,filterNotificationWorkspaces}=await import(`./native-edge.mjs?revision=${Date.now()}`);
 const {pillPreview}=await import(`./pill-preview.mjs?revision=${Date.now()}`);
 const { ActivityStore, READ_METHODS, requestMetadata, workspaceID } = await import(`./activity-store.mjs?revision=${Date.now()}`);
@@ -21,6 +22,7 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   const store = new ActivityStore({maxMessagesPerItem:200,maxWorkspaces:12});
   const local=await new TriageState(path.join(runtimeDir,'triage-state.json')).load();
   let actionError=null,returnEpoch=0,settingsEpoch=0,nativeHotkey=false,nativeStockHotkey=false,edgeHelperAt=0,edgeHelperReady=null;
+  let backdropHelperAt=0,backdropHelperReady=null;
   const knownWorkspaces=new Map(),selectedWorkspaces=new Map();
   const previewSession=createPreviewSession(),sendConfirmation=createSendConfirmation(),quickTargets=new Map(),previewReads=new Map();
   const uiStates=new Map(),actionResults=new Map();let lastSnapshot={workspaces:[]};
@@ -95,8 +97,15 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   function syncBackdrop(entry){
     const ui=uiStates.get(entry.sessionId),context=contextGuard.current(entry);
     return backdrop.update(entry,{identity:context?.uniqueId||context?.id||null,
+      helperReady:shell.backdropConnected()&&Date.now()-backdropHelperAt<3000&&backdropHelperReady===entry.sessionId,
       enabled:!!context&&!!teamFromURL(entry.url)&&mods.enabled('triage-surface')&&local.settings.inboxGlass===true&&
         ['queue','reading','reply'].includes(ui?.mode)&&!ui?.quickReply&&!ui?.reduceTransparency});
+  }
+  function shellBackdrop(){
+    const entry=pickEntry(),ui=entry&&uiStates.get(entry.sessionId);
+    return nativeBackdrop({id:entry?.sessionId,slackPID:slackPID||sessionInfo.slackPid,geometry:ui?.backdropGeometry,
+      enabled:!!entry&&!!contextGuard.current(entry)&&mods.enabled('triage-surface')&&local.settings.inboxGlass===true&&backdrop.status().ready&&
+        Date.now()-ui?.previewAt<5000&&['queue','reading','reply'].includes(ui?.mode)&&!ui?.quickReply&&!ui?.reduceTransparency});
   }
   async function shellCommand(op,workspaceId){if(op==='preferences'){settingsEpoch++;return {settingsRequested:true};}const entry=pickEntry(workspaceId)||pickEntry();if(!entry)throw Error('No connected workspace');
     if(op==='switch'&&knownWorkspaces.has(workspaceId)){selectedWorkspaces.set(entry.sessionId,workspaceId);await local.configure({workspace:workspaceId});}
@@ -104,12 +113,13 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
     return evaluate(entry,`window.__PME_TRIAGE__?.command(${JSON.stringify(op==='switch'?'queue':op)})`);
   }
   const shell=await createShellServer({file:path.join(runtimeDir,'shell.sock'),
+    backdropState:shellBackdrop,backdropDisconnected:()=>{backdropHelperReady=null;if(!disposed)for(const entry of sessions.values())void syncBackdrop(entry).catch(()=>{});},
     previewAction,
-    state:request=>{if(typeof request.previewHover==='string'&&shellPreview()?.key===request.previewHover)previewSession.hold(request.previewHover);if(request.edgeStripVersion===1){edgeHelperAt=Date.now();edgeHelperReady=typeof request.stripReady==='string'?request.stripReady:null;}if(typeof request.hotKeyOK==='boolean')nativeHotkey=request.hotKeyOK;if(typeof request.stockHotKeyOK==='boolean')nativeStockHotkey=request.stockHotKeyOK;return {slackPID:slackPID||sessionInfo.slackPid||0,returnEpoch,settingsEpoch,settings:local.settings,backdrop:backdrop.status(),accentTheme:accentTheme(local.settings.accentColor),
+    state:request=>{if(request.backdropVersion===1){backdropHelperAt=Date.now();const ready=typeof request.backdropReady==='string'?request.backdropReady:null;if(ready!==backdropHelperReady){backdropHelperReady=ready;for(const entry of sessions.values())void syncBackdrop(entry).catch(()=>{});}}if(typeof request.previewHover==='string'&&shellPreview()?.key===request.previewHover)previewSession.hold(request.previewHover);if(request.edgeStripVersion===1){edgeHelperAt=Date.now();edgeHelperReady=typeof request.stripReady==='string'?request.stripReady:null;}if(typeof request.hotKeyOK==='boolean')nativeHotkey=request.hotKeyOK;if(typeof request.stockHotKeyOK==='boolean')nativeStockHotkey=request.stockHotKeyOK;return {slackPID:slackPID||sessionInfo.slackPid||0,returnEpoch,settingsEpoch,settings:local.settings,backdrop:{...backdrop.status(),helperReady:!!backdropHelperReady&&shell.backdropConnected()},accentTheme:accentTheme(local.settings.accentColor),
       mode:pickEntry()?uiStates.get(pickEntry().sessionId)?.mode||'stock':'stock',attention:unreadItemCount(notificationWorkspaces()),inboxWorkspace:pickEntry()?scopeFor(pickEntry()):null,preview:shellPreview(),edgeStrip:shellEdgeStrip(),
       displays:[...uiStates.values()].find(s=>s.displays?.length)?.displays||[],
       workspaces:[...knownWorkspaces.values()].map(w=>({...w,connected:true}))};},
-    configure:async patch=>{await local.configure(patch);const entry=pickEntry();if(entry&&contextGuard.current(entry))await backdrop.prepare(entry,mods.enabled('triage-surface')&&local.settings.inboxGlass===true);await Promise.all([...sessions.values()].map(syncBackdrop));return {settings:local.settings,backdrop:backdrop.status(),accentTheme:accentTheme(local.settings.accentColor)};},command:shellCommand});
+    configure:async patch=>{await local.configure(patch);const entry=pickEntry();if(entry&&contextGuard.current(entry))await backdrop.prepare(entry,mods.enabled('triage-surface')&&local.settings.inboxGlass===true);await Promise.all([...sessions.values()].map(syncBackdrop));return {settings:local.settings,backdrop:{...backdrop.status(),helperReady:!!backdropHelperReady&&shell.backdropConnected()},accentTheme:accentTheme(local.settings.accentColor)};},command:shellCommand});
   const refreshes=createActivityRefresher({load:async request=>{
     const entry=pickEntry(request.workspaceId)||pickEntry();
     if(!entry||!mods.enabled('history-reader'))return {ok:false,error:'adapter_disabled'};
@@ -182,10 +192,10 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
       try{const r=JSON.parse(p.payload);if(r.workspaceId!==teamFromURL(entry.url))return;
         const previous=uiStates.get(entry.sessionId)||{};
         previewSession.update(entry.sessionId,r.mode,r.preview||null);
-        uiStates.set(entry.sessionId,{...previous,mode:r.mode,quickReply:r.quickReply===true,reduceTransparency:r.reduceTransparency===true,edgeStrip:r.edgeStrip||null,preview:r.preview||null,previewAt:Date.now(),online:typeof r.online==='boolean'?r.online:previous.online,activeAt:r.focused?Date.now():previous.activeAt,
+        uiStates.set(entry.sessionId,{...previous,mode:r.mode,quickReply:r.quickReply===true,reduceTransparency:r.reduceTransparency===true,edgeStrip:r.edgeStrip||null,backdropGeometry:r.backdropGeometry||null,preview:r.preview||null,previewAt:Date.now(),online:typeof r.online==='boolean'?r.online:previous.online,activeAt:r.focused?Date.now():previous.activeAt,
           displays:Array.isArray(r.displays)?r.displays.filter(d=>typeof d.id==='string'&&/^\d+$/.test(d.id)&&typeof d.name==='string').slice(0,12):previous.displays});
         if(r.mode!=='reply'&&r.mode!=='cluster'){quickTargets.delete(entry.sessionId);sendConfirmation.clear(entry.sessionId);}
-        void syncBackdrop(entry).catch(()=>{});
+        void syncBackdrop(entry).catch(()=>{});shell.publishBackdrop();
         syncConnectivity();if(r.resumed===true)refreshes.resume();
         if(r.returnFocus===true)returnEpoch++;
       }catch{}return;
@@ -334,7 +344,7 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   return {
     attach,
     async detach(entry) {sendConfirmation.clear(entry.sessionId);quickTargets.delete(entry.sessionId);attached.delete(entry.sessionId);boundContexts.delete(entry.sessionId);uiStates.delete(entry.sessionId);actionResults.delete(entry.sessionId);selectedWorkspaces.delete(entry.sessionId);backdrop.detach(entry);mods.detach(entry);syncConnectivity(); },
-    status: () => ({ backdrop:backdrop.status(),quickSend:sendConfirmation.status(),callbackSecurity:{rejected:rejectedCallbacks,ready:[...sessions.values()].filter(e=>contextGuard.current(e)).length}, ...store.status(), ...stats, customApi:{...customApi,methods:{...customApi.methods}}, methods: Object.fromEntries(observedMethods), shapes: Object.fromEntries(shapes), socketTypes: Object.fromEntries(socketTypes),
+    status: () => ({ backdrop:{...backdrop.status(),helperReady:!!backdropHelperReady&&shell.backdropConnected()},quickSend:sendConfirmation.status(),callbackSecurity:{rejected:rejectedCallbacks,ready:[...sessions.values()].filter(e=>contextGuard.current(e)).length}, ...store.status(), ...stats, customApi:{...customApi,methods:{...customApi.methods}}, methods: Object.fromEntries(observedMethods), shapes: Object.fromEntries(shapes), socketTypes: Object.fromEntries(socketTypes),
       shell:{connected:shell.connected(),hotkeyRegistered:nativeHotkey,stockHotkeyRegistered:nativeStockHotkey},network:refreshes.status().online?'available':'offline',apiPolicy:'manual-only',refreshQueue:{active:refreshes.status().active,queued:refreshes.status().queued},activity:refreshes.status().workspaces.map(a=>({status:a.status,at:a.at,attemptAt:a.attemptAt,nextAt:a.nextAt,hasMore:a.hasMore,countsAvailable:a.countsAvailable,threadsAvailable:a.threadsAvailable})),history:history.status(),mode: 'triage-with-native-reply', mods:mods.status(),liveUI:mods.enabled('triage-surface'), partial: true }),
     async dispose() {
       if(disposed)return;

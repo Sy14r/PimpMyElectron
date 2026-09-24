@@ -36,7 +36,7 @@ test('native transparency requires a real restart, preserves recovery across rel
  const restarted=createWindowBackdrop({...h.options,launchId:'second'});
  assert.equal((await restarted.prepare(entry,true)).state,'ready');
  for(let i=0;i<20;i++)await restarted.update(entry,{enabled:true,identity:2});
- assert.equal(h.calls.filter(c=>c==='window.__PME_TRIAGE__?.setInboxGlass(true,false)').length,1);
+ assert.equal(h.calls.filter(c=>c==='window.__PME_TRIAGE__?.setInboxGlass(true,false,false)').length,1);
  await restarted.prepare(entry,false);await restarted.update(entry,{enabled:false,identity:2});
  assert.equal(h.preference,false);assert.equal(restarted.status().active,false);
  assert.equal(JSON.parse(await fs.readFile(h.options.file,'utf8')).profiles.test.original,null);
@@ -46,7 +46,7 @@ test('existing native transparency stays enabled when our effect is disabled',as
  const h=await harness(t);h.preference=true;const b=createWindowBackdrop(h.options);
  assert.equal((await b.prepare(entry,true)).state,'ready');
  await b.update(entry,{enabled:true,identity:1});await b.prepare(entry,false);await b.update(entry,{enabled:false,identity:1});
- assert.equal(h.preference,true);assert.ok(h.calls.includes('window.__PME_TRIAGE__?.setInboxGlass(false,true)'));
+ assert.equal(h.preference,true);assert.ok(h.calls.includes('window.__PME_TRIAGE__?.setInboxGlass(false,true,false)'));
  assert.equal(h.calls.filter(c=>c.includes('setPreference')).length,0);
 });
 test('failed recovery record writes never mutate the native preference',async t=>{
@@ -65,15 +65,18 @@ test('renderer scopes material, restores the original preference, and honors acc
  const fragment=source.slice(source.indexOf('  const reducedTransparency='),source.indexOf('  const accentProperties='));
  const attrs=new Map(),calls=[],media={matches:false,addEventListener(){}};
  const node=()=>({toggleAttribute:(k,v)=>attrs.set(k,v),remove(){}});
- const env={window:{matchMedia:()=>media},document:{createElement:()=>node(),head:{append(){}},documentElement:node()},host:node(),abort:new AbortController(),disposed:false,mode:'queue',quickReply:null,reportShell(){},desktop:{window:{getWindowId:async()=>1,callBrowserWindowMethod:async(...args)=>calls.push(args)}}};env.window.desktop=env.desktop;
+ const env={window:{matchMedia:()=>media},document:{createElement:()=>node(),head:{append(){}},documentElement:node()},host:node(),abort:new AbortController(),disposed:false,mode:'queue',quickReply:null,reportShell(){},desktop:{window:{getWindowId:async()=>1,callBrowserWindowMethod:async(...args)=>{calls.push(args);return args[1]==='hasShadow'?true:undefined;}}}};env.window.desktop=env.desktop;
  vm.createContext(env);vm.runInContext(fragment,env);
  assert.equal(await env.setInboxGlass(true),false); // Unknown restoration state: stay opaque.
  assert.equal(await env.setInboxGlass(true,true),true);assert.deepEqual(calls.at(-1),[1,'setVibrancy','hud']);assert.equal(attrs.get('data-inbox-glass'),true);
- await env.setInboxGlass(true,true);assert.equal(calls.length,1);
- env.mode='stock';await env.setInboxGlass(true);assert.deepEqual(calls.at(-1),[1,'setVibrancy','titlebar']);assert.equal(attrs.get('data-inbox-glass'),false);
+ await env.setInboxGlass(true,true);assert.equal(calls.length,3);
+ await env.setInboxGlass(true,true,true);assert.deepEqual(calls.at(-1),[1,'setVibrancy',null]);
+ const readyCalls=calls.length;await env.setInboxGlass(true,true,true);assert.equal(calls.length,readyCalls);
+ await env.setInboxGlass(true,true,false);assert.deepEqual(calls.at(-1),[1,'setVibrancy','hud']);
+ env.mode='stock';await env.setInboxGlass(true);assert.deepEqual(calls.filter(c=>c[1]==='setVibrancy').at(-1),[1,'setVibrancy','titlebar']);assert.deepEqual(calls.at(-1),[1,'setHasShadow',true]);assert.equal(attrs.get('data-inbox-glass'),false);
  env.mode='queue';await env.setInboxGlass(true);assert.deepEqual(calls.at(-1),[1,'setVibrancy','hud']);assert.equal(attrs.get('data-inbox-glass'),true);
  env.mode='reply';env.quickReply={};assert.equal(await env.setInboxGlass(true),false);
  env.quickReply=null;media.matches=true;assert.equal(await env.setInboxGlass(true),false);
- media.matches=false;await env.setInboxGlass(true,false);await env.setInboxGlass(false);assert.equal(calls.at(-1)[2],null);
+ media.matches=false;await env.setInboxGlass(true,false);await env.setInboxGlass(false);assert.equal(calls.filter(c=>c[1]==='setVibrancy').at(-1)[2],null);assert.deepEqual(calls.at(-1),[1,'setHasShadow',true]);
  assert.doesNotMatch(fragment,/setOpacity|setBackgroundColor|setPreference|backdrop-filter/);
 });

@@ -5,8 +5,9 @@ September 23, 2026. Default off; local testing only, not a broad performance qua
 ## Implementation
 
 Settings → Appearance & behavior → **Translucent inbox (experimental)** enables
-one Electron `setVibrancy('hud')` material. A lightly tinted, accent-aware background
-covers it in the custom inbox. Text keeps its full opacity. The native conversation
+one helper-owned macOS HUD material behind the inbox only. Its visual effect state
+is `.active`, so it remains blurred when Slack loses focus. A lightly tinted,
+accent-aware background covers it in the custom inbox. Text keeps its full opacity. The native conversation
 pane, composer, loading covers, menus, pill and strip remain opaque. The sliding
 reader and loading covers are clipped at the inbox boundary, so the inbox keeps
 the same tint throughout the animation. The parked Slack page is hidden and
@@ -15,7 +16,7 @@ clipped out of the inbox region, including its native detail descendants.
 No CSS blur/backdrop-filter, whole-window opacity, screenshot loop, new debugging
 transport, or Slack API requests are involved. State changes are serialized and
 deduplicated rather than reapplied on each activity snapshot. Returning to ordinary
-Slack restores the original native material. The system Reduce Transparency
+Slack restores the original native material and shadow. The system Reduce Transparency
 preference suppresses the custom effect.
 
 ## Why the first probe failed
@@ -36,9 +37,19 @@ already enabled, it is preserved. Failed preparation leaves the inbox opaque.
 Only this appearance preference is read/changed; the record contains no messages
 or credentials. Keep the record until opting out so the prior value can be restored.
 
-The native material spans the whole BrowserWindow, even though we expose it only
-behind the inbox. `hud` names the material, not its extent. The wider layout
-therefore also needs performance testing.
+The original Electron material spanned the whole BrowserWindow. The helper's
+click-through, nonactivating panel confines it to the inbox instead. The existing
+private Unix socket streams only validated geometry and the owned Slack PID;
+no messages, credentials, screenshots or executable commands are sent. The helper
+independently verifies the visible Slack window and hides if the window disappears,
+the stream disconnects, geometry is invalid, or its heartbeat expires. This
+three-second disconnect watchdog is not an expiration of the feature.
+
+The renderer removes its native full-window material only after the helper reports
+that the inbox backdrop is visible. If the helper is unavailable, the older
+focus-dependent Electron material remains as a fallback. Stable geometry does not
+reposition or repaint the helper. Updates during the 180 ms content animation use
+the same progress as the content; idle stream heartbeats are once per second.
 
 ## Local checks
 
@@ -106,6 +117,57 @@ remain noisy and do not establish sustained power cost. WindowServer was about
 Still needed: longer normal work sessions, native-history scrolling and typing, moving background
 content, external displays, and work-laptop battery/thermal checks. Conversation
 background blur remains deferred until this smaller trial is satisfactory.
+
+## Inactive windows and opening animation
+
+The user subsequently confirmed that HUD becomes largely solid when Slack loses
+focus. A live popover-material probe behaved the same way. Electron creates its
+`NSVisualEffectView` with `followsWindowActiveState` unless the BrowserWindow was
+constructed with `visualEffectState: 'active'`. Slack does not expose that
+constructor option or a runtime setter through its renderer bridge. Reapplying
+the material is not a reliable way to force the active state. A temporary helper
+backdrop proved that AppKit's `.active` state works without that bridge; its
+five-minute experiment timeout caused one later apparent regression. The saved
+helper implementation has no such timeout. No Slack bundle patch or focus-stealing
+workaround was introduced.
+
+A slide-out trace showed Chromium width updates jumping from 420 through 434,
+447, 496, 548, 591, 684, 745, 801 to 820 over roughly 376 ms. The native resize
+animation advances independently, exposing background before Chromium catches
+up. A stepped-resize experiment reduced the band but did not eliminate it, and
+the user found it substantially slower (about 622 ms in the local trace). That
+experiment was removed.
+
+The replacement expands the native window once, waits for a renderer paint
+opportunity at the target width, then animates a shared CSS progress value over
+180 ms. The native detail pane and custom loading cover read the same progress,
+including a pane that mounts partway through the reveal. No native bounds change
+during the content animation. On the right dock, the inbox slides left while
+uncovering the detail; on the left dock, the detail slides out behind the inbox.
+Clipping keeps both surfaces outside the translucent inbox at every point.
+
+The full-width glass initially appeared immediately, which the user found
+distracting. Confining the backdrop to a helper panel removed that pop, but a
+native window shadow still outlined the expanded area early. The user confirmed
+that disabling this shadow eliminated the remaining outline. The renderer now
+captures/restores the native shadow around translucent triage.
+
+Opening and closing both animate content inside an already allocated surface
+while the helper supplies only the inbox backdrop. Closing shrinks the native
+window after the content recedes. Opaque mode, reduced motion, helper fallback,
+and hidden/minimized windows skip this content-only animation. Frame and animation
+waits are bounded; cleanup removes overrides even if resizing fails. The earlier
+content-only Activity trace reached full width at 16 ms and finished around 241 ms.
+Live lifecycle checks passed for both docks, hide/reopen, normal Slack, disabling
+and reenabling translucency, and helper restart recovery. Long work sessions and
+Spaces/fullscreen/external-display visual checks remain outstanding.
+
+The helper-backed implementation repeated the short scroll benchmark at p95
+9.1 ms in both inbox and expanded layouts, with no frames above 33.4 ms. Disabled
+samples were 8.4/8.5 ms. The native helper used about 1.5–1.7% idle CPU with blur
+enabled versus 0.8% disabled, and 1.3% while scrolling versus 0.3% disabled.
+WindowServer remained around 46–48%; background desktop activity still prevents
+isolating its cost. These are short local samples, not a battery-life guarantee.
 
 ## References
 

@@ -140,12 +140,15 @@ pill and edge strip, embedded native panes and composer, and Settings previews.
 It saves on this Mac and updates without reopening the conversation. Accent text
 and indicators are lightened when needed for contrast; normal Slack keeps its own theme.
 **Translucent inbox (experimental)** is off by default. It uses one macOS native
-blur material behind the inbox list; messages, the composer, popups, and the pill
-stay opaque. First activation prepares Slack’s native window transparency. If
+blur material behind the inbox list, supplied by the menu-bar helper so it stays
+active when Slack loses focus. Messages, the composer, popups, and the pill stay
+opaque. The inbox's native window shadow is hidden to avoid outlining the detail
+pane before it slides into view. First activation prepares Slack’s native window transparency. If
 Settings says a restart is needed, stop and relaunch with the usual Pimp My
 Electron launcher (a mod reload is not enough). Subsequent on/off changes apply
 live. Turning it off restores the previous native transparency preference.
-The effect respects macOS Reduce Transparency. See [prototype findings and
+The effect respects macOS Reduce Transparency. If the helper is unavailable, blur
+falls back to following Slack's focus. See [prototype findings and
 performance checks](research/inbox-translucency.md) before using it on another Mac.
 
 Local Done remains separate from Slack read state.

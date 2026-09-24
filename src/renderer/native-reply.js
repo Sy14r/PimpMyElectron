@@ -45,6 +45,8 @@
     body[data-pme-switcher] .c-search_modal{background:#0005!important;}
     @media(max-width:650px){[data-pme-native-reply-pane]{left:44px!important;width:calc(100vw - 44px)!important;}}
     body[data-pme-detail-motion] [data-pme-native-reply-pane]{left:420px!important;right:auto!important;width:var(--pme-detail-width,400px)!important;transform:translateX(calc(100vw - 420px - var(--pme-detail-width,400px)))!important;}
+    body[data-pme-detail-reveal] [data-pme-native-reply-pane]{transform:translateX(calc((var(--pme-detail-progress) - 1)*var(--pme-detail-width,400px)))!important;clip-path:inset(0 0 0 calc((1 - var(--pme-detail-progress))*var(--pme-detail-width,400px)))!important;}
+    body[data-pme-detail-reveal="right"] [data-pme-native-reply-pane]{transform:none!important;}
     /* Scope tokens and selectors to the embedded pane. Removing its
        attribute restores Slack's theme. Native portals are themed only in triage. */
     [data-pme-native-reply-pane]{
