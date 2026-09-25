@@ -37,3 +37,31 @@ test('creating a shortcut preserves its signature and writes the identity on the
  await assert.rejects(createProfile({dataDir:dir,template,destination,appId:'slack',installationPath:'/Applications/Slack.app',modIds:['slack-triage']}),/already exists/);
  await fs.rename(destination,path.join(dir,'Renamed.app'));await assertShortcut(path.join(dir,'Renamed.app'),p.id);assert.equal((await listProfiles(dir)).length,1);
 });
+
+test('Finder deletion is reflected in snapshots and a stale profile can be removed without the app',async t=>{
+ const dataDir=await temp(t),shortcut=path.join(dataDir,'Deleted.app');await fs.mkdir(shortcut);
+ const p={schemaVersion:1,id,name:'Deleted',appId:'spotify',installationPath:'/Applications/Spotify.app',modIds:['spotify-menu'],shortcutPath:shortcut};
+ await writeJSON(profileFile(dataDir,id),p);
+ const manager=await new ClientManager({root,dataDir,request:async()=>{throw Error('offline');}}).init();
+ const saved=async()=>(await manager.snapshot()).apps.find(a=>a.id==='spotify').shortcuts;
+ assert.equal((await saved())[0].availability,'available');
+ await fs.rmdir(shortcut);assert.equal((await saved())[0].availability,'missing');
+ // Merely refreshing must preserve a profile that could have been moved.
+ assert.deepEqual(await readProfile(dataDir,id),p);
+ const result=await manager.dispatch({op:'shortcut-forget',profileId:id});
+ assert.deepEqual(result.apps.find(a=>a.id==='spotify').shortcuts,[]);
+ assert.equal(manager.busy,false);
+ await assert.rejects(manager.dispatch({op:'shortcut-forget',profileId:'../../client'}),/Invalid shortcut profile/);
+});
+
+test('moving or restoring a shortcut preserves its profile, and forgetting never deletes a replacement',async t=>{
+ const dataDir=await temp(t),shortcut=path.join(dataDir,'Original.app'),moved=path.join(dataDir,'Moved.app');await fs.mkdir(shortcut);
+ await writeJSON(profileFile(dataDir,id),{schemaVersion:1,id,name:'Original',appId:'slack',installationPath:'/Applications/Slack.app',modIds:['slack-triage'],shortcutPath:shortcut});
+ await fs.rename(shortcut,moved);assert.equal((await listProfiles(dataDir))[0].availability,'missing');
+ await fs.rename(moved,shortcut);assert.equal((await listProfiles(dataDir))[0].availability,'available');
+ await fs.rmdir(shortcut);await fs.writeFile(shortcut,'unrelated replacement');
+ assert.equal((await listProfiles(dataDir))[0].availability,'unavailable');
+ const manager=await new ClientManager({root,dataDir,request:async()=>{throw Error('offline');}}).init();
+ await manager.dispatch({op:'shortcut-forget',profileId:id});
+ assert.equal(await fs.readFile(shortcut,'utf8'),'unrelated replacement');
+});

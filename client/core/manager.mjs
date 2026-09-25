@@ -46,11 +46,11 @@ export class ClientManager {
   }catch{return {running:false};}
  }
  async snapshot(){
-  const apps=[];for(const app of this.catalog.apps){const pref=this.config.apps[app.id],runtime=await this.runtime(app.id);const installed=this.installations.filter(i=>i.appId===app.id);
+  const apps=[],shortcuts=await listProfiles(this.dataDir);for(const app of this.catalog.apps){const pref=this.config.apps[app.id],runtime=await this.runtime(app.id);const installed=this.installations.filter(i=>i.appId===app.id);
    let profileConflict=false;const verified=this.verified.get(pref.path);
    if(verified?.profile){try{profileConflict=!!(await fs.stat(verified.profile).catch(()=>null))&&!readProfileOwners(path.join(this.runtimeDir(app.id),'profile-owner.json')).some(p=>p.profile===verified.profile);}catch{profileConflict=true;}}
    const plan=moduleSelection(app,pref.selected,this.modules),applied=await readJSON(path.join(this.runtimeDir(app.id),'mods.json'),null);
-   apps.push({...app,shortcuts:(await listProfiles(this.dataDir)).filter(p=>p.appId===app.id),installations:installed,selectedPath:pref.path,selectedMods:pref.selected,runtime,profileConflict,
+   apps.push({...app,shortcuts:shortcuts.filter(p=>p.appId===app.id),installations:installed,selectedPath:pref.path,selectedMods:pref.selected,runtime,profileConflict,
     changesPending:runtime.running&&(app.id==='spotify'?!pref.selected.includes('spotify-menu'):JSON.stringify([...plan.disabled].sort())!==JSON.stringify([...(applied?.disabled||[])].sort()))});
   }
   return {clientVersion:this.clientVersion.version,clientBuild:this.clientVersion.build,catalogVersion:this.catalog.version,apps,launching:this.launching,dataDir:this.dataDir};

@@ -4,7 +4,12 @@ export const shortcutAttribute='com.pimpmyElectron.launch-profile';
 export function profileID(id){if(typeof id!=='string'||!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(id))throw Error('Invalid shortcut profile');return id;}
 export const profileFile=(dir,id)=>path.join(dir,'shortcuts',profileID(id)+'.json');
 export async function readProfile(dir,id){const p=await readJSON(profileFile(dir,id));if(p?.schemaVersion!==1||p.id!==id||typeof p.appId!=='string'||!path.isAbsolute(p.installationPath||'')||!Array.isArray(p.modIds))throw Error('Invalid saved shortcut');return p;}
-export async function listProfiles(dir){const folder=path.join(dir,'shortcuts'),names=await fs.readdir(folder).catch(e=>{if(e.code==='ENOENT')return [];throw e;});const profiles=[];for(const name of names){if(!/^[a-f0-9-]+\.json$/i.test(name))continue;try{profiles.push(await readProfile(dir,name.slice(0,-5)));}catch{/* A broken profile must not hide the rest. */}}return profiles.sort((a,b)=>a.name.localeCompare(b.name));}
+export async function shortcutAvailability(file){
+ if(typeof file!=='string'||!path.isAbsolute(file)||!file.endsWith('.app'))return 'unavailable';
+ try{const stat=await fs.lstat(file);return stat.isDirectory()&&!stat.isSymbolicLink()?'available':'unavailable';}
+ catch(error){return ['ENOENT','ENOTDIR'].includes(error.code)?'missing':'unavailable';}
+}
+export async function listProfiles(dir){const folder=path.join(dir,'shortcuts'),names=await fs.readdir(folder).catch(e=>{if(e.code==='ENOENT')return [];throw e;});const profiles=[];for(const name of names){if(!/^[a-f0-9-]+\.json$/i.test(name))continue;try{const p=await readProfile(dir,name.slice(0,-5));profiles.push({...p,availability:await shortcutAvailability(p.shortcutPath)});}catch{/* A broken profile must not hide the rest. */}}return profiles.sort((a,b)=>a.name.localeCompare(b.name));}
 function command(bin,args){const p=spawnSync(bin,args,{encoding:'utf8'});if(p.status!==0)throw Error(`Shortcut operation failed: ${path.basename(bin)}`);return p.stdout.trim();}
 export function shortcutIdentity(file){return command('/usr/bin/xattr',['-p',shortcutAttribute,file]);}
 export async function assertShortcut(file,id){if(!path.isAbsolute(file)||!file.endsWith('.app'))throw Error('Invalid shortcut location');const stat=await fs.lstat(file);if(!stat.isDirectory()||stat.isSymbolicLink()||shortcutIdentity(file)!==profileID(id))throw Error('This app is not the saved PME shortcut');}

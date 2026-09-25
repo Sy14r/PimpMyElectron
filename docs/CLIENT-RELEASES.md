@@ -44,6 +44,12 @@ PME session with different mods is left alone, with an explanation to stop it fi
 Concurrent launches are serialized across the manager and shortcut processes.
 Sessions started before 0.2.0 need one restart before selection matching is known.
 
+PME checks saved shortcut locations when refreshing the manager. A shortcut deleted
+or moved in Finder is shown as missing, with **Remove from list** to forget its
+saved profile without needing the app to exist. If you moved it, launch it once
+to reconnect instead. Restoring it to its saved location also clears the missing
+state automatically. Removing a missing entry does not delete anything from Finder.
+
 The **Manage shortcuts** section contains **Reveal**, **Update selection**, **Rename**, and **Remove**. Remove moves the
 app to Trash and removes its saved profile. A Finder rename/move retains its
 profile ID; launching it updates the displayed name/location in PME. If a copying

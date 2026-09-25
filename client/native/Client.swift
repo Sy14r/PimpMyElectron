@@ -44,10 +44,16 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         let data=try Data(contentsOf:dataURL.appendingPathComponent("shortcuts/\(id).json"))
         guard let profile=try JSONSerialization.jsonObject(with:data) as? [String:Any],profile["id"] as? String==id else{throw NSError(domain:"PME",code:1,userInfo:[NSLocalizedDescriptionKey:"Invalid shortcut profile"])};return profile
     }
-    func shortcutURL(_ id:String)throws->URL {
+    func shortcutURL(_ id:String,allowMissing:Bool=false)throws->URL? {
         let profile=try shortcutProfile(id)
         guard let path=profile["shortcutPath"] as? String else{throw NSError(domain:"PME",code:1,userInfo:[NSLocalizedDescriptionKey:"Missing shortcut location"])}
-        let url=URL(fileURLWithPath:path),p=Process(),pipe=Pipe();p.executableURL=URL(fileURLWithPath:"/usr/bin/xattr");p.arguments=["-p","com.pimpmyElectron.launch-profile",path];p.standardOutput=pipe;p.standardError=FileHandle.nullDevice
+        let url=URL(fileURLWithPath:path)
+        do {_ = try FileManager.default.attributesOfItem(atPath:path)}catch {
+            let failure=error as NSError
+            if allowMissing && failure.domain==NSCocoaErrorDomain && [NSFileReadNoSuchFileError,NSFileNoSuchFileError].contains(failure.code) {return nil}
+            throw error
+        }
+        let p=Process(),pipe=Pipe();p.executableURL=URL(fileURLWithPath:"/usr/bin/xattr");p.arguments=["-p","com.pimpmyElectron.launch-profile",path];p.standardOutput=pipe;p.standardError=FileHandle.nullDevice
         try p.run();let result=pipe.fileHandleForReading.readDataToEndOfFile();p.waitUntilExit()
         guard p.terminationStatus==0,String(data:result,encoding:.utf8)?.trimmingCharacters(in:.whitespacesAndNewlines)==id else{throw NSError(domain:"PME",code:1,userInfo:[NSLocalizedDescriptionKey:"Shortcut not found at its saved location. If you moved it, launch it once to update its location."])};return url
     }
@@ -87,7 +93,7 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage) {
         guard message.frameInfo.isMainFrame,message.frameInfo.request.url?.standardizedFileURL==uiURL.appendingPathComponent("index.html").standardizedFileURL,
               let raw=message.body as? [String:Any],let id=raw["id"] as? Int,let op=raw["op"] as? String else{return}
-        guard ["status","scan","select","launch","stop","show","add-app","import","data-folder","shortcut-create","shortcut-update","shortcut-rename","shortcut-remove","shortcut-reveal"].contains(op) else {fail(id,"Unsupported client action");return}
+        guard ["status","scan","select","launch","stop","show","add-app","import","data-folder","shortcut-create","shortcut-update","shortcut-rename","shortcut-remove","shortcut-reveal","shortcut-forget"].contains(op) else {fail(id,"Unsupported client action");return}
         if op=="data-folder" {NSWorkspace.shared.open(dataURL);reply(["id":id,"ok":true]);return}
         var request:[String:Any]=["id":id,"op":op]
         for key in ["appId","modIds","installationPath","view","profileId"] {if let value=raw[key] {request[key]=value}}
@@ -107,7 +113,8 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
             };return
         }
         if op=="shortcut-reveal" || op=="shortcut-remove" {
-            do {guard let profileID=raw["profileId"] as? String else{return};let url=try shortcutURL(profileID)
+            do {guard let profileID=raw["profileId"] as? String else{return}
+                guard let url=try shortcutURL(profileID,allowMissing:op=="shortcut-remove") else {request["op"]="shortcut-forget";send(request);return}
                 if op=="shortcut-reveal" {NSWorkspace.shared.activateFileViewerSelecting([url]);reply(["id":id,"ok":true]);return}
                 NSWorkspace.shared.recycle([url]){[weak self] _,error in DispatchQueue.main.async {guard let self else{return};if let error {self.fail(id,error.localizedDescription)}else{request["op"]="shortcut-forget";self.send(request)}}};return
             }catch{fail(id,error.localizedDescription);return}
