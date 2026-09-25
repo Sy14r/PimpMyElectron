@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.2.1",
+  "version": "0.3.0",
   "apps": [
     {
       "id": "slack",
@@ -30,7 +30,10 @@
             "Density, accent, and translucency controls"
           ],
           "access": "Uses Slack\u2019s cached state and native interface. Background API polling is disabled.",
-          "defaultEnabled": true
+          "defaultEnabled": true,
+          "platforms": [
+            "mac"
+          ]
         }
       ]
     },
@@ -59,7 +62,30 @@
             "Keeps working after the manager closes"
           ],
           "access": "Playback controls use macOS Automation. Mini Library uses Spotify\u2019s own client interfaces through a private inherited pipe, with no debugging port or separate Spotify Web API credentials. Browsing and search can fetch data through Spotify. Artwork loads from Spotify\u2019s image CDN.",
-          "defaultEnabled": true
+          "defaultEnabled": true,
+          "platforms": [
+            "mac"
+          ]
+        },
+        {
+          "id": "spotify-camera-pause",
+          "name": "Camera Pause",
+          "version": "0.1.0",
+          "author": "PimpMyElectron",
+          "summary": "Music pauses when your camera comes on.",
+          "description": "Choose the apps whose camera use should pause Spotify. Resume only music this mod paused, once none of those apps is using the camera.",
+          "modules": [],
+          "requires": [],
+          "features": [
+            "Choose conferencing apps or browsers to watch",
+            "Resume only playback paused by this mod",
+            "Works on its own or alongside Menu Player"
+          ],
+          "access": "Observes local macOS camera-activity diagnostics and uses macOS Automation to control Spotify. No camera or microphone recording, browser inspection, or Spotify library connection. App attribution depends on macOS diagnostic support.",
+          "defaultEnabled": false,
+          "platforms": [
+            "mac"
+          ]
         }
       ]
     }

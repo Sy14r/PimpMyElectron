@@ -2,7 +2,7 @@
 import fs from 'node:fs/promises';import path from 'node:path';import {spawnSync} from 'node:child_process';
 const root=process.cwd(),dir=path.join(root,'.lab/spotify-motion'),app=path.join(dir,'PME Motion Lab.app');
 await fs.mkdir(path.join(app,'Contents/MacOS'),{recursive:true});
-const appearance=await fs.readFile('native/spotify/Appearance.swift','utf8');
+const appearance=(await fs.readFile('native/spotify/camera/CameraPausePolicy.swift','utf8'))+'\n'+(await fs.readFile('native/spotify/camera/CameraPause.swift','utf8'))+'\n'+(await fs.readFile('native/spotify/Appearance.swift','utf8'));
 let library=await fs.readFile('native/spotify/MiniLibrary.swift','utf8');
 const start=library.indexOf('    func send(_ request:'),end=library.indexOf('    static func request(',start);
 if(start<0||end<0)throw Error('MiniLibrary fixture insertion point changed');

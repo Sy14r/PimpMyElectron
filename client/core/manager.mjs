@@ -1,7 +1,7 @@
 import {inspectSpotify,waitForSpotifyHelper} from './spotify.mjs';
 import {supportedApps} from './app-support.mjs';
 import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import {spawn,spawnSync} from 'node:child_process';
-import {validateCatalog,resolveSelection,moduleSelection} from './catalog.mjs';
+import {validateCatalog,resolveSelection,moduleSelection,hostPlatform,modCompatibility} from './catalog.mjs';
 import {discoverApps} from './discovery.mjs';import {readJSON,writeJSON} from './state.mjs';import {control} from './control.mjs';
 import {listProfiles,readProfile,createProfile,updateProfile,profileFile,assertShortcut,withLaunchLock,sameSelection} from './shortcuts.mjs';
 import {inspectInstallation,developmentProfile,readProfileOwners} from '../../src/slack-installation.mjs';
@@ -15,7 +15,7 @@ export class ClientManager {
   this.catalog=validateCatalog(await readJSON(path.join(this.root,'client/catalog.json')),this.modules);
   this.config=await readJSON(path.join(this.dataDir,'client.json'),{version:1,apps:{},extraPaths:[]});
   if(this.config?.version!==1||!this.config.apps||!Array.isArray(this.config.extraPaths))throw Error('Invalid client settings; existing data has been preserved.');
-  for(const app of this.catalog.apps){const saved=this.config.apps[app.id];this.config.apps[app.id]={path:typeof saved?.path==='string'?saved.path:null,selected:resolveSelection(app,saved?.selected??app.mods.filter(m=>m.defaultEnabled).map(m=>m.id))};}
+  for(const app of this.catalog.apps){const saved=this.config.apps[app.id],requested=saved?.selected??app.mods.filter(m=>m.defaultEnabled).map(m=>m.id);const known=resolveSelection(app,requested,{platform:null});this.config.apps[app.id]={path:typeof saved?.path==='string'?saved.path:null,selected:resolveSelection(app,known.filter(id=>modCompatibility(app,id).compatible))};}
   return this;
  }
  app(id){const app=this.catalog.apps.find(a=>a.id===id);if(!app)throw Error('Unsupported app');return app;}
@@ -40,7 +40,7 @@ export class ClientManager {
  }
  async runtime(id){
   try{const state=await this.request(path.join(this.runtimeDir(id),'control.sock'),{op:'status'});
-   if(id==='spotify')return state.adapter==='spotify'?{running:true,pid:state.pid,mode:'everyday',helperRunning:true,appRunning:state.appRunning,signedIn:true,error:state.error,appPath:state.appPath}: {running:false};
+   if(id==='spotify')return state.adapter==='spotify'?{running:true,pid:state.pid,mode:'everyday',helperRunning:true,mods:state.mods??['spotify-menu'],cameraStatus:state.cameraStatus,cameraOwnsPause:state.cameraOwnsPause,appRunning:state.appRunning,signedIn:true,error:state.error,appPath:state.appPath}: {running:false};
    return {running:state.running===true,pid:state.pid,mode:state.controlMode,appPath:state.installation?.app,version:state.installation?.version,error:state.featureError,
     helperRunning:state.helperRunning,signedIn:state.pages?.some(p=>p.signedIn)===true,modules:state.feature?.mods?.pages?.[0]?.modules||{},customApiRequests:state.feature?.customApi?.requests||0};
   }catch{return {running:false};}
@@ -50,10 +50,10 @@ export class ClientManager {
    let profileConflict=false;const verified=this.verified.get(pref.path);
    if(verified?.profile){try{profileConflict=!!(await fs.stat(verified.profile).catch(()=>null))&&!readProfileOwners(path.join(this.runtimeDir(app.id),'profile-owner.json')).some(p=>p.profile===verified.profile);}catch{profileConflict=true;}}
    const plan=moduleSelection(app,pref.selected,this.modules),applied=await readJSON(path.join(this.runtimeDir(app.id),'mods.json'),null);
-   apps.push({...app,shortcuts:shortcuts.filter(p=>p.appId===app.id),installations:installed,selectedPath:pref.path,selectedMods:pref.selected,runtime,profileConflict,
-    changesPending:runtime.running&&(app.id==='spotify'?!pref.selected.includes('spotify-menu'):JSON.stringify([...plan.disabled].sort())!==JSON.stringify([...(applied?.disabled||[])].sort()))});
+   apps.push({...app,mods:app.mods.map(m=>({...m,...modCompatibility(app,m.id)})),shortcuts:shortcuts.filter(p=>p.appId===app.id),installations:installed,selectedPath:pref.path,selectedMods:pref.selected,runtime,profileConflict,
+    changesPending:runtime.running&&(app.id==='spotify'?JSON.stringify([...pref.selected].sort())!==JSON.stringify([...(runtime.mods||[])].sort()):JSON.stringify([...plan.disabled].sort())!==JSON.stringify([...(applied?.disabled||[])].sort()))});
   }
-  return {clientVersion:this.clientVersion.version,clientBuild:this.clientVersion.build,catalogVersion:this.catalog.version,apps,launching:this.launching,dataDir:this.dataDir};
+  return {platform:hostPlatform(),clientVersion:this.clientVersion.version,clientBuild:this.clientVersion.build,catalogVersion:this.catalog.version,apps,launching:this.launching,dataDir:this.dataDir};
  }
  async select({appId,modIds,installationPath}){
   const app=this.app(appId),pref=this.config.apps[appId];
@@ -64,7 +64,7 @@ export class ClientManager {
  }
  async start(appId,selection){return withLaunchLock(this.dataDir,()=>this.startLocked(appId,selection));}
  async startLocked(appId,selection){
-  const app=this.app(appId),pref=selection?{path:selection.installationPath,selected:resolveSelection(app,selection.modIds)}:this.config.apps[appId];if(!pref.selected.length)throw Error('Enable at least one mod before launching.');
+  const app=this.app(appId),pref=selection?{path:selection.installationPath,selected:resolveSelection(app,selection.modIds)}:this.config.apps[appId];resolveSelection(app,pref.selected);if(!pref.selected.length)throw Error('Enable at least one mod before launching.');
   if((await this.runtime(appId)).running)throw Error('This app is already running with PME. Stop it before changing mods.');
   if(appId==='spotify')return this.startSpotify(pref);
   if(this.running())throw Error('Slack is already open. Quit it normally, then launch it here. PME will not close another Slack session.');
@@ -100,6 +100,7 @@ export class ClientManager {
    await launchLog('Starting Spotify Menu Player.');
    // Reuse the private inherited-pipe host when only the widget was stopped.
    const bridgePath=path.join(dir,'bridge.sock');
+   if(pref.selected.includes('spotify-menu')){
    let bridge=await this.request(bridgePath,{op:'status'}).catch(()=>null);
    if(bridge?.adapter!=='spotify'||bridge?.mode!=='pipe'){
     if(this.spotifyRunning())throw Error('Quit Spotify normally, then launch it from PME to enable Mini Library.');
@@ -113,9 +114,11 @@ export class ClientManager {
     }
    }
    if(!bridge?.ready)throw Error('Spotify is still starting or needs sign-in. Wait for its Home view, then launch again from PME.');
+   }
+   // Camera Pause alone uses Automation and can attach to an ordinary Spotify session.
    // Launch as an application; macOS attributes nested-helper consent to PME.
    await launchLog('Requesting menu helper launch through macOS; waiting up to 60 seconds for its control endpoint.');
-   const child=this.launch('/usr/bin/open',['-g','-n','-a',path.resolve(binary,'../../..'),'--args','--data-dir',dir,'--spotify-app',installation.app],{cwd:this.root,env:cleanEnvironment(process.env),detached:true,stdio:['ignore',log.fd,log.fd]});
+   const child=this.launch('/usr/bin/open',['-g','-n','-a',path.resolve(binary,'../../..'),'--args','--data-dir',dir,'--spotify-app',installation.app,'--mods',pref.selected.join(',')],{cwd:this.root,env:cleanEnvironment(process.env),detached:true,stdio:['ignore',log.fd,log.fd]});
    let failure=null;child.once('error',error=>{failure=error.code||error.message;});child.unref();
    const state=await waitForSpotifyHelper({status:()=>this.runtime('spotify'),launchFailure:()=>failure||(child.exitCode!=null&&child.exitCode!==0?`macOS open exited with status ${child.exitCode}`:child.signalCode?`macOS open ended with signal ${child.signalCode}`:null)});
    await launchLog(`Menu helper ready (pid ${state.pid}).`);
@@ -144,7 +147,7 @@ export class ClientManager {
   });
  }
  async stop(appId){const dir=this.runtimeDir(appId),state=await this.runtime(appId);if(!state.running)return this.snapshot();if(state.mode!=='everyday')throw Error('This session was not started in everyday mode. Stop it from its original launcher.');await this.request(path.join(dir,'control.sock'),{op:'stop'});for(let i=0;i<40;i++){await new Promise(r=>setTimeout(r,150));if(!(await this.runtime(appId)).running)break;}return this.snapshot();}
- async show(appId,op){if(!['queue','preferences','stock'].includes(op))throw Error('Unsupported view');const state=await this.runtime(appId);if(!state.running||state.mode!=='everyday')throw Error('Launch the app with PME first.');await this.request(path.join(this.runtimeDir(appId),appId==='spotify'?'control.sock':'shell.sock'),{op:appId==='spotify'?'show':op});return this.snapshot();}
+ async show(appId,op){if(!['queue','preferences','stock','camera-settings'].includes(op))throw Error('Unsupported view');const state=await this.runtime(appId);if(!state.running||state.mode!=='everyday')throw Error('Launch the app with PME first.');await this.request(path.join(this.runtimeDir(appId),appId==='spotify'?'control.sock':'shell.sock'),{op:appId==='spotify'?(op==='camera-settings'?'camera-settings':'show'):op});return this.snapshot();}
  async importSetup(appId,source){
   this.app(appId);if(appId!=='slack')throw Error('Import is only supported for Slack.');if((await this.runtime(appId)).running)throw Error('Stop the PME-managed app before importing settings.');
   if(!path.isAbsolute(source))throw Error('Choose your existing PME project folder.');

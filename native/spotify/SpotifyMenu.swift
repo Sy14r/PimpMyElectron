@@ -12,6 +12,7 @@ final class Player: ObservableObject {
     let preferences=PlayerPreferences()
     @Published var atmosphere:ArtworkAtmosphere?
     @Published var settingsOpen=false
+    @Published var cameraEnabled=false
     @Published var title="Your music, a hover away"
     @Published var artist="Open Spotify and choose something to play."
     @Published var album=""
@@ -59,7 +60,7 @@ struct PlayerWidget: View {
                 Button {library.pinned.toggle()} label:{Image(systemName:"pin").foregroundStyle(library.pinned ? green:Color.secondary)}.buttonStyle(.plain).help("Keep player open")
                 Button {model.settingsOpen.toggle()} label:{Image(systemName:"gearshape").font(.system(size:13))}
                     .buttonStyle(.plain).help("Mini player settings").accessibilityLabel("Mini player settings")
-                    .popover(isPresented:$model.settingsOpen,arrowEdge:.top){PlayerSettings(preferences:preferences)}
+                    .popover(isPresented:$model.settingsOpen,arrowEdge:.top){VStack{PlayerSettings(preferences:preferences);if model.cameraEnabled {Button("Camera Pause settings…"){model.action?("camera-settings")}.padding(.bottom,16)}}}
                 Button {model.action?("open")} label:{Image(systemName:"arrow.up.forward.app").font(.system(size:13))}.buttonStyle(.plain).help("Open Spotify").accessibilityLabel("Open Spotify")
                 Button {model.action?("close")} label:{Image(systemName:"xmark").font(.system(size:11))}.buttonStyle(.plain).help("Close player").accessibilityLabel("Close player")
             }
@@ -177,6 +178,9 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
     var trackKey="",ownsSocket=false,waitingForEntry=false,pointerWasOverIcon=false
     var clickMonitor:Any?,keyMonitor:Any?
     var sizing:AnyCancellable?
+    var menuEnabled=true
+    var camera:CameraPause?
+    var selectedMods=["spotify-menu"]
     var layoutTimer:Timer?
     var layoutTarget:PlayerLayout?
     var automationEntitled:Bool {
@@ -187,12 +191,16 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
         let args=CommandLine.arguments
         func argument(_ key:String)->String? {guard let n=args.firstIndex(of:key),n+1<args.count else{return nil};return args[n+1]}
         guard let dir=argument("--data-dir"),let appPath=argument("--spotify-app"),dir.hasPrefix("/"),appPath.hasPrefix("/"),official(URL(fileURLWithPath:appPath)) else{NSApp.terminate(nil);return}
+        selectedMods=(argument("--mods") ?? "spotify-menu").split(separator:",").map(String.init)
+        guard !selectedMods.isEmpty,Set(selectedMods).isSubset(of:["spotify-menu","spotify-camera-pause"]) else{NSApp.terminate(nil);return}
+        menuEnabled=selectedMods.contains("spotify-menu");model.cameraEnabled=selectedMods.contains("spotify-camera-pause")
+        if model.cameraEnabled {camera=CameraPause(directory:dir);camera?.available={[weak self] in self?.refreshVisibility();return self?.verifiedRunning==true}}
         spotifyPath=appPath;socketPath=dir+"/control.sock";model.library.socketPath=dir+"/bridge.sock"
         fputs("Automation entitlement available at runtime: \(automationEntitled)\n",stderr)
         do {try FileManager.default.createDirectory(atPath:dir,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700]);try startServer()}catch{fputs("Spotify helper: \(error.localizedDescription)\n",stderr);NSApp.terminate(nil);return}
         item=NSStatusBar.system.statusItem(withLength:28)
         if let button=item.button {
-            button.image=spotifyIcon();button.toolTip="Spotify · PME Menu Player";button.setAccessibilityLabel("Spotify Menu Player")
+            button.image=menuEnabled ? spotifyIcon():NSImage(systemSymbolName:"video.slash",accessibilityDescription:"Spotify Camera Pause");button.toolTip=menuEnabled ? "Spotify · PME Menu Player":"Spotify · Camera Pause";button.setAccessibilityLabel(menuEnabled ? "Spotify Menu Player":"Spotify Camera Pause")
             button.target=self;button.action=#selector(toggle)
         }
         let host=HoverHost(rootView:PlayerWidget(model:model));let controller=NSViewController();controller.view=host
@@ -214,6 +222,8 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
         // Reading pointer position needs no input-monitoring or Accessibility permission.
         iconHoverTimer=Timer(timeInterval:0.1,repeats:true){ [weak self] _ in self?.checkIconHover() }
         if let iconHoverTimer {RunLoop.main.add(iconHoverTimer,forMode:.common)}
+        camera?.start()
+        if camera?.targets.isEmpty==true {camera?.showSettings()}
         if !spotifyRunning {openSpotify(activate:false)}
     }
     var spotifyRunning:Bool {NSRunningApplication.runningApplications(withBundleIdentifier:"com.spotify.client").contains{!$0.isTerminated}}
@@ -244,6 +254,7 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
         };image.isTemplate=true;return image
     }
     func checkIconHover() {
+        guard menuEnabled else{return}
         let bounds=item.button.flatMap{button in button.window?.convertToScreen(button.convert(button.bounds,to:nil))}
         let inside=item.isVisible && (bounds?.contains(NSEvent.mouseLocation) ?? false)
         let entered=inside && !pointerWasOverIcon
@@ -252,6 +263,7 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
     }
     @objc func toggle() {popover.isShown ? close():show()}
     func show() {
+        guard menuEnabled else{camera?.showSettings();return}
         refreshVisibility();guard item.isVisible,let button=item.button else{return}
         if !popover.isShown {
             popover.show(relativeTo:button.bounds,of:button,preferredEdge:.minY)
@@ -291,7 +303,7 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
         let inside=(buttonRect?.insetBy(dx:-4,dy:-4).contains(point) ?? false)||(popover.contentViewController?.view.window?.frame.insetBy(dx:-4,dy:-4).contains(point) ?? false)
         if inside {outsideSince=nil;waitingForEntry=false}else if waitingForEntry {return}else if let since=outsideSince {if Date().timeIntervalSince(since)>=model.preferences.dismissalDelay {close()}}else{outsideSince=Date()}
     }
-    func presentPlayer(){show();waitingForEntry=true;NSApp.activate(ignoringOtherApps:true);popover.contentViewController?.view.window?.makeKey()}
+    func presentPlayer(){if !menuEnabled {camera?.showSettings();return};show();waitingForEntry=true;NSApp.activate(ignoringOtherApps:true);popover.contentViewController?.view.window?.makeKey()}
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {presentPlayer();return true}
     func close(){model.settingsOpen=false;model.library.expanded=false;model.library.collection=nil;model.library.generation+=1;model.library.queryTask?.cancel();resizePlayer(animated:false);waitingForEntry=false;popover.performClose(nil);hoverTimer?.invalidate();hoverTimer=nil;outsideSince=nil}
     func openSpotify(activate:Bool) {
@@ -299,6 +311,7 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
         NSWorkspace.shared.openApplication(at:URL(fileURLWithPath:spotifyPath),configuration:config){ [weak self] _,error in DispatchQueue.main.async {if let error {self?.model.error=error.localizedDescription};self?.refreshVisibility()} }
     }
     func perform(_ action:String) {
+        if action=="camera-settings" {camera?.showSettings();return}
         if action=="close" {close();return};if action=="open" {openSpotify(activate:true);return}
         if action=="retry" {
             guard !querying,!model.working else{return}
@@ -397,7 +410,8 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
                     let op=request?["op"] as? String
                     var response:[String:Any]
                     switch op {
-                    case "status":response=["ok":true,"result":["adapter":"spotify","running":true,"pid":getpid(),"appRunning":self.spotifyRunning,"appPath":self.spotifyPath,"automationEntitled":self.automationEntitled,"popoverShown":self.popover.isShown,"statusVisible":self.item.isVisible,"statusFrame":self.item.button?.window.map{NSStringFromRect($0.frame)} ?? "none","error":self.model.error]]
+                    case "status":response=["ok":true,"result":["adapter":"spotify","running":true,"mods":self.selectedMods,"cameraStatus":self.camera?.status ?? "","cameraOwnsPause":self.camera?.ownsPause ?? false,"cameraDiagnostics":self.camera?.diagnostics ?? [:],"pid":getpid(),"appRunning":self.spotifyRunning,"appPath":self.spotifyPath,"automationEntitled":self.automationEntitled,"popoverShown":self.popover.isShown,"statusVisible":self.item.isVisible,"statusFrame":self.item.button?.window.map{NSStringFromRect($0.frame)} ?? "none","error":self.model.error]]
+                    case "camera-settings":if let camera=self.camera {camera.showSettings();response=["ok":true,"result":true]}else{response=["ok":false,"error":"Enable Camera Pause and relaunch first"]}
                     case "show":self.presentPlayer();response=["ok":true,"result":true]
                     case "stop":response=["ok":true,"result":true];DispatchQueue.main.asyncAfter(deadline:.now()+0.1){NSApp.terminate(nil)}
                     default:response=["ok":false,"error":"Unsupported Spotify helper action"]
@@ -409,6 +423,6 @@ final class SpotifyMenu:NSObject,NSApplicationDelegate {
             }
         }
     }
-    func applicationWillTerminate(_ notification:Notification){poll?.invalidate();hoverTimer?.invalidate();iconHoverTimer?.invalidate();layoutTimer?.invalidate();if server>=0 {Darwin.close(server);if ownsSocket {unlink(socketPath)}}}
+    func applicationWillTerminate(_ notification:Notification){camera?.stop();poll?.invalidate();hoverTimer?.invalidate();iconHoverTimer?.invalidate();layoutTimer?.invalidate();if server>=0 {Darwin.close(server);if ownsSocket {unlink(socketPath)}}}
 }
 let app=NSApplication.shared,delegate=SpotifyMenu();if CommandLine.arguments.contains("--check-signature"){print(delegate.automationEntitled ? "automation-entitled":"automation-missing");exit(delegate.automationEntitled ? 0:1)};app.delegate=delegate;app.setActivationPolicy(.accessory);app.run()

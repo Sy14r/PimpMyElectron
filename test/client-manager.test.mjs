@@ -11,7 +11,7 @@ async function fixture(t){
  await m.rescan();return {m,calls,dataDir,installation,set external(v){external=v;},set active(v){isRunning=v;}};
 }
 test('mod catalog resolves dependencies once and blocks unknown IDs, cycles and arbitrary sources',()=>{
- const app={mods:[{id:'base',modules:['observer'],requires:[]},{id:'view',modules:['view'],requires:['base']}]};
+ const app={mods:[{id:'base',platforms:['global'],modules:['observer'],requires:[]},{id:'view',platforms:['global'],modules:['view'],requires:['base']}]};
  assert.deepEqual(resolveSelection(app,['view','base']),['base','view']);assert.deepEqual(moduleSelection(app,['view'],[{id:'observer'},{id:'view'},{id:'api'}]),{disabled:['api']});
  assert.throws(()=>resolveSelection(app,['other']));app.mods[0].requires=['view'];assert.throws(()=>resolveSelection(app,['view']),/Circular/);
  const bad={schemaVersion:1,apps:[{id:'../slack',adapter:'slack',bundleId:'com.tinyspeck.slackmacgap',mods:[]}]};assert.throws(()=>validateCatalog(bad,[]));
@@ -45,4 +45,11 @@ test('client control refuses arbitrary evaluation and launch serialization preve
  const f=await fixture(t);await assert.rejects(f.m.dispatch({op:'inspect',expression:'code'}),/Unsupported/);await assert.rejects(f.m.show('slack','inspect'),/Unsupported/);
  f.m.busy=true;await assert.rejects(f.m.dispatch({op:'launch',appId:'slack'}),/wait/);assert.deepEqual((await f.m.dispatch({op:'status'})).apps.map(a=>a.id),['slack','spotify']);
  const env=cleanEnvironment({PATH:'/bin',NODE_OPTIONS:'--inspect',NODE_PATH:'/bad',DYLD_INSERT_LIBRARIES:'/bad',ELECTRON_RUN_AS_NODE:'1',PME_DATA_DIR:'/data'});assert.deepEqual(env,{PATH:'/bin',PME_DATA_DIR:'/data'});
+});
+
+test('backend rejects an incompatible selection and launch even if UI controls are bypassed',async t=>{
+ const f=await fixture(t);f.m.app('slack').mods[0].platforms=['windows'];
+ await assert.rejects(f.m.select({appId:'slack',modIds:['slack-triage']}),/cannot run on macOS/);
+ await assert.rejects(f.m.start('slack'),/cannot run on macOS/);
+ const app=(await f.m.select({appId:'slack',modIds:[]})).apps.find(a=>a.id==='slack');assert.equal(app.mods[0].compatible,false);assert.equal(f.calls.some(c=>c.node),false);
 });
