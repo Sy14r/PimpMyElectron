@@ -41,9 +41,13 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         for (title,selector,key) in [("Copy","copy:","c"),("Paste","paste:","v"),("Select All","selectAll:","a")] { edits.addItem(withTitle:title,action:NSSelectorFromString(selector),keyEquivalent:key) }
         NSApp.mainMenu=menu
         do { try recordLocation();try startWorker(resources) } catch { showError("PME could not start its bundled runtime.",error.localizedDescription) }
-        nativeRequest("update-finish"){_ in}
+        // Finish update recovery before the page sends its initial scan. Both
+        // are runtime mutations; overlapping them can reject that first scan.
+        nativeRequest("update-finish"){[weak self] _ in
+            guard let self else{return}
+            self.web.loadFileURL(self.uiURL.appendingPathComponent("index.html"),allowingReadAccessTo:self.uiURL)
+        }
         updaterController.startUpdater()
-        web.loadFileURL(uiURL.appendingPathComponent("index.html"),allowingReadAccessTo:uiURL)
         window.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
     }
     func recordLocation() throws {
