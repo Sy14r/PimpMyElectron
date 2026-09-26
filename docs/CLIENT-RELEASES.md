@@ -9,8 +9,7 @@ Spotify Menu Player uses native macOS Automation and a private inherited-pipe li
 ## Install and update
 
 Download the versioned ZIP from [GitHub Releases](https://github.com/Sy14r/PimpMyElectron/releases),
-extract it, and move **PimpMyElectron.app** into Applications. Repository access is
-required while this repository is private. Node, a compiler, and a clone are not
+extract it, and move **PimpMyElectron.app** into Applications. The repository and release downloads are public. Node, a compiler, and a clone are not
 needed to run it. macOS performs its normal signed-app first-open check.
 
 Choose Slack, enable Slack Triage, and click Launch Slack. Quit any existing Slack
@@ -22,7 +21,7 @@ Import does not copy Slack credentials or replace existing destination settings.
 
 For updates, stop the PME-managed Slack session from PME, quit PME, replace the
 app in Applications, and reopen it. Settings live outside the app at
-`~/Library/Application Support/PimpMyElectron/`. There is no automatic updater yet.
+`~/Library/Application Support/PimpMyElectron/`. Version 0.5.0 adds Sparkle update checks and installation on request; see [Client updates](CLIENT-UPDATES.md).
 Closing the manager alone intentionally leaves a running modded Slack session up.
 
 ## Launch shortcuts (client 0.2.0)
@@ -170,12 +169,15 @@ commit, creates a draft GitHub Release, downloads and validates those exact asse
 and only then publishes. Rerunning publish verifies existing assets without
 clobbering published releases. Do not distribute `notarization-upload.zip`.
 
-The private release contains:
+The public release contains:
 
 - `PimpMyElectron-X.Y.Z-macOS-arm64.zip`
+- `appcast.xml` (signed update feed) and signed Markdown release notes
 - `SHA256SUMS`
 - `manifest.json` (provenance, hashes, and Apple submission ID; no secrets)
 
 For broader deployment, also test a browser download on another Mac with normal
 quarantine/Gatekeeper behavior. Local acceptance and a CLI download check do not
 replace that separate-machine test. Intel builds are not offered in this version.
+
+The release pipeline embeds pinned Sparkle 2.10.0, signs its framework and installer components before the outer app, and signs the final archive/feed using the `com.pimpmyElectron.client` Sparkle Keychain account. The app reads the latest release’s `appcast.xml` asset. Keep this feed asset on every future client release; publish only client releases as GitHub’s latest release.

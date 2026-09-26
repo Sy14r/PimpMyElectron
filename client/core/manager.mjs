@@ -1,3 +1,4 @@
+import {assertNoUpdate,prepareUpdate,clearUpdate} from './update-gate.mjs';
 import {inspectSpotify,waitForSpotifyHelper} from './spotify.mjs';
 import {supportedApps} from './app-support.mjs';
 import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import {spawn,spawnSync} from 'node:child_process';
@@ -64,6 +65,7 @@ export class ClientManager {
  }
  async start(appId,selection){return withLaunchLock(this.dataDir,()=>this.startLocked(appId,selection));}
  async startLocked(appId,selection){
+  await assertNoUpdate(this.dataDir);
   const app=this.app(appId),pref=selection?{path:selection.installationPath,selected:resolveSelection(app,selection.modIds)}:this.config.apps[appId];resolveSelection(app,pref.selected);if(!pref.selected.length)throw Error('Enable at least one mod before launching.');
   if((await this.runtime(appId)).running)throw Error('This app is already running with PME. Stop it before changing mods.');
   if(appId==='spotify')return this.startSpotify(pref);
@@ -138,6 +140,7 @@ export class ClientManager {
   if(p.shortcutPath!==shortcutPath)await this.shortcutLocation(id,shortcutPath);
   resolveSelection(this.app(p.appId),p.modIds);
   return withLaunchLock(this.dataDir,async()=>{
+   await assertNoUpdate(this.dataDir);
    const state=await this.runtime(p.appId);
    if(state.running){const active=await readJSON(path.join(this.runtimeDir(p.appId),'launch-selection.json'),null);
     if(state.mode!=='everyday'||active?.pid!==state.pid||!sameSelection(active,p))throw Error('This app is already running with a different launch selection. Stop its mod from PME before using this shortcut.');
@@ -171,7 +174,7 @@ export class ClientManager {
   if(!request||typeof request!=='object'||Array.isArray(request))throw Error('Invalid request');
   if(request.op==='status')return this.snapshot();
   if(this.busy)throw Error('Please wait for the current action to finish.');this.busy=true;
-  try{switch(request.op){case 'scan':return await this.rescan();case 'add-app':return await this.rescan(request.path);case 'shortcut-create':return await this.createShortcut(request.appId,request.path);case 'shortcut-update':return await this.updateShortcut(request.appId,request.profileId);case 'shortcut-location':return await this.shortcutLocation(request.profileId,request.path);case 'shortcut-forget':await fs.rm(profileFile(this.dataDir,request.profileId),{force:true});return this.snapshot();case 'select':return await this.select(request);case 'launch':return await this.start(request.appId);case 'stop':return await this.stop(request.appId);case 'show':return await this.show(request.appId,request.view);case 'import':return await this.importSetup(request.appId,request.path);default:throw Error('Unsupported client action');}}
+  try{switch(request.op){case 'update-prepare':return await withLaunchLock(this.dataDir,()=>prepareUpdate(this,{processes:()=>{const p=spawnSync('/bin/ps',['-axo','command='],{encoding:'utf8'});if(p.status!==0)throw Error('Could not verify running mod sessions. Retry the update.');return p.stdout.split('\n');}}));case 'update-cancel':return await withLaunchLock(this.dataDir,()=>clearUpdate(this));case 'update-finish':return await withLaunchLock(this.dataDir,()=>clearUpdate(this,true));case 'scan':return await this.rescan();case 'add-app':return await this.rescan(request.path);case 'shortcut-create':return await this.createShortcut(request.appId,request.path);case 'shortcut-update':return await this.updateShortcut(request.appId,request.profileId);case 'shortcut-location':return await this.shortcutLocation(request.profileId,request.path);case 'shortcut-forget':await fs.rm(profileFile(this.dataDir,request.profileId),{force:true});return this.snapshot();case 'select':return await this.select(request);case 'launch':return await this.start(request.appId);case 'stop':return await this.stop(request.appId);case 'show':return await this.show(request.appId,request.view);case 'import':return await this.importSetup(request.appId,request.path);default:throw Error('Unsupported client action');}}
   finally{this.busy=false;}
  }
 }

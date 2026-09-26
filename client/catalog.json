@@ -47,7 +47,7 @@
         {
           "id": "spotify-menu",
           "name": "Menu Player",
-          "version": "0.2.1",
+          "version": "0.2.2",
           "author": "PimpMyElectron",
           "summary": "Your player and mini library in the menu bar.",
           "description": "Hover for playback controls, then expand to browse liked songs, playlists, albums, search, and queue without leaving your work.",

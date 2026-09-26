@@ -1,9 +1,10 @@
+import {sparkle,updater} from './lib/sparkle.mjs';
 // Local Keychain-backed release pipeline, adapted from SlackAssist/Ledge.
 // No keys/passwords are exported or uploaded to GitHub. Publishing is explicit.
 import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {root,env,run,metadata,read,write,hash,assertClean,verifyApp,assertManifest,assertSameApp,submissionAction,nestedApps} from './lib/client-release.mjs';
+import {root,env,run,metadata,read,write,hash,assertClean,verifyApp,assertManifest,assertSameApp,submissionAction,nestedApps,sparkleCode} from './lib/client-release.mjs';
 const [command='help',input,...args]=process.argv.slice(2);
 const help=`Usage:
   npm run client:release -- prepare
@@ -40,7 +41,7 @@ function prepare(){
  console.log(`Preparing ${dir}`);
  run(process.execPath,['scripts/build-client.mjs'],{stdio:'inherit',env:{...env,PME_CLIENT_OUTPUT:app}});
  const node=path.join(app,'Contents/Resources/bin/node'),helper=path.join(app,'Contents/Resources/runtime/bin/SlackTriage');
- for(const [target,id,entitlements] of [[node,'com.pimpmyElectron.client.node',path.join(root,'client/native/Node.entitlements')],[helper,'com.pimpmyElectron.client.triage',null],...nestedApps(app).map(n=>[n.path,n.id,n.kind==='spotify-menu'?path.join(root,'native/spotify/SpotifyMenu.entitlements'):null]),[app,'com.pimpmyElectron.client',path.join(root,'client/native/Client.entitlements')]]){
+ for(const [target,id,entitlements] of [[node,'com.pimpmyElectron.client.node',path.join(root,'client/native/Node.entitlements')],[helper,'com.pimpmyElectron.client.triage',null],...nestedApps(app).map(n=>[n.path,n.id,n.kind==='spotify-menu'?path.join(root,'native/spotify/SpotifyMenu.entitlements'):null]),...sparkleCode(app).map(([,target,id])=>[target,id,null]),[app,'com.pimpmyElectron.client',path.join(root,'client/native/Client.entitlements')]]){
   run('/usr/bin/codesign',['--force','--options','runtime','--timestamp','--identifier',id,...(entitlements?['--entitlements',entitlements]:[]),'--sign',identity,target]);
  }
  const signatures=verifyApp(app,teamID).hashes;
@@ -86,11 +87,24 @@ function verifyDownload(dir){
  run('gh',['release','download',r.m.tag,'--repo',r.m.repo,'--dir',download,'--pattern',r.m.asset,'--pattern','SHA256SUMS']);
  if(hash(path.join(download,r.m.asset))!==r.m.artifactSHA256||fs.readFileSync(path.join(download,'SHA256SUMS'),'utf8')!==fs.readFileSync(path.join(r.dir,'SHA256SUMS'),'utf8'))throw Error('GitHub download does not match the validated artifact');
  extractVerified(path.join(download,r.m.asset),path.join(download,'extracted'),r.m);
+ run('gh',['release','download',r.m.tag,'--repo',r.m.repo,'--dir',download,'--pattern','appcast.xml','--pattern','*.md']);
+ const tools=sparkle();run(path.join(tools,'bin/sign_update'),['--account',updater.keychainAccount,'--verify',path.join(download,'appcast.xml')]);
+ const feed=fs.readFileSync(path.join(download,'appcast.xml'),'utf8');if(!feed.includes(r.m.asset)||!feed.includes(`<sparkle:version>${r.m.build}</sparkle:version>`))throw Error('Downloaded appcast does not describe this release');
  console.log(`Verified GitHub download: ${download}`);
+}
+function prepareFeed(r,notes){
+ const tools=sparkle(),stage=path.join(r.dir,'feed');fs.mkdirSync(stage,{recursive:true});
+ const archive=path.join(stage,r.m.asset);fs.copyFileSync(path.join(r.dir,r.m.asset),archive);
+ fs.copyFileSync(notes,path.join(stage,r.m.asset.replace(/\.zip$/,'.md')));
+ const prefix=`https://github.com/${r.m.repo}/releases/download/${r.m.tag}/`;
+ run(path.join(tools,'bin/generate_appcast'),['--account',updater.keychainAccount,'--maximum-deltas','0','--download-url-prefix',prefix,'--release-notes-url-prefix',prefix,stage]);
+ const feed=path.join(stage,'appcast.xml');run(path.join(tools,'bin/sign_update'),['--account',updater.keychainAccount,'--verify',feed]);
+ return [feed,path.join(stage,r.m.asset.replace(/\.zip$/,'.md'))];
 }
 function publish(dir,notes){
  if(!notes||!fs.statSync(notes).isFile())throw Error('Provide --notes with reviewed release notes');
  const r=load(dir);finalArtifact(r);
+ const feedAssets=prepareFeed(r,path.resolve(notes));
  const remote=run('gh',['repo','view','--json','nameWithOwner']);if(JSON.parse(remote).nameWithOwner!==r.m.repo)throw Error('Wrong GitHub repository');
  const remoteURL=run('git',['remote','get-url','origin']);if(!/^(?:git@github\.com:|https:\/\/github\.com\/)Sy14r\/PimpMyElectron(?:\.git)?$/.test(remoteURL))throw Error('Unexpected origin; refusing release tag push');
  const ref=`refs/tags/${r.m.tag}`;
@@ -101,7 +115,7 @@ function publish(dir,notes){
  if(remoteTag.length){const peeled=remoteTag.find(l=>l.endsWith('^{}'))||remoteTag[0];if(peeled.split(/\s/)[0]!==r.m.commit)throw Error('Remote release tag points to another commit');}
  else run('git',['push','origin',ref],{stdio:'inherit'});
  let release=releaseAt(r.m);
- if(!release){run('gh',['release','create',r.m.tag,'--repo',r.m.repo,'--verify-tag','--draft','--title',`PimpMyElectron Client ${r.m.version}`,'--notes-file',path.resolve(notes),path.join(r.dir,r.m.asset),path.join(r.dir,'SHA256SUMS'),path.join(r.dir,'manifest.json')]);release=releaseAt(r.m);}
+ if(!release){run('gh',['release','create',r.m.tag,'--repo',r.m.repo,'--verify-tag','--draft','--title',`PimpMyElectron Client ${r.m.version}`,'--notes-file',path.resolve(notes),path.join(r.dir,r.m.asset),path.join(r.dir,'SHA256SUMS'),path.join(r.dir,'manifest.json'),...feedAssets]);release=releaseAt(r.m);}
  if(!release)throw Error('GitHub release creation could not be confirmed');
  // On resume, verify existing assets; never clobber a published release.
  verifyDownload(r.dir);

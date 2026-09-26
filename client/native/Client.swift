@@ -1,8 +1,14 @@
 import AppKit
+import Sparkle
 import WebKit
 import UniformTypeIdentifiers
 
-final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, NSWindowDelegate {
+final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, NSWindowDelegate, SPUUpdaterDelegate {
+    lazy var updaterController=SPUStandardUpdaterController(startingUpdater:false,updaterDelegate:self,userDriverDelegate:nil)
+    var installingUpdate=false
+    var updateReady=false
+    var nativeSequence = -1
+    var nativeReplies=[Int:([String:Any])->Void]()
     var window:NSWindow!
     var web:WKWebView!
     var worker:Process?
@@ -25,12 +31,18 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         window.minSize=NSSize(width:920,height:650);window.contentView=web;window.delegate=self;window.center()
         let menu=NSMenu(),appItem=NSMenuItem();menu.addItem(appItem);let appMenu=NSMenu();appItem.submenu=appMenu
         appMenu.addItem(withTitle:"About PimpMyElectron",action:#selector(NSApplication.orderFrontStandardAboutPanel(_:)),keyEquivalent:"")
+        let check=appMenu.addItem(withTitle:"Check for Updates…",action:#selector(SPUStandardUpdaterController.checkForUpdates(_:)),keyEquivalent:"")
+        check.target=updaterController
+        let automatic=appMenu.addItem(withTitle:"Check for updates automatically",action:#selector(toggleUpdateChecks(_:)),keyEquivalent:"")
+        automatic.target=self;automatic.state=updaterController.updater.automaticallyChecksForUpdates ? .on:.off
         appMenu.addItem(.separator());appMenu.addItem(withTitle:"Hide PimpMyElectron",action:#selector(NSApplication.hide(_:)),keyEquivalent:"h")
         appMenu.addItem(withTitle:"Quit PimpMyElectron",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"q")
         let edit=NSMenuItem();edit.title="Edit";menu.addItem(edit);let edits=NSMenu(title:"Edit");edit.submenu=edits
         for (title,selector,key) in [("Copy","copy:","c"),("Paste","paste:","v"),("Select All","selectAll:","a")] { edits.addItem(withTitle:title,action:NSSelectorFromString(selector),keyEquivalent:key) }
         NSApp.mainMenu=menu
         do { try recordLocation();try startWorker(resources) } catch { showError("PME could not start its bundled runtime.",error.localizedDescription) }
+        nativeRequest("update-finish"){_ in}
+        updaterController.startUpdater()
         web.loadFileURL(uiURL.appendingPathComponent("index.html"),allowingReadAccessTo:uiURL)
         window.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
     }
@@ -82,7 +94,33 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         process.terminationHandler={ [weak self] _ in DispatchQueue.main.async { self?.input=nil } }
         try process.run();input=stdin.fileHandleForWriting;worker=process
     }
+    func nativeRequest(_ op:String,completion:@escaping([String:Any])->Void){
+        let id=nativeSequence;nativeSequence-=1;nativeReplies[id]=completion
+        send(["id":id,"op":op])
+        DispatchQueue.main.asyncAfter(deadline:.now()+15){[weak self] in
+            self?.nativeReplies.removeValue(forKey:id)?(["ok":false,"error":"The update readiness check timed out. Please reopen PME and retry."])
+        }
+    }
+    @objc func toggleUpdateChecks(_ sender:NSMenuItem){
+        let updater=updaterController.updater
+        updater.automaticallyChecksForUpdates.toggle();sender.state=updater.automaticallyChecksForUpdates ? .on:.off
+    }
+    func updater(_ updater:SPUUpdater,willInstallUpdate item:SUAppcastItem){installingUpdate=true}
+    func updater(_ updater:SPUUpdater,didAbortWithError error:Error){
+        installingUpdate=false;updateReady=false;nativeRequest("update-cancel"){_ in}
+    }
+    func applicationShouldTerminate(_ sender:NSApplication)->NSApplication.TerminateReply {
+        guard installingUpdate,!updateReady else{return .terminateNow}
+        nativeRequest("update-prepare"){[weak self] response in
+            guard let self else{return}
+            let ready=response["ok"] as? Bool == true
+            self.updateReady=ready;sender.reply(toApplicationShouldTerminate:ready)
+            if !ready {self.showError("Finish your mod sessions before updating",response["error"] as? String ?? "Could not verify that PME is ready to update.")}
+        }
+        return .terminateLater
+    }
     func reply(_ response:[String:Any]) {
+        if let id=response["id"] as? Int,let completion=nativeReplies.removeValue(forKey:id){completion(response);return}
         web.callAsyncJavaScript("window.pmeReceive(response)",arguments:["response":response],in:nil,in:.page,completionHandler:nil)
     }
     func fail(_ id:Int,_ message:String){reply(["id":id,"ok":false,"error":message])}
@@ -93,7 +131,8 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage) {
         guard message.frameInfo.isMainFrame,message.frameInfo.request.url?.standardizedFileURL==uiURL.appendingPathComponent("index.html").standardizedFileURL,
               let raw=message.body as? [String:Any],let id=raw["id"] as? Int,let op=raw["op"] as? String else{return}
-        guard ["status","scan","select","launch","stop","show","add-app","import","data-folder","shortcut-create","shortcut-update","shortcut-rename","shortcut-remove","shortcut-reveal","shortcut-forget"].contains(op) else {fail(id,"Unsupported client action");return}
+        guard ["status","scan","select","launch","stop","show","add-app","import","data-folder","shortcut-create","shortcut-update","shortcut-rename","shortcut-remove","shortcut-reveal","shortcut-forget","update-check"].contains(op) else {fail(id,"Unsupported client action");return}
+        if op=="update-check" {updaterController.checkForUpdates(nil);reply(["id":id,"ok":true]);return}
         if op=="data-folder" {NSWorkspace.shared.open(dataURL);reply(["id":id,"ok":true]);return}
         var request:[String:Any]=["id":id,"op":op]
         for key in ["appId","modIds","installationPath","view","profileId"] {if let value=raw[key] {request[key]=value}}

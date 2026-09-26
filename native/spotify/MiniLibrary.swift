@@ -147,6 +147,7 @@ struct LibraryDetail:View {
                     if let collection=model.collection {HStack{Button{model.collection=nil;model.load()}label:{Image(systemName:"chevron.left")}.buttonStyle(.plain).help("Back to library");Text(collection.name).font(.system(size:13,weight:.semibold)).lineLimit(1);Spacer()}}
                     if !model.error.isEmpty {VStack(alignment:.leading,spacing:6){Text(model.error).font(.system(size:12)).foregroundStyle(Color.orange);Button("Try again"){model.load()}.buttonStyle(.plain).foregroundStyle(green)}}
                     ScrollView {
+                        VStack(spacing:0) {
                         LazyVStack(spacing:3){ForEach(model.items){item in
                             HStack(spacing:5){Button{model.open(item)}label:{HStack(spacing:10){LibraryCover(url:item.image.isEmpty ? (model.collection?.image ?? ""):item.image,type:item.type);VStack(alignment:.leading,spacing:3){Text(item.name).font(.system(size:13,weight:.medium)).lineLimit(1);Text(item.subtitle).font(.system(size:11)).foregroundStyle(.secondary).lineLimit(1)}.frame(maxWidth:.infinity,alignment:.leading);if !item.isSong {Image(systemName:"chevron.right").font(.system(size:10)).foregroundStyle(.secondary)}}.padding(.vertical,5).contentShape(Rectangle())}.buttonStyle(.plain).disabled(!item.playable)
                                 if item.isSong {Button{model.enqueue(item)}label:{Image(systemName:"text.badge.plus").frame(width:28,height:32)}.buttonStyle(.plain).help("Add to queue").accessibilityLabel("Add \(item.name) to queue")}
@@ -155,10 +156,118 @@ struct LibraryDetail:View {
                         if model.busy {ProgressView().controlSize(.small).padding(12)}
                         else if model.hasMore {Button("Load more"){model.load(more:true)}.buttonStyle(.plain).foregroundStyle(green).padding(10)}
                         else if model.items.isEmpty && model.error.isEmpty {Text(model.view=="search" && model.query.isEmpty ? "Find your next listen":"Nothing here yet").font(.system(size:12)).foregroundStyle(.secondary).padding(20)}
-                    }}.id(model.view+model.scope+(model.collection?.uri ?? "")+model.query).frame(maxHeight:.infinity)
+                        }.padding(.trailing,22).background(LibraryScrollChrome())
+                    }.padding(.trailing,-14)}.id(model.view+model.scope+(model.collection?.uri ?? "")+model.query).frame(maxHeight:.infinity)
                     if !model.notice.isEmpty {Text(model.notice).font(.system(size:11)).foregroundStyle(green).lineLimit(1)}
                 }.padding(14).frame(maxWidth:.infinity,maxHeight:.infinity)
             }.frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.top)
 
     }
+}
+
+// Keep native wheel, momentum, accessibility and thumb dragging. The reserved
+// content gutter also protects row actions when macOS shows legacy scrollbars.
+final class LibraryScroller:NSScroller {
+    private var fade:DispatchWorkItem?
+    var trackingThumb=false
+    func revealBriefly(){
+        fade?.cancel();alphaValue=1
+        let work=DispatchWorkItem{[weak self] in
+            guard let self,!self.trackingThumb else{return}
+            NSAnimationContext.runAnimationGroup{context in
+                context.duration=NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0:0.2
+                self.animator().alphaValue=0
+            }
+        }
+        fade=work;DispatchQueue.main.asyncAfter(deadline:.now()+1.0,execute:work)
+    }
+    override func trackKnob(with event:NSEvent){
+        trackingThumb=true;revealBriefly();super.trackKnob(with:event)
+        trackingThumb=false;revealBriefly()
+    }
+    deinit {fade?.cancel()}
+    override func drawKnob() {
+        let knob=rect(for:.knob)
+        guard knob.height>0 else{return}
+        let slim=NSRect(x:knob.maxX-6,y:knob.minY+1,width:4,height:max(0,knob.height-2))
+        NSColor.white.withAlphaComponent(NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 0.7:0.28).setFill()
+        NSBezierPath(roundedRect:slim,xRadius:2,yRadius:2).fill()
+    }
+    override func drawKnobSlot(in slotRect:NSRect,highlight flag:Bool) {}
+}
+// Filter the content underneath without a material's tint or saturation change.
+// A transparent-to-opaque mask grades the effect; they never intercept input.
+final class LibraryEdgeBlur:NSView {
+    static let height:CGFloat=32
+    private let gradient=CAGradientLayer()
+    init(top:Bool){
+        super.init(frame:.zero)
+        wantsLayer=true
+        if let blur=CIFilter(name:"CIGaussianBlur",parameters:[kCIInputRadiusKey:4]) {backgroundFilters=[blur]}
+        gradient.colors=[NSColor.white.withAlphaComponent(top ? 0:1).cgColor,NSColor.white.withAlphaComponent(top ? 1:0).cgColor]
+        gradient.startPoint=CGPoint(x:0.5,y:0);gradient.endPoint=CGPoint(x:0.5,y:1)
+        layer?.mask=gradient;layer?.masksToBounds=true
+        setAccessibilityElement(false)
+    }
+    override func layout(){
+        super.layout();CATransaction.begin();CATransaction.setDisableActions(true)
+        gradient.frame=bounds;CATransaction.commit()
+    }
+    required init?(coder:NSCoder){fatalError("init(coder:) has not been implemented")}
+    override func hitTest(_ point:NSPoint)->NSView? {nil}
+}
+struct LibraryScrollChrome:NSViewRepresentable {
+    final class Anchor:NSView {
+        weak var observedScroll:NSScrollView?
+        private var observers=[NSObjectProtocol]()
+        private var lastOrigin:NSPoint?
+        private let top=LibraryEdgeBlur(top:true),bottom=LibraryEdgeBlur(top:false)
+        override func viewDidMoveToWindow(){super.viewDidMoveToWindow();if window==nil {detach()}else{install()}}
+        override func viewDidMoveToSuperview(){super.viewDidMoveToSuperview();install()}
+        func detach(){
+            observers.forEach{NotificationCenter.default.removeObserver($0)};observers=[]
+            top.removeFromSuperview();bottom.removeFromSuperview();observedScroll=nil;lastOrigin=nil
+        }
+        deinit {observers.forEach{NotificationCenter.default.removeObserver($0)}}
+        func refresh(){
+            guard let scroll=observedScroll,let document=scroll.documentView else{return}
+            let visible=scroll.documentVisibleRect,bounds=document.bounds
+            if let previous=lastOrigin,abs(previous.y-visible.origin.y)>0.5 {(scroll.verticalScroller as? LibraryScroller)?.revealBriefly()}
+            lastOrigin=visible.origin
+            let viewport=scroll.convert(scroll.contentView.bounds,from:scroll.contentView)
+            let height=min(LibraryEdgeBlur.height,viewport.height/2)
+            top.frame=NSRect(x:viewport.minX,y:scroll.isFlipped ? viewport.minY:viewport.maxY-height,width:viewport.width,height:height)
+            bottom.frame=NSRect(x:viewport.minX,y:scroll.isFlipped ? viewport.maxY-height:viewport.minY,width:viewport.width,height:height)
+            let before=visible.minY>bounds.minY+1,after=visible.maxY<bounds.maxY-1
+            top.isHidden = !(document.isFlipped ? before:after)
+            bottom.isHidden = !(document.isFlipped ? after:before)
+        }
+        func install(){
+            // SwiftUI attaches its scroll hierarchy after creating the content.
+            DispatchQueue.main.async{[weak self] in
+                guard let self,self.window != nil,let scroll=self.enclosingScrollView else{return}
+                if self.observedScroll===scroll {self.refresh();return}
+                self.detach();self.observedScroll=scroll
+                let scroller=LibraryScroller();scroller.controlSize = .small;scroller.alphaValue=0
+                scroll.verticalScroller=scroller
+                // A separate lane prevents even the thumb's hit target from
+                // covering an action. Draw only a slim thumb, without a track.
+                scroll.scrollerStyle = .legacy
+                scroll.autohidesScrollers=true
+                scroll.reflectScrolledClipView(scroll.contentView)
+                scroll.addSubview(self.top);scroll.addSubview(self.bottom)
+                scroll.contentView.postsBoundsChangedNotifications=true
+                scroll.contentView.postsFrameChangedNotifications=true
+                scroll.documentView?.postsFrameChangedNotifications=true
+                for (name,object) in [(NSView.boundsDidChangeNotification,scroll.contentView),(NSView.frameDidChangeNotification,scroll.contentView),(NSView.frameDidChangeNotification,scroll.documentView)] {
+                    guard let object else{continue}
+                    self.observers.append(NotificationCenter.default.addObserver(forName:name,object:object,queue:.main){[weak self] _ in self?.refresh()})
+                }
+                self.refresh()
+            }
+        }
+    }
+    func makeNSView(context:Context)->Anchor {Anchor()}
+    func updateNSView(_ view:Anchor,context:Context){view.install()}
+    static func dismantleNSView(_ view:Anchor,coordinator:()){view.detach()}
 }

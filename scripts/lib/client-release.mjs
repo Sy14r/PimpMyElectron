@@ -20,6 +20,7 @@ export const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 export function write(file,value){fs.writeFileSync(file,JSON.stringify(value,null,2)+'\n',{mode:0o600});}
 export function assertClean(){if(run('git',['status','--porcelain']))throw Error('Commit all source changes before preparing a release.');return run('git',['rev-parse','HEAD']);}
 export function nestedApps(app){return [...Object.entries(supportedApps).map(([id,s])=>({kind:'launcher-'+id,path:path.join(app,'Contents/Helpers',s.template),id:'com.pimpmyElectron.launcher.'+id})),{kind:'spotify-menu',path:path.join(app,'Contents/Helpers/SpotifyMenu.app'),id:'com.pimpmyElectron.spotify-menu'}];}
+export function sparkleCode(app){const framework=path.join(app,'Contents/Frameworks/Sparkle.framework'),base=path.join(framework,'Versions/B');return [['sparkle-downloader',path.join(base,'XPCServices/Downloader.xpc'),'org.sparkle-project.Downloader'],['sparkle-installer',path.join(base,'XPCServices/Installer.xpc'),'org.sparkle-project.Installer'],['sparkle-autoupdate',path.join(base,'Autoupdate'),'org.sparkle-project.Sparkle.Autoupdate'],['sparkle-updater',path.join(base,'Updater.app'),'org.sparkle-project.Sparkle.Updater'],['sparkle-framework',framework,'org.sparkle-project.Sparkle']];}
 export function expectedEntitlements(kind){return kind==='node'?{'com.apple.security.cs.allow-jit':true}:(kind==='spotify-menu'||kind==='app')?{'com.apple.security.automation.apple-events':true}:{};}
 export function checkEntitlements(actual,kind){if(JSON.stringify(Object.entries(actual).sort())!==JSON.stringify(Object.entries(expectedEntitlements(kind)).sort()))throw Error(`Unexpected ${kind} release entitlements`);}
 export function signatureInfo(details){
@@ -34,7 +35,7 @@ export function verifyApp(app,team){
  const seal=run('/usr/bin/plutil',['-convert','xml1','-o','-',path.join(app,'Contents/_CodeSignature/CodeResources')]);
  for(const target of nestedApps(app)){const nested=seal.split('<key>Helpers/'+path.basename(target.path)+'</key>')[1]?.split('</dict>')[0];if(!nested?.includes('<key>cdhash</key>'))throw Error('Helpers must be sealed as nested code, not ordinary resources');}
  const hashes={};
- for(const [kind,target] of [['node',path.join(app,'Contents/Resources/bin/node')],['helper',path.join(app,'Contents/Resources/runtime/bin/SlackTriage')],...nestedApps(app).map(n=>[n.kind,n.path]),['app',app]]){
+ for(const [kind,target] of [['node',path.join(app,'Contents/Resources/bin/node')],['helper',path.join(app,'Contents/Resources/runtime/bin/SlackTriage')],...nestedApps(app).map(n=>[n.kind,n.path]),...sparkleCode(app),['app',app]]){
   run('/usr/bin/codesign',['--verify','--deep','--strict','--all-architectures',`-R=${requirement}`,target]);
   const details=spawnSync('/usr/bin/codesign',['-d','--verbose=4',target],{encoding:'utf8'});if(details.status!==0)throw Error('Could not inspect signature');
   hashes[kind]=signatureInfo(details.stderr);
