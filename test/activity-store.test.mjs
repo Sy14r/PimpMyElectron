@@ -119,3 +119,15 @@ test('unknown cache unread does not suppress DOM evidence, and native count resp
   s.ingestDOM({workspaceId:'TONE',conversations:[{channelId:'CONE',unread:false,unreadObserved:true}]});assert.equal(item(s).unread,false);
   s.ingest(meta('client.counts'),{channels:[{id:'CONE',mention_count:0}]});assert.equal(item(s).mentionObserved,false);
 });
+
+test('muting preserves Slack unread and mentions, applies to child threads and survives partial observations',()=>{
+ const s=new ActivityStore();
+ s.ingestClientState({workspaceId:'TONE',channels:[{id:'DONE',is_im:true,muted:true,has_unreads:true,mentionObserved:true}],threads:[{channel:'DONE',ts:'100.1',last_read:'100.1',root:{ts:'100.1',latest_reply:'100.2'}}]});
+ s.ingestClientState({workspaceId:'TTWO',channels:[{id:'DONE',is_im:true,muted:false,has_unreads:true}]});
+ let rows=s.snapshot().workspaces.find(w=>w.id==='TONE').items;
+ assert.equal(rows.length,2);assert.ok(rows.every(i=>i.muted&&i.unread));assert.equal(rows.find(i=>!i.threadTs).mentionObserved,true);
+ assert.equal(item(s,'DONE','TTWO').muted,false);
+ s.ingestClientState({workspaceId:'TONE',channels:[{id:'DONE',has_unreads:true}]});assert.equal(item(s,'DONE').muted,true);
+ s.ingestClientState({workspaceId:'TONE',channels:[{id:'DONE',muted:false}]});
+ assert.ok(s.snapshot().workspaces.find(w=>w.id==='TONE').items.every(i=>!i.muted&&i.unread));
+});

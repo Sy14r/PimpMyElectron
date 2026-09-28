@@ -111,3 +111,16 @@ test('on-demand checks keep missing cursors unknown and reject wrong account, wo
  env.accounts.TONE.user_id='UNEW';s.bootData={user_id:'UOLD'};assert.equal(env.api.readState({workspaceId:'TONE',channelId:'DONE'}),null);
  env.api.dispose();assert.equal(env.api.readState({workspaceId:'TONE',channelId:'DONE'}),null);assert.equal(env.network(),0);assert.equal(env.dispatches(),0);
 });
+
+test('workspace mute dictionaries publish independently of unread state and preserve tombstones',()=>{
+ const one=state(),two=state('TTWO');one.mutedChannels=inherited({DONE:{isMuted:true,secret:'PRIVATE'}});two.mutedChannels={};
+ const e=setup([one,two]);e.flush();
+ assert.equal(e.snapshots.find(s=>s.workspaceId==='TONE').channels[0].muted,true);
+ assert.equal(e.snapshots.find(s=>s.workspaceId==='TTWO').channels[0].muted,false);
+ assert.equal(e.snapshots[0].channels[0].has_unreads,true);assert.equal(JSON.stringify(e.snapshots).includes('PRIVATE'),false);
+ // Only the mute slice changes; unmuting must publish without a new message.
+ e.stores[0].state={...one,mutedChannels:Object.assign(inherited(one.mutedChannels),{DONE:null})};e.change();e.flush();
+ assert.equal(e.snapshots.at(-1).channels[0].muted,false);
+ e.stores[0].state={...one,mutedChannels:undefined};e.change();e.flush();assert.equal(e.snapshots.at(-1).channels[0].muted,undefined);
+ assert.equal(e.network(),0);assert.equal(e.dispatches(),0);e.api.dispose();
+});

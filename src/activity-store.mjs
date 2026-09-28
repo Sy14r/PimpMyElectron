@@ -52,7 +52,7 @@ export class ActivityStore {
     if (!workspaceID(id)) return null;
     if (!this.workspaces.has(id)) {
       if (this.workspaces.size >= this.maxWorkspaces) this.workspaces.delete(this.workspaces.keys().next().value);
-      this.workspaces.set(id, { id, name: id, items: new Map(), users: new Map(), observedAt: 0, methods: new Set() });
+      this.workspaces.set(id, { id, name: id, items: new Map(), users: new Map(), mutedChannels: new Set(), observedAt: 0, methods: new Set() });
     }
     return this.workspaces.get(id);
   }
@@ -79,6 +79,10 @@ export class ActivityStore {
   }
   conversation(ws, raw, kind) {
     if (!raw || !channelID(raw.id)) return;
+    if(typeof raw.muted==='boolean'){
+      if(raw.muted)ws.mutedChannels.add(raw.id);else ws.mutedChannels.delete(raw.id);
+      while(ws.mutedChannels.size>this.maxItems)ws.mutedChannels.delete(ws.mutedChannels.values().next().value);
+    }
     const actualKind = raw.is_im ? 'dm' : raw.is_mpim ? 'groupDM' : kind || 'channel';
     const fields = { kind: actualKind, peer: text(raw.user, 40) || undefined,
       name: text(raw.name || raw.name_normalized, 180) || undefined, archived: raw.is_archived === true };
@@ -246,7 +250,7 @@ export class ActivityStore {
       items: [...ws.items.values()].filter(i => !i.archived).map(item => ({
         key: item.key, workspaceId: ws.id, channelId: item.channelId, threadTs: item.threadTs,
         name: itemName(item), peer: (item.threadTs?ws.items.get(`${ws.id}:${item.channelId}:`)||item:item).peer,
-        kind: item.kind, mentionObserved:item.mentionObserved, unread: item.unread, unreadCount: item.unreadCount, mentions: item.mentions,
+        kind: item.kind, muted:ws.mutedChannels.has(item.channelId), mentionObserved:item.mentionObserved, unread: item.unread, unreadCount: item.unreadCount, mentions: item.mentions,
         countsStale: !item.countsAt || now - item.countsAt > 60000,
         observedAt: item.observedAt, stale: now - item.observedAt > 60000, latest: item.latest,lastRead:item.lastRead||null,
         source: item.source, historyObserved: item.historyObserved,
@@ -256,7 +260,7 @@ export class ActivityStore {
         messages: [...item.messages.values()].sort((a, b) => compareTs(a.ts, b.ts)).map(m => ({
           ...m, parts:messageParts(m.text,ws.users,channelNames), author: ws.users.get(m.userId) || m.author || m.userId || 'Unknown author'
         }))
-      })).sort((a, b) => Number(b.unread === true) - Number(a.unread === true) || compareTs(b.latest || '', a.latest || '') || a.name.localeCompare(b.name))
+      })).sort((a, b) => Number(b.unread === true&&!b.muted) - Number(a.unread === true&&!a.muted) || compareTs(b.latest || '', a.latest || '') || a.name.localeCompare(b.name))
     });}) };
   }
   status() {

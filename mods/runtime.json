@@ -6,7 +6,7 @@
   "modules": [
     {
       "id": "state-observer",
-      "version": "0.14.2",
+      "version": "0.14.3",
       "source": "src/renderer/state-observer.js",
       "global": "__PME_OBSERVER__",
       "requires": [
@@ -48,7 +48,7 @@
     },
     {
       "id": "triage-surface",
-      "version": "0.20.1",
+      "version": "0.20.2",
       "source": "src/renderer/triage.js",
       "global": "__PME_TRIAGE__",
       "requires": [

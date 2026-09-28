@@ -39,6 +39,10 @@
       const knownMentions=initialMentions!==undefined&&Array.isArray(highlights);
       result.channels.push({id,name:str(c.name||c.name_normalized,180),user:userId(c.user)?c.user:undefined,
         is_im:c.is_im===true,is_mpim:c.is_mpim===true,is_archived:c.is_archived===true,
+        // Slack keeps per-conversation mute records in an immutable dictionary.
+        // An absent record in a loaded dictionary means unmuted; a missing
+        // dictionary means unknown and must not erase a previous observation.
+        muted:state.mutedChannels&&typeof state.mutedChannels==='object'?data(data(state.mutedChannels,id),'isMuted')===true:undefined,
         has_unreads:currentCount!==undefined?currentCount>0:initialCount>0||Array.isArray(unreads)&&unreads.length>0?true:knownUnread?false:undefined,
         // Preserve unknown exact counts instead of presenting a guessed total.
         mentionObserved:currentMentions!==undefined?currentMentions>0:initialMentions>0||Array.isArray(highlights)&&highlights.length>0?true:knownMentions?false:undefined,
@@ -67,7 +71,7 @@
   function publish(watch,force=false){
     watch.timer=null;if(disposed)return;
     try{
-      const state=watch.store.getState(),known=accounts(),parts=['channels','channelCursors','channelLatests','unreadCounts','members','messages','threadSub'].map(k=>state[k]);
+      const state=watch.store.getState(),known=accounts(),parts=['channels','channelCursors','channelLatests','unreadCounts','mutedChannels','members','messages','threadSub'].map(k=>state[k]);
       const scope=JSON.stringify([location.pathname,known]);
       if(!force&&watch.parts&&parts.every((p,i)=>p===watch.parts[i])&&watch.scope===scope&&Date.now()-watch.at<30000)return;
       const snapshot=project(state,known);if(!snapshot||typeof window.__pmeClientState!=='function')return;
@@ -126,6 +130,6 @@
       health.workspaces=watches.size;
     }catch{health.errors++;}
   }
-  window.__PME_OBSERVER__={version:'0.14.2',readState,status:()=>({...health}),dispose(){disposed=true;clearInterval(scanTimer);for(const w of watches.values()){w.unsubscribe();clearTimeout(w.timer);}watches.clear();delete window.__PME_OBSERVER__;}};
+  window.__PME_OBSERVER__={version:'0.14.3',readState,status:()=>({...health}),dispose(){disposed=true;clearInterval(scanTimer);for(const w of watches.values()){w.unsubscribe();clearTimeout(w.timer);}watches.clear();delete window.__PME_OBSERVER__;}};
   discover();scanTimer=setInterval(discover,10000);
 })();

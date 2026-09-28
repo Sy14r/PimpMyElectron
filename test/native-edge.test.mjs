@@ -57,3 +57,9 @@ test('queued strip hiding cannot hide a subsequently opened inbox',async()=>{
   const {env,calls}=renderer();env.snapshot.nativeStripReady='123-1';env.syncNativeStrip();env.mode='queue';
   await env.nativeQueue;assert.deepEqual(calls,[]);assert.equal(env.stripSyncPending,false);
 });
+
+test('muted destinations are excluded from native counts and keep their mute flag in global summaries',()=>{
+ const workspaces=[{id:'TONE',items:[{unread:true,muted:true,mentions:1},{unread:true,muted:false}]}];
+ assert.equal(unreadItemCount(workspaces),1);assert.equal(unreadItemCount(notificationSummaries(workspaces)),1);
+ assert.equal(notificationSummaries(workspaces)[0].items[0].muted,true);
+});

@@ -39,3 +39,7 @@ test('personal alias titles preserve conversation context and new-message conten
  const p=preview({kind:'thread',triage:{state:'active',alias:'Launch blockers'}});
  assert.equal(p.title,'Launch blockers');assert.equal(p.subtitle,'One · Thread · Alex');assert.equal(p.messages[0].text,'New content');
 });
+
+test('muting an unread destination invalidates its hover preview',()=>{
+ assert.equal(preview({muted:true,mentionObserved:true}),null);
+});

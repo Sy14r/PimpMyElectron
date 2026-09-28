@@ -75,3 +75,11 @@ test('clicking a background notification selects its workspace and opens the nat
   env.openItem('UNKNOWN');assert.equal(opened.length,1);
  }
 });
+
+test('muted messages and mentions never reveal the pill; unmuting alone does not replay activity',()=>{
+ const track=create();feed(track,[item(false)]);
+ assert.equal(feed(track,[item(true,'1001.000001',{muted:true,mentions:1})]),false);
+ assert.equal(feed(track,[item(true,'1002.000001',{muted:true,unreadCount:2})]),false);
+ assert.equal(feed(track,[item(true,'1002.000001',{muted:false,unreadCount:2})]),false);
+ assert.equal(feed(track,[item(true,'1003.000001',{muted:false})]),true);
+});

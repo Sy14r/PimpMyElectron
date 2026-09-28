@@ -1,5 +1,5 @@
 // The companion only needs geometry and a scoped count, never message content.
-export const unreadItemCount = workspaces => workspaces.reduce((n,w)=>n+w.items.filter(i=>i.unread===true&&!i.pendingRead&&!['done','later'].includes(i.triage?.state)).length,0);
+export const unreadItemCount = workspaces => workspaces.reduce((n,w)=>n+w.items.filter(i=>i.muted!==true&&i.unread===true&&!i.pendingRead&&!['done','later'].includes(i.triage?.state)).length,0);
 export const filterNotificationWorkspaces = (workspaces,settings,inboxScope) => workspaces.filter(w=>
   settings.notificationMode==='inbox'?inboxScope==='*'||w.id===inboxScope:
   settings.notificationMode==='selected'?(settings.notificationWorkspaces||[]).includes(w.id):true);
@@ -7,7 +7,7 @@ export const filterNotificationWorkspaces = (workspaces,settings,inboxScope) => 
 // Keep message bodies in the selected inbox or the explicitly hovered preview.
 export const notificationSummaries = workspaces => workspaces.map(w=>({id:w.id,name:w.name,items:w.items.map(i=>({
   key:i.key,workspaceId:w.id,workspaceName:w.name,channelId:i.channelId,threadTs:i.threadTs,
-  name:i.name,kind:i.kind,pendingRead:i.pendingRead,unread:i.unread,unreadCount:i.unreadCount,latest:i.latest,
+  name:i.name,kind:i.kind,muted:i.muted,pendingRead:i.pendingRead,unread:i.unread,unreadCount:i.unreadCount,latest:i.latest,
   triage:{state:i.triage?.state,alias:i.triage?.alias},messages:[]
 }))}));
 export function nativeEdgeStrip(workspaces, request) {
