@@ -19,6 +19,28 @@ test('J/K and arrows move only the filtered row focus, wrapping without native n
  assert.deepEqual(f.calls,[['focus','two'],['focus','three'],['focus','one'],['focus','three'],['focus','two']]);
  f.env.mode='reply';f.env.selection='one';f.env.inboxNavigationKey(f.event('j'));assert.equal(f.env.selection,'one');assert.equal(f.shadow.activeElement.dataset.key,'three');
 });
+test('0 focuses the first filtered row and resets scroll without opening or replacing a conversation',()=>{
+ for(const mode of ['queue','reply']){
+  const f=setup();f.env.mode=mode;f.env.selection='three';f.shadow.activeElement=f.list.children[2];f.list.scrollTop=500;
+  f.env.filtered=()=>f.rows.slice(1);
+  assert.equal(f.env.inboxNavigationKey(f.event('0')),true);
+  assert.equal(f.shadow.activeElement.dataset.key,'two');assert.equal(f.list.scrollTop,0);
+  assert.equal(f.env.selection,mode==='queue'?'two':'three');assert.equal(f.env.inputMode,'keyboard');
+  assert.deepEqual(f.calls,[['focus','two']]);
+ }
+ const f=setup();f.env.filtered=()=>[];f.list.scrollTop=100;
+ assert.equal(f.env.inboxNavigationKey(f.event('0')),true);assert.equal(f.list.scrollTop,0);assert.deepEqual(f.calls,[]);
+});
+test('0 leaves typing, modified keys, native overlays and normal Slack alone',()=>{
+ const f=setup();f.shadow.activeElement=f.search;assert.equal(f.env.inboxNavigationKey(f.event('0')),false);
+ f.shadow.activeElement=null;
+ for(const extra of [{metaKey:true},{ctrlKey:true},{altKey:true},{shiftKey:true},{isComposing:true},{defaultPrevented:true}])assert.equal(f.env.inboxNavigationKey(f.event('0',extra)),false);
+ f.env.mode='reply';const nativeEvent=f.event('0',{composedPath:()=>[{}]});
+ f.env.window.__PME_REPLY__.overlayOpen=()=>true;assert.equal(f.env.inboxNavigationKey(nativeEvent),false);
+ f.env.window.__PME_REPLY__.overlayOpen=()=>false;f.env.document.activeElement={closest:()=>({})};assert.equal(f.env.inboxNavigationKey(nativeEvent),false);
+ f.env.document.activeElement=null;assert.equal(f.env.inboxNavigationKey(nativeEvent),true);assert.equal(f.shadow.activeElement.dataset.key,'one');
+ f.env.mode='stock';assert.equal(f.env.inboxNavigationKey(f.event('0')),false);
+});
 test('Enter opens the highlighted destination, or focuses an already mounted editor without reopening',()=>{
  const f=setup();f.shadow.activeElement=f.list.children[1];f.env.inboxNavigationKey(f.event('Enter'));assert.deepEqual(f.calls,[['open','two']]);
  f.env.mode='reply';f.env.inboxNavigationKey(f.event('Enter'));assert.deepEqual(f.calls.at(-1),['composer']);

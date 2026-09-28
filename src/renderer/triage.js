@@ -652,7 +652,7 @@
       button.append(el('div','preview',last?.text || (['queued','loading'].includes(item.history?.status)?'Loading messages…':item.history?.status==='error'?'Could not load · open to retry':item.history?.status==='ready'?'No messages returned':'Open to load messages')));
       button.append(el('div','meta',[snapshot.workspaces.length>1?snapshot.workspaces.find(w=>w.id===item.workspaceId)?.name:null,item.kind === 'thread' ? 'Thread' : item.kind === 'channel' ? 'Channel' : 'Direct message', pendingInboxUnread(item)?'Marking unread…':pendingInboxRead(item)?'Marking read…':item.unread === null ? 'Unread unknown' : item.countsStale ? 'Unread state may be stale' : inboxUnread(item) ? 'Unread observed' : 'Read observed',last ? time(last.ts) : null].filter(Boolean).join(' · ')));
       const summary=[displayName(item),threadAlias(item.key)?item.name:null,item.triage?.pinned?'Pinned':null,inboxUnread(item)?'Unread':null,inboxUnread(item)&&item.unreadCount>0?`${item.unreadCount} unread`:null,button.querySelector('.meta')?.textContent,last?.text].filter(Boolean).join(' · ');
-      button.setAttribute('aria-label',summary);button.dataset.pointerTitle=`${summary.slice(0,400)}\nJ/K: move · H/L: filters · /: filter text · Shift+/: clear filter · Enter: reply · X: toggle read / unread · Option-click: read-only`;button.title=host.getAttribute('data-inbox-input')==='keyboard'?'':button.dataset.pointerTitle;button.setAttribute('aria-keyshortcuts','h j k l ArrowLeft ArrowRight ArrowDown ArrowUp Enter x');
+      button.setAttribute('aria-label',summary);button.dataset.pointerTitle=`${summary.slice(0,400)}\nJ/K: move · 0: first row · H/L: filters · /: filter text · Shift+/: clear filter · Enter: reply · X: toggle read / unread · Option-click: read-only`;button.title=host.getAttribute('data-inbox-input')==='keyboard'?'':button.dataset.pointerTitle;button.setAttribute('aria-keyshortcuts','h j k l ArrowLeft ArrowRight ArrowDown ArrowUp Enter x 0');
       $('list').append(button);
     }
     $('list').scrollTop = listScroll;
@@ -938,6 +938,15 @@
     render();const row=[...$('list').children].find(node=>node.dataset.key===item.key);
     row?.focus({preventScroll:true});row?.scrollIntoView({block:'nearest'});
   }
+  function firstInboxRow(){
+    const item=filtered()[0];
+    if(item){
+      if(mode==='queue')selection=item.key;
+      render();
+      [...$('list').children].find(node=>node.dataset.key===item.key)?.focus({preventScroll:true});
+    }
+    $('list').scrollTop=0;
+  }
   function moveInboxFilter(direction){
     const filters=['all','unread','mentions','dms','channels','threads'],index=filters.indexOf(filter);
     filter=filters[(index+direction+filters.length)%filters.length];
@@ -989,11 +998,12 @@
       !fromInbox&&document.activeElement?.closest?.(editable);
     const horizontal=['ArrowLeft','ArrowRight'].includes(event.key),arrows=['ArrowDown','ArrowUp'].includes(event.key),enter=event.key==='Enter';
     if(typing&&!(active===$('search')&&(arrows||enter)))return false;
-    if(!clearFilter&&!arrows&&!horizontal&&!['h','j','k','l','x','/'].includes(key)&&!enter)return false;
+    if(!clearFilter&&!arrows&&!horizontal&&!['h','j','k','l','x','/','0'].includes(key)&&!enter)return false;
     // Keep Enter's ordinary button activation on header and filter controls.
     if(enter&&fromInbox&&!active?.dataset?.key&&active!==$('search'))return false;
     event.preventDefault();event.stopImmediatePropagation();touch();setInboxInput('keyboard');
     if(clearFilter)clearInboxFilter();
+    else if(key==='0')firstInboxRow();
     else if(key==='/'){$('search').focus({preventScroll:true});$('search').select();}
     else if(horizontal||key==='h'||key==='l')moveInboxFilter(event.key==='ArrowLeft'||key==='h'?-1:1);
     else if(arrows||key==='j'||key==='k')moveInboxCursor(event.key==='ArrowUp'||key==='k'?-1:1);

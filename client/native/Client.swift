@@ -3,6 +3,13 @@ import Sparkle
 import WebKit
 import UniformTypeIdentifiers
 
+// The full-size web view consumes mouse events even in the transparent title
+// bar. Keep its reserved top strip native so dragging goes to the Window Server.
+final class WindowDragRegion: NSView {
+    override func acceptsFirstMouse(for event:NSEvent?) -> Bool { true }
+    override func mouseDown(with event:NSEvent) { window?.performDrag(with:event) }
+}
+
 final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, NSWindowDelegate, SPUUpdaterDelegate {
     lazy var updaterController=SPUStandardUpdaterController(startingUpdater:false,updaterDelegate:self,userDriverDelegate:nil)
     var installingUpdate=false
@@ -27,8 +34,18 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         web.isInspectable=false
         window=NSWindow(contentRect:NSRect(x:0,y:0,width:1120,height:780),styleMask:[.titled,.closable,.miniaturizable,.resizable,.fullSizeContentView],backing:.buffered,defer:false)
         window.title="PimpMyElectron";window.titleVisibility = .hidden;window.titlebarAppearsTransparent=true;window.isReleasedWhenClosed=false
+        window.isMovableByWindowBackground=true
         window.backgroundColor=NSColor(calibratedRed:0.066,green:0.074,blue:0.086,alpha:1);window.appearance=NSAppearance(named:.darkAqua)
-        window.minSize=NSSize(width:920,height:650);window.contentView=web;window.delegate=self;window.center()
+        let content=NSView(),dragRegion=WindowDragRegion()
+        web.translatesAutoresizingMaskIntoConstraints=false;dragRegion.translatesAutoresizingMaskIntoConstraints=false
+        content.addSubview(web);content.addSubview(dragRegion)
+        NSLayoutConstraint.activate([
+            web.leadingAnchor.constraint(equalTo:content.leadingAnchor),web.trailingAnchor.constraint(equalTo:content.trailingAnchor),
+            web.topAnchor.constraint(equalTo:content.topAnchor),web.bottomAnchor.constraint(equalTo:content.bottomAnchor),
+            dragRegion.leadingAnchor.constraint(equalTo:content.leadingAnchor),dragRegion.trailingAnchor.constraint(equalTo:content.trailingAnchor),
+            dragRegion.topAnchor.constraint(equalTo:content.topAnchor),dragRegion.heightAnchor.constraint(equalToConstant:28)
+        ])
+        window.minSize=NSSize(width:920,height:650);window.contentView=content;window.delegate=self;window.center()
         let menu=NSMenu(),appItem=NSMenuItem();menu.addItem(appItem);let appMenu=NSMenu();appItem.submenu=appMenu
         appMenu.addItem(withTitle:"About PimpMyElectron",action:#selector(NSApplication.orderFrontStandardAboutPanel(_:)),keyEquivalent:"")
         let check=appMenu.addItem(withTitle:"Check for Updates…",action:#selector(SPUStandardUpdaterController.checkForUpdates(_:)),keyEquivalent:"")

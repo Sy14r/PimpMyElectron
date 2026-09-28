@@ -865,6 +865,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             row.addArrangedSubview(key);row.addArrangedSubview(description);stack.addArrangedSubview(row);row.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         }
         shortcutRow("J / K · ↓ / ↑","Move between inbox rows")
+        shortcutRow("0","Jump to the first inbox row")
         shortcutRow("H / L · ← / →","Cycle inbox filters")
         shortcutRow("Enter","Open the selected item and focus its composer")
         shortcutRow("X","Toggle the selected item read / unread")
@@ -875,7 +876,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         shortcutRow("⌥⇧↓ / ⌥⇧↑","Open the next / previous unread item")
         shortcutRow("F6 / ⇧F6","Cycle inbox, messages, and composer focus (Fn may be needed)")
         shortcutRow("Escape","Leave text focus first, then close the conversation, then collapse the inbox")
-        note("Letter shortcuts stay inactive while typing. In the conversation filter, Down Arrow moves into results. Dialogs handle Escape before the inbox.")
+        note("Single-key shortcuts stay inactive while typing. In the conversation filter, Down Arrow moves into results. Dialogs handle Escape before the inbox.")
         let status=label(!shellOnline ? "Controller disconnected. Settings will be available after reconnecting." : settingsSaving ? "Saving…" : settingsError.isEmpty ? "Changes save automatically on this Mac." : settingsError)
         status.setAccessibilityIdentifier("settings-status");stack.addArrangedSubview(status);status.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         window.contentView?.layoutSubtreeIfNeeded()
