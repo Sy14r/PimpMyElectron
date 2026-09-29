@@ -25,7 +25,7 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   let backdropHelperAt=0,backdropHelperReady=null;
   const knownWorkspaces=new Map(),selectedWorkspaces=new Map();
   const previewSession=createPreviewSession(),sendConfirmation=createSendConfirmation(),quickTargets=new Map(),previewReads=new Map();
-  const uiStates=new Map(),actionResults=new Map();let lastSnapshot={workspaces:[]};
+  const startupStates=new Map(),uiStates=new Map(),actionResults=new Map();let lastSnapshot={workspaces:[]};
   const sessionInfo=JSON.parse(await fs.readFile(path.join(runtimeDir,'session.json'),'utf8').catch(()=>'{}'));
   const launchId=String(sessionInfo.launchId||`${sessionInfo.runtimePid}:${slackPID||sessionInfo.slackPid}`);
   const backdrop=createWindowBackdrop({cdp,file:path.join(runtimeDir,'native-appearance.json'),launchId,profile:sessionInfo.profile||'default'});
@@ -337,7 +337,8 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
         await mods.reconcile(entry);
         if(contextGuard.current(entry)){await backdrop.prepare(entry,mods.enabled('triage-surface')&&local.settings.inboxGlass===true);await syncBackdrop(entry);}
         await evaluate(entry, `if(location.origin==='https://app.slack.com' && location.pathname.match(/^\\/client\\/([TE][A-Z0-9]+)(?:\\/|$)/)?.[1]===${JSON.stringify(workspace)})window.__PME_TRIAGE__?.update(${JSON.stringify(scoped)})`);
-        await evaluate(entry, `window.__PME_TRIAGE__?.startup(${JSON.stringify(launchId)})`);
+        const startup=await evaluate(entry, `window.__PME_TRIAGE__?.startup(${JSON.stringify(launchId)})`);
+        if(startup)startupStates.set(entry.sessionId,{ok:startup.ok===true,home:startup.home===true,seeded:startup.seeded===true,restored:startup.restored===true,cancelled:startup.cancelled===true});
       }
       stats.lastPush = Date.now();
     } catch { /* Reloads destroy execution contexts; next tick recovers. */ }
@@ -345,8 +346,8 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   }, 1500);
   return {
     attach,
-    async detach(entry) {sendConfirmation.clear(entry.sessionId);quickTargets.delete(entry.sessionId);attached.delete(entry.sessionId);boundContexts.delete(entry.sessionId);uiStates.delete(entry.sessionId);actionResults.delete(entry.sessionId);selectedWorkspaces.delete(entry.sessionId);backdrop.detach(entry);mods.detach(entry);syncConnectivity(); },
-    status: () => ({ backdrop:{...backdrop.status(),helperReady:!!backdropHelperReady&&shell.backdropConnected()},quickSend:sendConfirmation.status(),callbackSecurity:{rejected:rejectedCallbacks,ready:[...sessions.values()].filter(e=>contextGuard.current(e)).length}, ...store.status(), ...stats, customApi:{...customApi,methods:{...customApi.methods}}, methods: Object.fromEntries(observedMethods), shapes: Object.fromEntries(shapes), socketTypes: Object.fromEntries(socketTypes),
+    async detach(entry) {startupStates.delete(entry.sessionId);sendConfirmation.clear(entry.sessionId);quickTargets.delete(entry.sessionId);attached.delete(entry.sessionId);boundContexts.delete(entry.sessionId);uiStates.delete(entry.sessionId);actionResults.delete(entry.sessionId);selectedWorkspaces.delete(entry.sessionId);backdrop.detach(entry);mods.detach(entry);syncConnectivity(); },
+    status: () => ({ startup:[...startupStates.values()], backdrop:{...backdrop.status(),helperReady:!!backdropHelperReady&&shell.backdropConnected()},quickSend:sendConfirmation.status(),callbackSecurity:{rejected:rejectedCallbacks,ready:[...sessions.values()].filter(e=>contextGuard.current(e)).length}, ...store.status(), ...stats, customApi:{...customApi,methods:{...customApi.methods}}, methods: Object.fromEntries(observedMethods), shapes: Object.fromEntries(shapes), socketTypes: Object.fromEntries(socketTypes),
       shell:{connected:shell.connected(),hotkeyRegistered:nativeHotkey,stockHotkeyRegistered:nativeStockHotkey},network:refreshes.status().online?'available':'offline',apiPolicy:'manual-only',refreshQueue:{active:refreshes.status().active,queued:refreshes.status().queued},activity:refreshes.status().workspaces.map(a=>({status:a.status,at:a.at,attemptAt:a.attemptAt,nextAt:a.nextAt,hasMore:a.hasMore,countsAvailable:a.countsAvailable,threadsAvailable:a.threadsAvailable})),history:history.status(),mode: 'triage-with-native-reply', mods:mods.status(),liveUI:mods.enabled('triage-surface'), partial: true }),
     async dispose() {
       if(disposed)return;

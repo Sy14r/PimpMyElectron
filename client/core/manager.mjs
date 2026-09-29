@@ -1,3 +1,4 @@
+import {releaseHistory} from './releases.mjs';
 import {assertNoUpdate,prepareUpdate,clearUpdate} from './update-gate.mjs';
 import {inspectSpotify,waitForSpotifyHelper} from './spotify.mjs';
 import {supportedApps} from './app-support.mjs';
@@ -173,6 +174,7 @@ export class ClientManager {
  async dispatch(request){
   if(!request||typeof request!=='object'||Array.isArray(request))throw Error('Invalid request');
   if(request.op==='status')return this.snapshot();
+  if(request.op==='release-history')return releaseHistory(this.root,this.clientVersion.version);
   if(this.busy)throw Error('Please wait for the current action to finish.');this.busy=true;
   try{switch(request.op){case 'update-prepare':return await withLaunchLock(this.dataDir,()=>prepareUpdate(this,{processes:()=>{const p=spawnSync('/bin/ps',['-axo','command='],{encoding:'utf8'});if(p.status!==0)throw Error('Could not verify running mod sessions. Retry the update.');return p.stdout.split('\n');}}));case 'update-cancel':return await withLaunchLock(this.dataDir,()=>clearUpdate(this));case 'update-finish':return await withLaunchLock(this.dataDir,()=>clearUpdate(this,true));case 'scan':return await this.rescan();case 'add-app':return await this.rescan(request.path);case 'shortcut-create':return await this.createShortcut(request.appId,request.path);case 'shortcut-update':return await this.updateShortcut(request.appId,request.profileId);case 'shortcut-location':return await this.shortcutLocation(request.profileId,request.path);case 'shortcut-forget':await fs.rm(profileFile(this.dataDir,request.profileId),{force:true});return this.snapshot();case 'select':return await this.select(request);case 'launch':return await this.start(request.appId);case 'stop':return await this.stop(request.appId);case 'show':return await this.show(request.appId,request.view);case 'import':return await this.importSetup(request.appId,request.path);default:throw Error('Unsupported client action');}}
   finally{this.busy=false;}

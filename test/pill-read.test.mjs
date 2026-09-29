@@ -6,7 +6,7 @@ function setup(){
  const env={mode:'cluster',connected:()=>true,pillReadPending:null,pillReadRun:0,disposed:false,
   paintPillDismissal:()=>Promise.resolve(),notificationItems:()=>[item],renderPill:()=>calls.push('render'),schedulePillCollapse:()=>{},touch:()=>{},
   Date:{now:()=>now},setTimeout:fn=>{now+=200;queueMicrotask(fn);},document:{body:{setAttribute:k=>attrs.add(k),removeAttribute:k=>attrs.delete(k)}},
-  window:{__PME_REPLY__:{open:async(target,options)=>{calls.push({target,options});return new Promise(r=>resolveOpen=r);},markReadNative:()=>{calls.push('read');item.unread=false;},suspend:()=>calls.push('suspend')}}};
+  window:{__PME_REPLY__:{open:async(target,options)=>{calls.push({target,options});return new Promise(r=>resolveOpen=r);},markReadNative:()=>{calls.push('read');item.unread=false;return {ok:true};},suspend:()=>calls.push('suspend')}}};
  vm.runInNewContext(source.slice(start,end),env);
  return {env,calls,attrs,item,open:value=>resolveOpen(value)};
 }
@@ -96,4 +96,12 @@ test('background read parks the native conversation before releasing its hidden 
  const pending=s.env.readFromPill({key:s.item.key});await new Promise(r=>setImmediate(r));s.open({ok:true});await new Promise(r=>setImmediate(r));
  assert.equal(s.attrs.has('data-pme-background-read'),true);assert.ok(s.env.pillReadPending);
  finishPark({ok:true});await pending;assert.equal(s.attrs.size,0);assert.equal(s.env.pillReadPending,null);
+});
+
+
+test('unavailable native read immediately rolls back and parks instead of waiting for a confirmation that cannot arrive',async()=>{
+ const s=setup();s.env.window.__PME_REPLY__.markReadNative=()=>({ok:false,error:'unavailable'});
+ const pending=s.env.readFromPill({key:s.item.key});await new Promise(r=>setImmediate(r));s.open({ok:true});
+ assert.equal((await pending).error,'unavailable');assert.equal(s.env.Date.now(),0);
+ assert.equal(s.item.unread,true);assert.equal(s.env.pillReadPending,null);assert.equal(s.attrs.size,0);assert.ok(s.calls.includes('suspend'));
 });

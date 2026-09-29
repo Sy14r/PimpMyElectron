@@ -13,3 +13,12 @@ test('muted entries remain in content filters but never enter Unread or pill, ev
  e.heldRow={key:'0',filter:'unread'};e.pillReadPending={key:'0',unread:true};assert.equal(e.filtered().length,1);assert.equal(e.inboxUnread(e.rows[0]),false);
  e.rows[0].muted=false;assert.equal(e.filtered().length,2);assert.equal(e.pillItems().length,2);
 });
+
+test('Apps & agents has a dedicated filter without changing read or mute policy',()=>{
+ const e=setup();e.rows[0].appConversation=true;e.rows[3].appConversation=true;
+ e.filter='apps';assert.deepEqual(Array.from(e.filtered(),i=>i.key),['0']);
+ e.filter='dms';assert.deepEqual(Array.from(e.filtered(),i=>i.key),['1','live']);
+ e.filter='threads';assert.deepEqual(Array.from(e.filtered(),i=>i.key),['3']);
+ e.filter='unread';assert.deepEqual(Array.from(e.filtered(),i=>i.key),['live']);
+ e.filter='all';assert.equal(e.filtered().length,5);
+});

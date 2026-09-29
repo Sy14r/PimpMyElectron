@@ -48,7 +48,7 @@
     },
     {
       "id": "triage-surface",
-      "version": "0.20.2",
+      "version": "0.20.3",
       "source": "src/renderer/triage.js",
       "global": "__PME_TRIAGE__",
       "requires": [

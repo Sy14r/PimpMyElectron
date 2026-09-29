@@ -131,3 +131,14 @@ test('muting preserves Slack unread and mentions, applies to child threads and s
  s.ingestClientState({workspaceId:'TONE',channels:[{id:'DONE',muted:false}]});
  assert.ok(s.snapshot().workspaces.find(w=>w.id==='TONE').items.every(i=>!i.muted&&i.unread));
 });
+
+test('app DMs use workspace-scoped peer classification, preserving threads and partial observations',()=>{
+ const s=new ActivityStore();
+ s.ingestClientState({workspaceId:'TONE',channels:[{id:'DAPP',is_im:true,user:'UAPP'},{id:'DBOT',is_im:true,user:'USLACKBOT'},{id:'CHUMAN',name:'general'}],users:[{id:'UAPP',name:'Agent',is_bot:true}],threads:[{channel:'DAPP',ts:'100.1'}]});
+ assert.equal(item(s,'DAPP').appConversation,true);assert.equal(item(s,'DAPP').kind,'dm');
+ assert.equal(item(s,'DBOT').appConversation,true);assert.equal(item(s,'CHUMAN').appConversation,false);
+ const thread=s.snapshot().workspaces[0].items.find(i=>i.threadTs);assert.equal(thread.appConversation,true);assert.equal(thread.kind,'thread');
+ s.ingestClientState({workspaceId:'TONE',users:[{id:'UAPP',name:'Agent renamed'}]});assert.equal(item(s,'DAPP').appConversation,true);
+ s.ingestClientState({workspaceId:'TTWO',channels:[{id:'DAPP',is_im:true,user:'UAPP'}],users:[{id:'UAPP',is_bot:false,is_app_user:false}]});assert.equal(item(s,'DAPP','TTWO').appConversation,false);
+ s.ingestClientState({workspaceId:'TONE',users:[{id:'UAPP',is_bot:false,is_app_user:false}]});assert.equal(item(s,'DAPP').appConversation,false);
+});

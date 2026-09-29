@@ -8,7 +8,7 @@ const transitionSource='function transition('+functionSource('function transitio
 function motionEnv(mode,{reduced=false,staged=false}={}){
  const calls=[],env={transitionEpoch:0,setInboxGlass:async()=>false,focusInbox:()=>{},workspaceDialog:{open:false},aliasDialog:{open:false},densityMenu:{matches:()=>false},mode,pillReadPending:null,quickReply:null,disposed:false,stagedDetail:staged,innerWidth:mode==='queue'||staged?420:820,openSequence:0,openingKey:null,
   hoverTimer:0,hoverIntent:null,pillIdleTimer:0,pillPointerInside:false,touch(){},schedulePillCollapse(){},clearTimeout(){},setPillPreview(){},nativeQueue:Promise.resolve(),document:{activeElement:null},
-  window:{matchMedia:()=>({matches:reduced}),__PME_REPLY__:{suspend:()=>calls.push('suspend'),status:()=>({ready:true})}},
+  window:{matchMedia:()=>({matches:reduced}),__PME_REPLY__:{status:()=>({ready:false}),suspend:()=>calls.push('suspend'),status:()=>({ready:true})}},
   setDetailMotion:()=>calls.push('mask'),clearDetailMotion:()=>{calls.push('unmask');env.stagedDetail=false;},
   concealWindow:async()=>calls.push('hide'),applyLayout:()=>calls.push('layout:'+env.mode),render(){},geometry:async(next,options)=>calls.push(`geometry:${next}:${options.animate}`),
   $:()=>({focus(){}}),reportShell(){}};
@@ -31,7 +31,7 @@ function openingEnv(){
  const calls=[];let loaded,revealed;
  const loading=new Promise(resolve=>{loaded=resolve;}),reveal=new Promise(resolve=>{revealed=resolve;});
  const env={clearInboxFilter:()=>calls.push('clear-filter'),mode:'queue',quickReply:null,stagedDetail:false,openSequence:0,disposed:false,nativeQueue:Promise.resolve(),filtered:()=>[],filter:'all',snapshot:{},
-   window:{__PME_REPLY__:{suspend:()=>calls.push('suspend'),open:(_item,options)=>{calls.push(['open',options.focusEditor]);return loading;},focus:()=>calls.push('focus')}},
+   window:{__PME_REPLY__:{status:()=>({ready:false}),suspend:()=>calls.push('suspend'),open:(_item,options)=>{calls.push(['open',options.focusEditor]);return loading;},focus:()=>calls.push('focus')}},
    transition:async(next,{stage=false}={})=>{env.mode=next;calls.push(stage?'stage':'reveal');if(!stage)await reveal;},render:()=>calls.push('render')};
  vm.runInNewContext(startReplySource,env);
  return {env,calls,loaded,revealed};
@@ -127,5 +127,18 @@ test('opening a conversation clears search before navigation, but compose and qu
   assert.equal(f.calls.includes('clear-filter'),clear);
   if(clear)assert.ok(f.calls.indexOf('clear-filter')<f.calls.indexOf('suspend'));
   f.loaded();f.revealed();await pending;
+ }
+});
+
+
+test('visible unread app conversations acknowledge through Slack only after opening and reveal finish',async()=>{
+ for(const variant of ['read-only','editable','already-read','wrong-target','loading','cancelled','linked-message']){
+  const f=openingEnv(),item={key:'TONE:DAPP:',workspaceId:'TONE',channelId:'DAPP',unread:variant!=='already-read'};
+  f.env.window.__PME_REPLY__.status=()=>({ready:variant!=='loading',readOnly:variant!=='editable',target:{key:variant==='wrong-target'?'TONE:DOTHER:':item.key}});
+  f.env.window.__PME_REPLY__.markReadNative=()=>{f.calls.push('read');return {ok:true};};
+  const pending=f.env.startReply(item,{preservePosition:variant==='linked-message'});await flush();
+  f.loaded();await flush();assert.equal(f.calls.includes('read'),false);
+  if(variant==='cancelled')f.env.openSequence++;
+  f.revealed();await pending;assert.equal(f.calls.includes('read'),variant==='read-only');
  }
 });

@@ -10,7 +10,7 @@ function fixture({visible=false,minimized=false,stripHidden=false}={}){
  const bridge={getWindowId:async()=>1,callBrowserWindowMethod:async(_id,method,...args)=>{
   calls.push([method,...args]);return {isVisible:visible,isMinimized:minimized}[method];
  }};
- const env={compactBounds:null,nativeStripRequest:null,nativeStripHidden:stripHidden,window:{desktop:{window:bridge}},
+ const env={saveStockBounds(){},fitStockBounds:b=>b,compactBounds:null,nativeStripRequest:null,nativeStripHidden:stripHidden,window:{desktop:{window:bridge}},
   desktop:{screen:{getAllDisplays:async()=>[{id:1,workArea:area}],getPrimaryDisplay:async()=>({id:1,workArea:area})}},
   original:{min:[400,300],bounds:{x:20,y:30,width:900,height:700},top:false,spaces:false},spacesApplied:true,glassHelper:false,
   sessionStorage:{removeItem(){},setItem(){}},settings:{display:'main'},layoutKey:'layout',edge:'left',quickReply:null,innerWidth:420,

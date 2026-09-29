@@ -4,7 +4,7 @@ function setup({thread=null,delayFirstSelection=false,openingThread=null,nativeC
   let clockOffset=0;
   const attributes=new Map(),bodyAttributes=new Map(),listeners=new Map(),storage=new Map(),navigations=[];let focused=false,removed=false,tick;const events=[];
   let threadPending=false,threadClosed=false;
-  const readButton={disabled:false,clicks:0,click(){this.clicks++;}};
+  const readButton={disabled:false,getAttribute(){return null;},clicks:0,click(){this.clicks++;}};
   const native={team:'TONE',threadCloses:0,switches:0,selects:0,composeClicks:0,threadNavigations:[],latestJumps:0,replyJumps:[]};
   const teamButton={getAttribute:()=> 'TTWO',click(){native.switches++;native.team='TTWO';location.pathname='/client/TTWO/COLD';}};
   const channelRow={getAttribute:()=> 'CTWO',click(){if(selectionThrows)throw Error('native navigation failed');native.selects++;if(!delayFirstSelection||native.selects>1)box.channel='CTWO';location.pathname='/client/TTWO/CTWO';}};
@@ -385,10 +385,10 @@ test('unread rejects missing actions, mismatched workspaces, and wrong-thread or
 });
 
 
-test('channel read falls back to the banner action without clearing separate threads or accepting wrong-workspace callbacks',async()=>{
+test('channel read uses the native action without clearing separate threads or accepting wrong-workspace callbacks',async()=>{
  for(const team of ['TONE','TTWO']){
   const e=setup({nativeCallbacks:true,callbackTeam:team});e.readButton.hidden=true;await e.api.open({workspaceId:'TONE',channelId:'CONE'});
-  assert.equal(e.api.markReadNative().ok,team==='TONE');assert.equal(e.native.readConversation?.channelId,team==='TONE'?'CONE':undefined);assert.equal(e.native.threadReads,undefined);e.api.dispose();
+  assert.equal(e.api.markReadNative().ok,team==='TONE');assert.equal(e.native.readConversation?.channelId,team==='TONE'?'CONE':undefined);assert.equal(e.native.threadReads,undefined);if(team==='TONE')assert.equal(e.native.readConversation.reason,'clicked');e.api.dispose();
  }
 });
 
@@ -436,4 +436,18 @@ test('normal thread replies mark read only after server confirmation and keep th
  assert.ok(e.events.includes('pme-native-send-confirmed'));e.advance(2000);e.tick();
  assert.equal(e.events.includes('pme-native-quick-sent'),false);assert.equal(e.api.status().ready,true);
  e.api.dispose();
+});
+
+
+test('app read prefers its scoped native action over Slack’s repurposed unread-options button',async()=>{
+ const e=setup({notificationOnly:true,nativeCallbacks:true});e.readButton.getAttribute=()=> 'menu';
+ await e.api.open({workspaceId:'TONE',channelId:'CONE'});
+ assert.equal(e.api.markReadNative().ok,true);assert.equal(e.readButton.clicks,0);
+ assert.equal(e.native.readConversation.channelId,'CONE');assert.equal(e.native.readConversation.reason,'clicked');
+ e.callbacks.markMostRecentMsgRead=()=>{throw Error('native action unavailable');};
+ assert.equal(e.api.markReadNative().ok,false);assert.equal(e.readButton.clicks,0);e.api.dispose();
+});
+test('legacy read fallback never mistakes the unread-options menu for mark read',async()=>{
+ const e=setup();e.readButton.getAttribute=()=> 'menu';await e.api.open({workspaceId:'TONE',channelId:'CONE'});
+ assert.equal(e.api.markReadNative().ok,false);assert.equal(e.readButton.clicks,0);e.api.dispose();
 });

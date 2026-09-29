@@ -332,11 +332,20 @@
     return run!==generation||disposed?{cancelled:true}:{ok:false,error:'Slack could not leave the conversation. Open Normal Slack and close its detail pane.'};
   }
   async function home(){
-    suspend();const run=generation,deadline=Date.now()+5000;let clicked=false;
+    suspend();const run=generation,deadline=Date.now()+15000;let clicked=false,stableAt=null,signature=null;
     while(!disposed&&run===generation&&Date.now()<deadline){
       const tab=document.querySelector('[data-qa="tab_rail_home_button"]');
-      if(tab?.getAttribute('aria-selected')==='true')return {ok:true};
-      if(tab&&!clicked){clicked=true;tab.click();}
+      const selected=tab?.getAttribute('aria-selected')==='true';
+      // Selection changes before Home mounts. Wait for its actual sidebar and
+      // a settled first set of rows so startup captures Home, not the old tab.
+      const sidebar=selected?document.querySelector('[data-qa="channel-sidebar"]'):null;
+      const tree=sidebar?.querySelector('[role="tree"]');
+      if(tree){
+        const next=[...tree.querySelectorAll('[data-qa="channel-sidebar-channel"]')].map(n=>n.getAttribute('data-qa-channel-sidebar-channel-id')).join(',');
+        if(next!==signature){signature=next;stableAt=Date.now();}
+        if(Date.now()-stableAt>=500)return {ok:true};
+      }else{stableAt=null;signature=null;}
+      if(tab&&!selected&&!clicked){clicked=true;tab.click();}
       await pause(50);
     }
     return disposed||run!==generation?{cancelled:true}:{ok:false};
@@ -433,13 +442,19 @@
         p.threadTs===target.threadTs&&/^\d+\.\d+$/.test(p.maxMarkableTs)&&typeof instance?.markThreadRead==='function'?()=>instance.markThreadRead():null);
       if(!mark)return {ok:false};mark();return {ok:true};
     }
-    // Slack's own unread banner button, scoped to the verified conversation.
-    const button=pane.querySelector('button.p-message_pane__unread_banner__close_icon');
-    if(button){if(button.disabled)return {ok:false};button.click();return {ok:true};}
-    // Some channel layouts omit the banner. Its native action still exists;
-    // avoid "mark all" because that would also clear separate unread threads.
-    const mark=nativeCapability(pane.querySelector('.c-virtual_list'),p=>typeof p.markMostRecentMsgRead==='function'?()=>p.markMostRecentMsgRead({channelId:target.channelId}):null);
-    if(!mark)return {ok:false};mark();return {ok:true};
+    // Slack reuses the old close-button class for an unread-options menu.
+    // Prefer the actual conversation action, with the same explicit reason as
+    // Slack's Mark as read command. Never use mark-all (it includes threads).
+    const mark=nativeCapability(pane.querySelector('.c-virtual_list'),p=>typeof p.markMostRecentMsgRead==='function'?()=>p.markMostRecentMsgRead({channelId:target.channelId,reason:'clicked'}):null);
+    try{
+      if(mark){mark();return {ok:true};}
+      // Older clients expose only the banner button. A menu trigger is not a
+      // read action, even when Slack gives it the same CSS class.
+      const button=pane.querySelector('button.p-message_pane__unread_banner__close_icon');
+      const popup=button?.getAttribute('aria-haspopup');
+      if(!button||button.disabled||popup&&popup!=='false')return {ok:false,error:'unavailable'};
+      button.click();return {ok:true};
+    }catch{return {ok:false,error:'unavailable'};}
   }
   function markUnreadNative(){
     if(!verifiedPane()||state!=='ready'||auxiliary||['compose','search','activity'].includes(target?.kind))return {ok:false};

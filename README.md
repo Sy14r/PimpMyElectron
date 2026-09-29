@@ -117,7 +117,7 @@ open until explicitly dismissed.
 
 Before moving to another Mac, run `npm run doctor` there. It checks the installed Slack distribution, version, signature, profile ownership and build prerequisites without launching Slack or reading account data. The launcher detects Mac App Store and official direct-download distributions and selects their separate development profiles. See the setup guide for the current validation status. Build a clean source transfer with `npm run package:pilot`; the zip under `dist/` includes Start/Stop command files and excludes private state and send experiments. See [pilot setup](pilot/README.md) and [next pilot proof points](research/pilot-next.md).
 
-Quit Slack normally, then run `npm run dev`. The launcher starts official Slack in its owned development profile and automatically builds/starts the native menu controller. Existing development sign-ins persist. Each fresh launch selects Slack’s Home tab and then opens the triage inbox. Reloading the mod does not repeat startup navigation. Conversation-free Activity remains parked behind the inbox to prevent background auto-reads. Press **⌘⇧Y from another app**, open or triage an item, then **⌘⇧Y** back to your work. Local triage decisions do not change Slack unread state. **Selecting an item opens Slack’s own conversation or thread pane alongside the queue immediately**, including its composer. There is no separate Reply click or custom-reader load first. **Option-click on an item** opens the lightweight cached reader. The ready native pane uses Slack’s own header; local triage actions remain in the cached reader and through keyboard shortcuts when focus is on the queue. **⌘⇧Y** collapses/reopens it while Slack keeps the draft. Opening the native view may mark the conversation read; **Done** remains local. **Open in Slack** is the ordinary-window fallback.
+Quit Slack normally, then run `npm run dev`. The launcher starts official Slack in its owned development profile and automatically builds/starts the native menu controller. Existing development sign-ins persist. Each fresh launch selects Slack’s Home tab, waits for its sidebar to mount and settle, captures the existing cached workspace state, and then opens the triage inbox automatically. Reloading the mod does not repeat startup navigation. Conversation-free Activity remains parked behind the inbox to prevent background auto-reads. Press **⌘⇧Y from another app**, open or triage an item, then **⌘⇧Y** back to your work. Local triage decisions do not change Slack unread state. **Selecting an item opens Slack’s own conversation or thread pane alongside the queue immediately**, including its composer. There is no separate Reply click or custom-reader load first. **Option-click on an item** opens the lightweight cached reader. The ready native pane uses Slack’s own header; local triage actions remain in the cached reader and through keyboard shortcuts when focus is on the queue. **⌘⇧Y** collapses/reopens it while Slack keeps the draft. Opening the native view may mark the conversation read; **Done** remains local. **Open in Slack** is the ordinary-window fallback.
 
 Use the **Inbox density** button beside the conversation filter to choose **Expanded** (the original two-line preview cards), **Cozy** (one-line previews with timestamps), or **Compact** (slim name/status rows). Compact rows keep their cached preview and full status in the hover tooltip and accessible label. Workspace labels remain visible in All workspaces. The choice is saved across launches and also appears in Settings → Appearance & behavior → Inbox density. Changing density affects the inbox list without resizing or reopening the native side pane.
 
@@ -248,3 +248,21 @@ support is currently claimed.
 `scripts/inspect_slack.py` reads the application bundle, fuses, archive metadata, and signature. `scripts/cdp.mjs` supplies a small bounded CDP client. `scripts/experiment.mjs` tests mod behavior. `scripts/native-window-experiment.mjs` tests reversible window changes. `scripts/pipe-experiment.mjs` verifies the preferred transport. `mods/runtime.json` is the live versioned manifest; `src/mod-loader.mjs` implements capability checks, independent installation/removal and a compatibility ledger. Other files in `mods/` support the older synthetic experiments. The loader is not a sandbox for untrusted code or a guarantee of future Slack compatibility.
 
 `.lab/` contains disposable profiles, logs, temporary extracted application code, and the patched archive copy. It is ignored and should not be committed or shared. `evidence/` contains local experiment results and screenshots; these artifacts are also ignored. Only its explanatory README is tracked.
+
+
+### Release history and feedback
+
+The manager’s **About PME → What’s new** tab shows the installed release and bundled older
+release notes offline. Release builds include the versioned notes in
+`client/releases/`; add the new version’s notes before building a release.
+
+**About PME → Feedback** contains a bug-report or idea form. Users review the full report before
+copying it or opening a prefilled GitHub issue. GitHub drafts require an account
+and are public when submitted. PME does not submit the issue automatically.
+Optional version details include PME, the selected application and its selected
+mods; workspace data, logs, account details and installation paths are excluded.
+
+Full-Slack window position and size are saved in the PME Slack profile across
+restarts. Restoring a window clamps its bounds to a connected display if the
+previous monitor is unavailable. Inbox and pill dimensions are not saved as the
+full-Slack size.

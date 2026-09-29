@@ -50,7 +50,7 @@
     }
     const peers=result.channels.map(c=>c.user).filter(Boolean),names=[...new Set([...peers,...keys(state.members,1201).filter(userId)])];
     if(names.length>1200)result.truncated=true;
-    for(const id of names.slice(0,1200)){const u=data(state.members,id);if(u?.id===id)result.users.push({id,name:str(u.profile?.display_name||u.profile?.real_name||u.real_name||u.name,160)});}
+    for(const id of names.slice(0,1200)){const u=data(state.members,id);if(u?.id===id)result.users.push({id,is_bot:typeof u.is_bot==='boolean'?u.is_bot:undefined,is_app_user:typeof u.is_app_user==='boolean'?u.is_app_user:undefined,name:str(u.profile?.display_name||u.profile?.real_name||u.real_name||u.name,160)});}
     // Latest activity first, bounded independently of workspace size.
     const messageChannels=keys(state.messages,601).filter(channelId);if(messageChannels.length>100)result.truncated=true;
     const messages=[];
@@ -82,7 +82,7 @@
       watch.parts=parts;watch.scope=scope;
       if(!force&&serialized===watch.last&&Date.now()-watch.at<30000)return;
       window.__pmeClientState(serialized);watch.last=serialized;watch.at=Date.now();
-      health.snapshots++;health.lastSnapshot=watch.at;health.truncated=snapshot.truncated;
+      health.snapshots++;health.lastSnapshot=watch.at;health.truncated=snapshot.truncated;return true;
     }catch{health.errors++;}
   }
   function readState(request){
@@ -130,6 +130,15 @@
       health.workspaces=watches.size;
     }catch{health.errors++;}
   }
-  window.__PME_OBSERVER__={version:'0.14.3',readState,status:()=>({...health}),dispose(){disposed=true;clearInterval(scanTimer);for(const w of watches.values()){w.unsubscribe();clearTimeout(w.timer);}watches.clear();delete window.__PME_OBSERVER__;}};
+  function capture(){
+    // Startup needs the Home seed before parking Activity, rather than waiting
+    // for the periodic discovery/debounce. Read existing stores only.
+    if(disposed)return false;
+    discover();let current=false;
+    const id=location.pathname.match(/^\/client\/([TE][A-Z0-9]+)/)?.[1];
+    for(const [workspaceId,watch] of watches){clearTimeout(watch.timer);const published=publish(watch,true);if(workspaceId===id&&published)current=true;}
+    return current;
+  }
+  window.__PME_OBSERVER__={version:'0.14.3',readState,capture,status:()=>({...health}),dispose(){disposed=true;clearInterval(scanTimer);for(const w of watches.values()){w.unsubscribe();clearTimeout(w.timer);}watches.clear();delete window.__PME_OBSERVER__;}};
   discover();scanTimer=setInterval(discover,10000);
 })();

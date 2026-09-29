@@ -152,7 +152,22 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage) {
         guard message.frameInfo.isMainFrame,message.frameInfo.request.url?.standardizedFileURL==uiURL.appendingPathComponent("index.html").standardizedFileURL,
               let raw=message.body as? [String:Any],let id=raw["id"] as? Int,let op=raw["op"] as? String else{return}
-        guard ["status","scan","select","launch","stop","show","add-app","import","data-folder","shortcut-create","shortcut-update","shortcut-rename","shortcut-remove","shortcut-reveal","shortcut-forget","update-check"].contains(op) else {fail(id,"Unsupported client action");return}
+        guard ["feedback-copy","feedback-open","release-history","status","scan","select","launch","stop","show","add-app","import","data-folder","shortcut-create","shortcut-update","shortcut-rename","shortcut-remove","shortcut-reveal","shortcut-forget","update-check"].contains(op) else {fail(id,"Unsupported client action");return}
+        if op=="feedback-copy" || op=="feedback-open" {
+            guard let title=raw["title"] as? String,let body=raw["body"] as? String,
+                  !title.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,title.count<=120,body.count<=6000 else {fail(id,"The feedback report is too long.");return}
+            if op=="feedback-copy" {
+                NSPasteboard.general.clearContents();NSPasteboard.general.setString(title+"\n\n"+body,forType:.string)
+                reply(["id":id,"ok":true]);return
+            }
+            // Fixed destination; the web view cannot use this bridge to open an
+            // arbitrary URL. The reviewed report becomes an unsubmitted draft.
+            var url=URLComponents(string:"https://github.com/Sy14r/PimpMyElectron/issues/new")!
+            url.queryItems=[URLQueryItem(name:"title",value:title),URLQueryItem(name:"body",value:body)]
+            guard let destination=url.url,destination.absoluteString.utf8.count<=16000 else {fail(id,"This report is too long for a browser draft. Use Copy report instead.");return}
+            guard NSWorkspace.shared.open(destination) else {fail(id,"Could not open your browser. Use Copy report instead.");return}
+            reply(["id":id,"ok":true]);return
+        }
         if op=="update-check" {updaterController.checkForUpdates(nil);reply(["id":id,"ok":true]);return}
         if op=="data-folder" {NSWorkspace.shared.open(dataURL);reply(["id":id,"ok":true]);return}
         var request:[String:Any]=["id":id,"op":op]

@@ -52,7 +52,7 @@ export class ActivityStore {
     if (!workspaceID(id)) return null;
     if (!this.workspaces.has(id)) {
       if (this.workspaces.size >= this.maxWorkspaces) this.workspaces.delete(this.workspaces.keys().next().value);
-      this.workspaces.set(id, { id, name: id, items: new Map(), users: new Map(), mutedChannels: new Set(), observedAt: 0, methods: new Set() });
+      this.workspaces.set(id, { id, name: id, items: new Map(), users: new Map(), appUsers: new Map(), mutedChannels: new Set(), observedAt: 0, methods: new Set() });
     }
     return this.workspaces.get(id);
   }
@@ -75,7 +75,9 @@ export class ActivityStore {
     if (typeof u?.id !== 'string' || !/^[UW][A-Z0-9]+$/.test(u.id)) return;
     ws.users.delete(u.id);
     ws.users.set(u.id, text(u.profile?.display_name || u.profile?.real_name || u.real_name || u.name || u.id, 160));
-    while (ws.users.size > this.maxUsers) ws.users.delete(ws.users.keys().next().value);
+    if (u.id==='USLACKBOT'||u.is_bot===true||u.is_app_user===true) ws.appUsers.set(u.id,true);
+    else if (u.is_bot===false&&u.is_app_user===false) ws.appUsers.set(u.id,false);
+    while (ws.users.size > this.maxUsers) {const oldest=ws.users.keys().next().value;ws.users.delete(oldest);ws.appUsers.delete(oldest);}
   }
   conversation(ws, raw, kind) {
     if (!raw || !channelID(raw.id)) return;
@@ -245,12 +247,13 @@ export class ActivityStore {
     return { revision: this.revision, generatedAt: now, partial: true, workspaces: [...this.workspaces.values()].map(ws => {
       const channelNames=new Map([...ws.items.values()].filter(i=>!i.threadTs).map(i=>[i.channelId,i.name]));
       const itemName=item=>{const base=item.threadTs?ws.items.get(`${ws.id}:${item.channelId}:`)||item:item;return base.peer?ws.users.get(base.peer)||base.name:base.name;};
+      const appConversation=item=>{const base=item.threadTs?ws.items.get(`${ws.id}:${item.channelId}:`)||item:item;return base.kind==='dm'&&(base.peer==='USLACKBOT'||ws.appUsers.get(base.peer)===true);};
       return ({
       id: ws.id, name: ws.name, observedAt: ws.observedAt,clientState:{at:ws.clientStateAt||0,truncated:ws.clientStateTruncated===true}, methods: [...ws.methods],
       items: [...ws.items.values()].filter(i => !i.archived).map(item => ({
         key: item.key, workspaceId: ws.id, channelId: item.channelId, threadTs: item.threadTs,
         name: itemName(item), peer: (item.threadTs?ws.items.get(`${ws.id}:${item.channelId}:`)||item:item).peer,
-        kind: item.kind, muted:ws.mutedChannels.has(item.channelId), mentionObserved:item.mentionObserved, unread: item.unread, unreadCount: item.unreadCount, mentions: item.mentions,
+        kind: item.kind, appConversation:appConversation(item), muted:ws.mutedChannels.has(item.channelId), mentionObserved:item.mentionObserved, unread: item.unread, unreadCount: item.unreadCount, mentions: item.mentions,
         countsStale: !item.countsAt || now - item.countsAt > 60000,
         observedAt: item.observedAt, stale: now - item.observedAt > 60000, latest: item.latest,lastRead:item.lastRead||null,
         source: item.source, historyObserved: item.historyObserved,

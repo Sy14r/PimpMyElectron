@@ -124,3 +124,22 @@ test('workspace mute dictionaries publish independently of unread state and pres
  e.stores[0].state={...one,mutedChannels:undefined};e.change();e.flush();assert.equal(e.snapshots.at(-1).channels[0].muted,undefined);
  assert.equal(e.network(),0);assert.equal(e.dispatches(),0);e.api.dispose();
 });
+
+
+test('startup captures cached Home state immediately, without waiting for debounce or requesting data',()=>{
+ const env=setup([state(),state('TTWO')]);assert.equal(env.snapshots.length,0);
+ assert.equal(env.api.capture(),true);assert.equal(env.snapshots.length,2);assert.equal(env.timers.size,0);
+ env.flush();assert.equal(env.snapshots.length,2);assert.equal(env.network(),0);assert.equal(env.dispatches(),0);
+ env.api.dispose();assert.equal(env.api.capture(),false);
+});
+test('startup cannot claim a seed for missing or mismatched current workspace stores',()=>{
+ const env=setup([state('TTWO')]);assert.equal(env.api.capture(),false);
+ assert.equal(env.snapshots.length,1);assert.equal(env.snapshots[0].workspaceId,'TTWO');env.api.dispose();
+});
+
+test('observer exports only cached app classification flags without fetching user information',()=>{
+ const s=state();s.members.UPEER={...s.members.UPEER,is_bot:true,is_app_user:false};
+ const env=setup([s]);env.flush();const u=env.snapshots[0].users[0];
+ assert.equal(u.is_bot,true);assert.equal(u.is_app_user,false);assert.equal(JSON.stringify(u).includes('SECRET'),false);
+ assert.equal(env.network(),0);assert.equal(env.dispatches(),0);env.api.dispose();
+});

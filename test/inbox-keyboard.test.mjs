@@ -68,8 +68,8 @@ test('X advances only when the selected row leaves the Unread filter and default
 
 test('H/L and horizontal arrows cycle inbox filters in order and wrap',()=>{
  const f=setup();f.shadow.activeElement=f.list.children[0];
- for(const [key,filter] of [['l','unread'],['ArrowRight','mentions'],['l','dms'],['l','channels'],['l','threads'],['l','all'],['h','threads'],['ArrowLeft','channels'],['h','dms']]){assert.equal(f.env.inboxNavigationKey(f.event(key)),true);assert.equal(f.env.filter,filter);}
- assert.equal(f.calls.filter(c=>c[0]==='inbox').length,9);assert.equal(f.calls.some(c=>c[0]==='open'),false);
+ for(const [key,filter] of [['l','unread'],['ArrowRight','mentions'],['l','dms'],['l','apps'],['l','channels'],['l','threads'],['l','all'],['h','threads'],['ArrowLeft','channels'],['h','apps'],['h','dms']]){assert.equal(f.env.inboxNavigationKey(f.event(key)),true);assert.equal(f.env.filter,filter);}
+ assert.equal(f.calls.filter(c=>c[0]==='inbox').length,11);assert.equal(f.calls.some(c=>c[0]==='open'),false);
 });
 
 test('Slash focuses and selects the conversation filter, then remains literal while typing',()=>{
