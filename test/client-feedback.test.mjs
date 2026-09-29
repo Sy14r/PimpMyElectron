@@ -11,3 +11,17 @@ test('client ideas work without an installed or selected application',()=>{
  const r=env.feedbackReport({kind:'idea',area:'client',title:'Idea',description:'Details',versions:false},null);
  assert.equal(r.body,'## Idea\nArea: PME client\n\nDetails');
 });
+
+import os from 'node:os';import path from 'node:path';import {submitFeedback} from '../client/core/feedback.mjs';
+test('native submit sends the reviewed payload only, avoids redirects, and retains safe retry outcomes',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'pme-feedback-'));
+ try{
+  await fs.mkdir(path.join(root,'client'));await fs.writeFile(path.join(root,'client/feedback.json'),JSON.stringify({endpoint:'https://feedback.example/v1/reports'}));
+  const report={title:'Test',body:'Description',requestId:Date.now()+'-'+crypto.randomUUID()},url='https://github.com/Sy14r/PimpMyElectron/issues/5';
+  const r=await submitFeedback(root,report,{fetcher:async(input,opts)=>{assert.equal(input,'https://feedback.example/v1/reports');assert.deepEqual(JSON.parse(opts.body),report);assert.equal(opts.redirect,'error');assert.deepEqual(opts.headers,{'Content-Type':'application/json'});return Response.json({url});}});assert.deepEqual(r,{url});
+  assert.deepEqual(await submitFeedback(root,report,{fetcher:async()=>Response.json({pending:true},{status:202})}),{pending:true});
+  await assert.rejects(submitFeedback(root,report,{fetcher:async()=>{throw Error('offline');}}),/without creating a duplicate/);
+  await assert.rejects(submitFeedback(root,report,{fetcher:async()=>Response.json({url:'https://evil.test'})}),/confirm submission/);
+  await assert.rejects(submitFeedback(root,report,{fetcher:async()=>Response.json({error:'secret server detail'},{status:503})}),/temporarily unavailable/);
+ }finally{await fs.rm(root,{recursive:true,force:true});}
+});

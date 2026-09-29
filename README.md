@@ -257,10 +257,12 @@ release notes offline. Release builds include the versioned notes in
 `client/releases/`; add the new version’s notes before building a release.
 
 **About PME → Feedback** contains a bug-report or idea form. Users review the full report before
-copying it or opening a prefilled GitHub issue. GitHub drafts require an account
-and are public when submitted. PME does not submit the issue automatically.
+copying it or choosing **Send feedback** to submit a public issue directly in PME.
+No browser or GitHub account is required. Drafts remain on this Mac until cleared,
+and retries reuse the same report identifier to avoid duplicate issues.
 Optional version details include PME, the selected application and its selected
 mods; workspace data, logs, account details and installation paths are excluded.
+Deployment and operational details are in [the feedback service guide](services/feedback/README.md).
 
 Full-Slack window position and size are saved in the PME Slack profile across
 restarts. Restoring a window clamps its bounds to a connected display if the

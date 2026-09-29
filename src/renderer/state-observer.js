@@ -30,10 +30,14 @@
     const ids=keys(state.channels,601).filter(channelId);if(ids.length>600)result.truncated=true;
     for(const id of ids.slice(0,600)){
       const c=data(state.channels,id);if(!c||c.id!==id||c.isUnknown||c.isNonExistent)continue;
-      const current=data(state.unreadCounts?.countsPerChannel,id),initial=data(state.unreadCounts?.initialUnreads,id),unreads=c.unreads,highlights=c.unread_highlights;
-      // Slack updates countsPerChannel even when startup counts and the channel's
-      // unread arrays stay unchanged. A live zero must also override stale positives.
-      const currentCount=count(current?.unreadCnt),currentMentions=count(current?.unreadHighlightCnt);
+      const liveCounts=state.unreadCounts?.countsPerChannel;
+      const hasLiveCounts=!!liveCounts&&typeof liveCounts==='object'&&!Array.isArray(liveCounts);
+      const current=data(liveCounts,id),initial=data(state.unreadCounts?.initialUnreads,id),unreads=c.unreads,highlights=c.unread_highlights;
+      // Slack's unread reducer removes entries when both counts reach zero;
+      // getCountsForChannel treats missing entries as zero. Startup counts and
+      // channel arrays can remain positive afterward, so never resurrect them
+      // when the live map exists. Incomplete records still remain unknown.
+      const currentCount=current==null?0:count(current.unreadCnt),currentMentions=current==null?0:count(current.unreadHighlightCnt);
       const initialCount=count(initial?.unreadCnt),initialMentions=count(initial?.unreadHighlightCnt);
       const knownUnread=initialCount!==undefined&&Array.isArray(unreads);
       const knownMentions=initialMentions!==undefined&&Array.isArray(highlights);
@@ -42,10 +46,11 @@
         // Slack keeps per-conversation mute records in an immutable dictionary.
         // An absent record in a loaded dictionary means unmuted; a missing
         // dictionary means unknown and must not erase a previous observation.
+        starred:state.starredChannels&&typeof state.starredChannels==='object'?data(data(state.starredChannels,id),'isStarred')===true:undefined,
         muted:state.mutedChannels&&typeof state.mutedChannels==='object'?data(data(state.mutedChannels,id),'isMuted')===true:undefined,
-        has_unreads:currentCount!==undefined?currentCount>0:initialCount>0||Array.isArray(unreads)&&unreads.length>0?true:knownUnread?false:undefined,
+        has_unreads:hasLiveCounts?(currentCount!==undefined?currentCount>0:undefined):initialCount>0||Array.isArray(unreads)&&unreads.length>0?true:knownUnread?false:undefined,
         // Preserve unknown exact counts instead of presenting a guessed total.
-        mentionObserved:currentMentions!==undefined?currentMentions>0:initialMentions>0||Array.isArray(highlights)&&highlights.length>0?true:knownMentions?false:undefined,
+        mentionObserved:hasLiveCounts?(currentMentions!==undefined?currentMentions>0:undefined):initialMentions>0||Array.isArray(highlights)&&highlights.length>0?true:knownMentions?false:undefined,
         latest:ts(data(state.channelLatests,id)),last_read:ts(data(state.channelCursors,id))});
     }
     const peers=result.channels.map(c=>c.user).filter(Boolean),names=[...new Set([...peers,...keys(state.members,1201).filter(userId)])];
@@ -71,7 +76,7 @@
   function publish(watch,force=false){
     watch.timer=null;if(disposed)return;
     try{
-      const state=watch.store.getState(),known=accounts(),parts=['channels','channelCursors','channelLatests','unreadCounts','mutedChannels','members','messages','threadSub'].map(k=>state[k]);
+      const state=watch.store.getState(),known=accounts(),parts=['channels','channelCursors','channelLatests','unreadCounts','mutedChannels','starredChannels','members','messages','threadSub'].map(k=>state[k]);
       const scope=JSON.stringify([location.pathname,known]);
       if(!force&&watch.parts&&parts.every((p,i)=>p===watch.parts[i])&&watch.scope===scope&&Date.now()-watch.at<30000)return;
       const snapshot=project(state,known);if(!snapshot||typeof window.__pmeClientState!=='function')return;
@@ -139,6 +144,6 @@
     for(const [workspaceId,watch] of watches){clearTimeout(watch.timer);const published=publish(watch,true);if(workspaceId===id&&published)current=true;}
     return current;
   }
-  window.__PME_OBSERVER__={version:'0.14.3',readState,capture,status:()=>({...health}),dispose(){disposed=true;clearInterval(scanTimer);for(const w of watches.values()){w.unsubscribe();clearTimeout(w.timer);}watches.clear();delete window.__PME_OBSERVER__;}};
+  window.__PME_OBSERVER__={version:'0.15.0',readState,capture,status:()=>({...health}),dispose(){disposed=true;clearInterval(scanTimer);for(const w of watches.values()){w.unsubscribe();clearTimeout(w.timer);}watches.clear();delete window.__PME_OBSERVER__;}};
   discover();scanTimer=setInterval(discover,10000);
 })();

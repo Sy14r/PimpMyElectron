@@ -86,7 +86,7 @@ export class ActivityStore {
       while(ws.mutedChannels.size>this.maxItems)ws.mutedChannels.delete(ws.mutedChannels.values().next().value);
     }
     const actualKind = raw.is_im ? 'dm' : raw.is_mpim ? 'groupDM' : kind || 'channel';
-    const fields = { kind: actualKind, peer: text(raw.user, 40) || undefined,
+    const fields = { starred:typeof raw.starred==='boolean'?raw.starred:typeof raw.is_starred==='boolean'?raw.is_starred:undefined, kind: actualKind, peer: text(raw.user, 40) || undefined,
       name: text(raw.name || raw.name_normalized, 180) || undefined, archived: raw.is_archived === true };
     const exact = count(raw.dm_count) ?? count(raw.unread_count_display) ?? count(raw.unread_count);
     const flag = bool(raw.has_unreads);
@@ -253,7 +253,7 @@ export class ActivityStore {
       items: [...ws.items.values()].filter(i => !i.archived).map(item => ({
         key: item.key, workspaceId: ws.id, channelId: item.channelId, threadTs: item.threadTs,
         name: itemName(item), peer: (item.threadTs?ws.items.get(`${ws.id}:${item.channelId}:`)||item:item).peer,
-        kind: item.kind, appConversation:appConversation(item), muted:ws.mutedChannels.has(item.channelId), mentionObserved:item.mentionObserved, unread: item.unread, unreadCount: item.unreadCount, mentions: item.mentions,
+        kind: item.kind, starred:(item.threadTs?ws.items.get(`${ws.id}:${item.channelId}:`)||item:item).starred===true, appConversation:appConversation(item), muted:ws.mutedChannels.has(item.channelId), mentionObserved:item.mentionObserved, unread: item.unread, unreadCount: item.unreadCount, mentions: item.mentions,
         countsStale: !item.countsAt || now - item.countsAt > 60000,
         observedAt: item.observedAt, stale: now - item.observedAt > 60000, latest: item.latest,lastRead:item.lastRead||null,
         source: item.source, historyObserved: item.historyObserved,

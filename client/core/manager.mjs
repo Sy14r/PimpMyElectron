@@ -1,3 +1,4 @@
+import {submitFeedback} from './feedback.mjs';
 import {releaseHistory} from './releases.mjs';
 import {assertNoUpdate,prepareUpdate,clearUpdate} from './update-gate.mjs';
 import {inspectSpotify,waitForSpotifyHelper} from './spotify.mjs';
@@ -173,6 +174,7 @@ export class ClientManager {
  }
  async dispatch(request){
   if(!request||typeof request!=='object'||Array.isArray(request))throw Error('Invalid request');
+  if(request.op==='feedback-submit')return submitFeedback(this.root,{title:request.title,body:request.body,requestId:request.requestId});
   if(request.op==='status')return this.snapshot();
   if(request.op==='release-history')return releaseHistory(this.root,this.clientVersion.version);
   if(this.busy)throw Error('Please wait for the current action to finish.');this.busy=true;

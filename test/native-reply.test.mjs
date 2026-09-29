@@ -451,3 +451,11 @@ test('legacy read fallback never mistakes the unread-options menu for mark read'
  const e=setup();e.readButton.getAttribute=()=> 'menu';await e.api.open({workspaceId:'TONE',channelId:'CONE'});
  assert.equal(e.api.markReadNative().ok,false);assert.equal(e.readButton.clicks,0);e.api.dispose();
 });
+
+test('notification settings invoke Slack’s current native popup without implementing a separate preference writer',async()=>{
+ const env=setup({headerControls:true,menuControls:true});await env.api.open({workspaceId:'TONE',channelId:'CONE'});
+ env.controls[2].setAttribute('aria-haspopup','menu');clickHeader(env,env.headerChildren[0]);
+ const menu=env.bodyChildren[0];assert.equal(menu.children[2].textContent,'Notifications & mute…');assert.match(menu.children[2].title,/temporary mute/);
+ const old=env.controls[2];env.controls[2]={...old,clicks:0};menu.children[2].handlers.get('click')();
+ assert.equal(old.clicks,0);assert.equal(env.controls[2].clicks,1);assert.equal(env.api.overlayOpen(),false);env.api.dispose();
+});

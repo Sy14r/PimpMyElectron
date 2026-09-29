@@ -123,6 +123,12 @@
     [data-pme-native-reply-pane] [data-qa="search_result_channel_name"]{font-size:11px;color:#94a2b8;}
     [data-pme-native-reply-pane] [data-qa="search_result"]:hover{background:#252e40!important;}
     [data-pme-native-reply-pane] [data-qa="search_view"] .c-mrkdwn__highlight{background:var(--pme-accent-a33,#b6a5e833);color:var(--pme-accent-text,#e4d9fb);}
+    /* Native menus remain owned by Slack, including its nested mute-duration
+       menu. Scope colors to triage so normal Slack is unchanged. */
+    body[data-pme-native-reply] .c-menu{background:#202735!important;color:#cdd4e4!important;border-color:#ffffff18!important;}
+    body[data-pme-native-reply] .c-menu_item__label{color:inherit!important;}
+    body[data-pme-native-reply] .c-menu_item__description{color:#a2aec2!important;}
+    body[data-pme-native-reply] .c-menu_item__button:is(:hover,:focus){background:var(--pme-accent-a1a,#b6a5e81a)!important;color:#edf0fa!important;}
     #pme-conversation-menu button:disabled{opacity:.45;cursor:default;}
     [data-pme-native-auxiliary] :is(.p-flexpane_header,.p-flexpane__body,.p-r_member_profile__container,.p-search_in_channel){background:#191f2c!important;color:#cdd4e4;}
     [data-pme-native-auxiliary] .p-flexpane_header{padding:8px 12px!important;}
@@ -156,7 +162,7 @@
     if(!header||target?.threadTs||auxiliary)return [];
     const huddle=header.querySelector('button[data-qa="huddle_channel_header_button"]'),search=header.querySelector('[data-qa="search_in_channel_button"]'),notifications=header.querySelector('[data-feat="view-header:notifications"]'),invite=header.querySelector('button[data-qa="invite-teammates-cta"]');
     return [{id:'huddle',button:huddle,label:'Huddle…'},{id:'search',button:search,label:'Search this conversation…'},
-      {id:'notifications',button:notifications,label:notifications?.getAttribute('aria-haspopup')?'Notifications…':notifications?.hasAttribute('aria-pressed')?(notifications.getAttribute('aria-pressed')==='true'?'Unmute conversation':'Mute conversation'):notifications?.getAttribute('aria-label')||'Conversation notifications'},
+      {id:'notifications',button:notifications,label:notifications?.getAttribute('aria-haspopup')?'Notifications & mute…':notifications?.hasAttribute('aria-pressed')?(notifications.getAttribute('aria-pressed')==='true'?'Unmute conversation':'Mute conversation'):notifications?.getAttribute('aria-label')||'Conversation notifications'},
       {id:'invite',button:invite,label:'Invite teammates…'}].filter(row=>row.button);
   }
   function syncMenuButton(actions){
@@ -177,7 +183,7 @@
     if(!verifiedPane()||!menuButton)return;
     const scope=target.key,menu=document.createElement('div');menu.id='pme-conversation-menu';menu.setAttribute('popover','auto');menu.setAttribute('role','menu');menu.setAttribute('aria-label','Conversation actions');
     for(const row of nativeMenuControls()){
-      const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');button.textContent=row.label;button.disabled=row.button.disabled||row.button.getAttribute('aria-disabled')==='true';
+      const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');button.textContent=row.label;if(row.id==='notifications'&&row.button.getAttribute('aria-haspopup')){button.title='All new posts, just mentions, mute and hide, or a temporary mute under More options';button.setAttribute('aria-description',button.title);}button.disabled=row.button.disabled||row.button.getAttribute('aria-disabled')==='true';
       button.addEventListener('click',()=>{
         if(target?.key!==scope||!verifiedPane()){closeMenu();return;}
         // Resolve again: Slack may replace its controls while the menu is open.

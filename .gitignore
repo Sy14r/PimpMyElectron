@@ -12,3 +12,8 @@ evidence/*
 *.log
 __pycache__/
 *.py[cod]
+
+# Cloudflare local state and development secrets.
+.wrangler/
+.dev.vars
+.dev.vars.*

@@ -22,3 +22,12 @@ test('Apps & agents has a dedicated filter without changing read or mute policy'
  e.filter='unread';assert.deepEqual(Array.from(e.filtered(),i=>i.key),['live']);
  e.filter='all';assert.equal(e.filtered().length,5);
 });
+
+test('native stars sort ahead of local pins without bypassing active filters',()=>{
+ const e=setup();e.rows[0].starred=true;e.rows[3].starred=true;e.rows[4].triage={pinned:true};
+ e.filter='all';assert.deepEqual(Array.from(e.filtered(),i=>i.key),['0','3','live','1','2']);
+ e.filter='dms';assert.deepEqual(Array.from(e.filtered(),i=>i.key),['0','live','1']);
+ e.filter='threads';assert.deepEqual(Array.from(e.filtered(),i=>i.key),['3']);
+ e.filter='unread';assert.deepEqual(Array.from(e.filtered(),i=>i.key),['live']);
+ e.$=()=>({value:'groupDM'});e.filter='all';assert.deepEqual(Array.from(e.filtered(),i=>i.key),['1']);
+});

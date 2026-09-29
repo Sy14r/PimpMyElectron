@@ -1,3 +1,4 @@
+import {ActivityStore} from '../src/activity-store.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import vm from 'node:vm';
 const source=await fs.readFile(new URL('../src/renderer/state-observer.js',import.meta.url),'utf8');
 const inherited=entries=>Object.create(entries);
@@ -141,5 +142,60 @@ test('observer exports only cached app classification flags without fetching use
  const s=state();s.members.UPEER={...s.members.UPEER,is_bot:true,is_app_user:false};
  const env=setup([s]);env.flush();const u=env.snapshots[0].users[0];
  assert.equal(u.is_bot,true);assert.equal(u.is_app_user,false);assert.equal(JSON.stringify(u).includes('SECRET'),false);
+ assert.equal(env.network(),0);assert.equal(env.dispatches(),0);env.api.dispose();
+});
+
+test('removing a live unread entry means read, even with stale startup counts and message arrays',()=>{
+ const s=state();s.channels.DONE={...s.channels.DONE,unreads:['100.000002'],unread_highlights:['100.000002']};
+ s.unreadCounts.countsPerChannel=inherited({DONE:{unreadCnt:1,unreadHighlightCnt:1}});
+ const env=setup([s]);env.flush();assert.equal(env.snapshots[0].channels[0].has_unreads,true);
+ // Slack drops zero-count entries instead of necessarily publishing a zero.
+ const counts=Object.create(s.unreadCounts.countsPerChannel);counts.DONE=undefined;
+ env.stores[0].state={...s,unreadCounts:{...s.unreadCounts,countsPerChannel:counts}};
+ env.change();env.flush();let row=env.snapshots.at(-1).channels[0];
+ assert.equal(row.has_unreads,false);assert.equal(row.mentionObserved,false);
+ assert.equal(env.api.readState({workspaceId:'TONE',channelId:'DONE'}),false);
+ // The next live positive must return immediately, with no local read override.
+ env.stores[0].state={...s,unreadCounts:{...s.unreadCounts,countsPerChannel:{DONE:{unreadCnt:2,unreadHighlightCnt:1}}}};
+ env.change();env.flush();row=env.snapshots.at(-1).channels[0];
+ assert.equal(row.has_unreads,true);assert.equal(row.mentionObserved,true);
+ assert.equal(env.network(),0);assert.equal(env.dispatches(),0);env.api.dispose();
+});
+test('an empty live count map is authoritative across workspaces; missing maps keep legacy fallback',()=>{
+ const one=state(),two=state('TTWO');one.unreadCounts.countsPerChannel={};
+ const env=setup([one,two]);env.flush();
+ assert.equal(env.snapshots.find(s=>s.workspaceId==='TONE').channels[0].has_unreads,false);
+ assert.equal(env.snapshots.find(s=>s.workspaceId==='TTWO').channels[0].has_unreads,true);
+ env.api.dispose();
+});
+test('a partial live count record stays unknown instead of reviving stale startup evidence',()=>{
+ const s=state();s.unreadCounts.countsPerChannel={DONE:{unreadCnt:0}};
+ const env=setup([s]);env.flush();const row=env.snapshots[0].channels[0];
+ assert.equal(row.has_unreads,false);assert.equal(row.mentionObserved,undefined);env.api.dispose();
+});
+
+
+test('native read deletion clears host inbox state without clearing unread replies in the same conversation',()=>{
+ const s=state();s.unreadCounts.countsPerChannel={DONE:{unreadCnt:1,unreadHighlightCnt:1}};
+ const env=setup([s]),store=new ActivityStore();env.flush();store.ingestClientState(env.snapshots.at(-1));
+ let rows=store.snapshot().workspaces[0].items;
+ assert.equal(rows.find(i=>!i.threadTs).unread,true);assert.equal(rows.find(i=>i.threadTs).unread,true);
+ env.stores[0].state={...s,unreadCounts:{...s.unreadCounts,countsPerChannel:{}}};env.change();env.flush();
+ store.ingestClientState(env.snapshots.at(-1));rows=store.snapshot().workspaces[0].items;
+ assert.equal(rows.find(i=>!i.threadTs).unread,false);assert.equal(rows.find(i=>!i.threadTs).mentionObserved,false);
+ assert.equal(rows.find(i=>i.threadTs).unread,true);
+ // A background refresh of the identical cache must never revive startup counts.
+ env.tick();store.ingestClientState(env.snapshots.at(-1));
+ assert.equal(store.snapshot().workspaces[0].items.find(i=>!i.threadTs).unread,false);env.api.dispose();
+});
+
+test('starred cache changes group parent conversations and threads independently per workspace',()=>{
+ const one=state(),two=state('TTWO');one.starredChannels=inherited({DONE:{isStarred:true,private:'SECRET'}});two.starredChannels={};
+ const env=setup([one,two]),store=new ActivityStore();env.flush();for(const snapshot of env.snapshots)store.ingestClientState(snapshot);
+ assert.ok(store.snapshot().workspaces.find(w=>w.id==='TONE').items.every(i=>i.starred===true));
+ assert.ok(store.snapshot().workspaces.find(w=>w.id==='TTWO').items.every(i=>i.starred===false));
+ assert.equal(JSON.stringify(env.snapshots).includes('SECRET'),false);
+ env.stores[0].state={...one,starredChannels:Object.assign(inherited(one.starredChannels),{DONE:undefined})};env.change();env.flush();store.ingestClientState(env.snapshots.at(-1));
+ assert.ok(store.snapshot().workspaces.find(w=>w.id==='TONE').items.every(i=>i.starred===false));
  assert.equal(env.network(),0);assert.equal(env.dispatches(),0);env.api.dispose();
 });
