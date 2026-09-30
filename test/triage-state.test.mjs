@@ -91,3 +91,14 @@ test('detail opacity boost persists separately and validates percentage points',
  assert.equal(restored.settings.inboxOpacity,45);assert.equal(restored.settings.detailOpacityBoost,20);
  for(const detailOpacityBoost of [-1,101,NaN,'30',null]){await state.configure({detailOpacityBoost});assert.equal(state.settings.detailOpacityBoost,20);}
 });
+
+test('cheat sheet shortcut defaults, persists, and stays distinct during swaps',async t=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'triage-help-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+ const file=path.join(dir,'state.json');await fs.writeFile(file,JSON.stringify({version:1,settings:{shortcut:'option-space'},records:{}}));
+ const state=await new TriageState(file).load();assert.equal(state.settings.helpShortcut,'cmd-shift-comma');
+ await state.configure({helpShortcut:'cmd-shift-u'});assert.equal(state.settings.helpShortcut,'cmd-shift-comma');
+ await state.configure({stockShortcut:'cmd-shift-comma',helpShortcut:'cmd-shift-u'});
+ const loaded=await new TriageState(file).load();assert.equal(loaded.settings.stockShortcut,'cmd-shift-comma');assert.equal(loaded.settings.helpShortcut,'cmd-shift-u');
+ await loaded.configure({shortcut:'cmd-shift-u'});assert.equal(loaded.settings.shortcut,'option-space');
+ await loaded.configure({helpShortcut:'invalid'});assert.equal(loaded.settings.helpShortcut,'cmd-shift-u');
+});

@@ -559,9 +559,16 @@
       let fiber=row[Object.keys(row).find(k=>k.startsWith('__reactFiber$'))];
       for(let depth=0;fiber&&depth<6;depth++,fiber=fiber.return){
         const suggestion=fiber.memoizedProps?.suggestion,im=suggestion?.im;
-        if(suggestion?.id===id&&im?.user===id&&im.context_team_id===workspaceId&&/^D[A-Z0-9]+$/.test(im.id)){channelId=im.id;break;}
+        if(suggestion?.id!==id)continue;
+        if(im){
+          if(im.user!==id||im.context_team_id!==workspaceId||!/^D[A-Z0-9]+$/.test(im.id))return null;
+          channelId=im.id;break;
+        }
       }
     }
+    // A selected person can have no DM yet. Replay that exact native result
+    // and embed the recipient-filled New Message page Slack creates for them.
+    if(!channelId&&peer)return {kind:'compose',workspaceId,peer,key:`${workspaceId}:compose`,name:'New message'};
     if(!channelId)return null;
     return {workspaceId,channelId,peer,threadTs:null,key:`${workspaceId}:${channelId}:`,name:String(row.getAttribute('aria-label')||channelId).replace(/, Direct Message$/, '').slice(0,180)};
   }
@@ -639,8 +646,9 @@
       // Expanding triage can remount Slack's suggestions before this replay.
       // Resolve the same recipient again, never the new highlighted result.
       const matches=node=>node.isConnected&&session.modal?.contains(node)&&node.getAttribute('data-id')===id&&node.getAttribute('data-type')===type&&
-        (!destination?.channelId||switcherDestination(node,workspaceId)?.key===destination.key);
-      const current=matches(row)?row:destination?.channelId?
+        (!destination?.channelId||switcherDestination(node,workspaceId)?.key===destination.key)&&
+        (destination?.kind!=='compose'||switcherDestination(node,workspaceId)?.peer===destination.peer);
+      const current=matches(row)?row:destination?
         [...(session.modal?.querySelectorAll('[data-qa="search_autocomplete"] [role="option"]')||[])].find(matches):null;
       cancelSwitcher({restore:false,close:!current});
       if(!current)return false;
@@ -693,7 +701,14 @@
         await pause(0);if(disposed||run!==generation||!active)return {cancelled:true};
         // A stale switcher row explicitly reports that it did not navigate.
         // Recover through the same native routing used by an inbox click.
-        if(nativeNavigate()===false)nativeNavigate=null;
+        if(nativeNavigate()===false){
+          if(target.kind==='compose'){fail('The selected person is no longer in Slack’s search results. Search again to open the intended chat.');return {ok:false,error:reason};}
+          nativeNavigate=null;
+        }else if(target.kind==='compose'){
+          // Let native recipient routing commit; never click New Message over
+          // the replayed selection or expose an old composer in the same turn.
+          await waitForNativeChange();
+        }
       }else if(close&&(target.kind!=='search'||previousAuxiliary?.kind!=='full search')){
         // The profile's Back button can be the originating click. Chromium
         // ignores a nested .click() on that same button until activation ends.
@@ -720,7 +735,7 @@
       }
       // A Canvas/popout can obscure the conversation while its URL stays the
       // same. Selecting the native row also restores the actual message view.
-      if(target.kind==='compose'&&inWorkspace()&&!composeClicked&&!locateCompose()){
+      if(!nativeNavigate&&target.kind==='compose'&&inWorkspace()&&!composeClicked&&!locateCompose()){
         const button=document.querySelector('[data-qa="composer_button"]');
         if(button){composeClicked=true;button.click();}
       }

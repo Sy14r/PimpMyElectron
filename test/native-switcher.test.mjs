@@ -51,7 +51,7 @@ test('switcher resolves native channel IDs and exact member-to-DM metadata witho
   const f=fixture();assert.equal(f.env.switcherDestination(f.row('channel','CONE'),'TONE').channelId,'CONE');
   const im={id:'DONE',user:'UONE',context_team_id:'TONE'};
   assert.equal(f.env.switcherDestination(f.row('member','UONE',im),'TONE').channelId,'DONE');
-  for(const bad of [{...im,user:'UOTHER'},{...im,context_team_id:'TTWO'},undefined])assert.equal(f.env.switcherDestination(f.row('member','UONE',bad),'TONE'),null);
+  for(const bad of [{...im,user:'UOTHER'},{...im,context_team_id:'TTWO'}])assert.equal(f.env.switcherDestination(f.row('member','UONE',bad),'TONE'),null);
   assert.equal(f.env.switcherDestination(f.row('channel','javascript:bad'),'TONE'),null);
   assert.equal(f.env.switcherDestination(f.row('workflow','CONE'),'TONE'),null);
 });
@@ -123,4 +123,24 @@ test('native Enter submissions without a suggestion still promote the resulting 
 test('query submission tolerates the popup closing before native search routing commits',async()=>{
  const f=fixture();await f.env.openSwitcher('TONE');f.env.switcherAction(f.event());f.modal.isConnected=false;f.env.syncSwitcher();assert.equal(f.env.switcherOpen(),true);assert.equal(f.events.length,0);
  f.env.path=()=>['','client','TONE','search'];f.env.syncSwitcher();assert.equal(f.events[0].type,'pme-native-search-open');
+});
+
+test('first-time member selections use native compose in triage, including a remounted result',async()=>{
+ for(const mouse of [false,true]){
+  const f=fixture();await f.env.openSwitcher('TONE');const original=f.row('member','UNEW');f.selected(original);
+  f.env.switcherAction(f.event(mouse?{type:'click',target:original,button:0}:{}));
+  const {destination,navigate}=f.events[0].detail;
+  assert.equal(destination.kind,'compose');assert.equal(destination.workspaceId,'TONE');assert.equal(destination.peer,'UNEW');assert.equal(destination.channelId,undefined);
+  original.isConnected=false;
+  const other=f.row('member','UOTHER'),replacement=f.row('member','UNEW');
+  other.click=()=>f.actions.push('wrong');replacement.click=()=>f.actions.push('new-dm');f.selected(other);f.results([other,replacement]);
+  assert.equal(navigate(),true);navigate();assert.equal(f.actions.filter(a=>a==='new-dm').length,1);assert.equal(f.actions.includes('wrong'),false);
+ }
+});
+test('a first-time member replay rejects removed, mismatched and cross-workspace results',async()=>{
+ for(const im of [undefined,{id:'DONE',user:'UOTHER',context_team_id:'TONE'},{id:'DONE',user:'UNEW',context_team_id:'TTWO'}]){
+  const f=fixture();await f.env.openSwitcher('TONE');const row=f.row('member','UNEW');f.selected(row);f.env.switcherAction(f.event());row.isConnected=false;
+  f.results(im?[f.row('member','UNEW',im)]:[]);
+  assert.equal(f.events[0].detail.navigate(),false);assert.equal(f.actions.includes('navigate'),false);
+ }
 });

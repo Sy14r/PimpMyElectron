@@ -16,7 +16,9 @@ aliases. Opening an item clears that text filter.
 Click an item to open its native conversation or thread alongside the inbox.
 Compose opens Slack's New Message view; All workspaces asks for a destination.
 The Activity button opens Slack's native Activity feed. Search (⌘K or the
-magnifying glass) uses Slack's native switcher and results. Unsupported destinations
+magnifying glass) uses Slack's native switcher and results. Selecting a person
+without an existing cached DM opens Slack's recipient-filled new-message composer
+beside the inbox, using the selected native search result. Unsupported destinations
 can be opened in full Slack.
 
 When a detail pane closes or triage hides, Slack is parked on conversation-free
@@ -43,6 +45,13 @@ read and may cause Slack to fetch data normally.
 
 ## Keyboard controls
 
+Open **Keyboard shortcuts…** from the Slack Triage menu-bar icon, or press
+**⌘⇧,**, for a separate scrollable cheat sheet. Press the shortcut again while the
+sheet is focused, or Escape, to close it and return focus. The sheet reflects your
+configured global shortcuts and is available without opening the inbox. Change its
+shortcut in Settings → Global shortcuts, or use the sheet’s **Shortcut settings…**
+button. The sheet shares Settings’ theme and stays visible when switching apps.
+
 Defaults below can differ from saved global-shortcut preferences. Inbox navigation
 also works with a detail pane open when no text entry or native dialog owns focus.
 
@@ -50,9 +59,10 @@ also works with a detail pane open when no text entry or native dialog owns focu
 | --- | --- |
 | ⌘⇧Y | Toggle triage globally. |
 | ⌘⇧U | Open standard Slack; there, hide/show its window. |
+| ⌘⇧, | Show/close the keyboard cheat sheet. |
 | J / K or ↓ / ↑ | Move the inbox highlight without opening an item. |
 | 0 | Jump to the first row in the current filter. |
-| 1 | Jump to the first unstarred row in the current filter; no-op if none exists. *Added after client 0.6.0; currently available from source.* |
+| 1 | Jump to the first unstarred row in the current filter; no-op if none exists. |
 | H / L or ← / → | Move between inbox filters. |
 | Enter | Open the highlighted item and focus the native editor. |
 | X | Toggle read/unread using Slack's native actions. |

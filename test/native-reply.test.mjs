@@ -459,3 +459,13 @@ test('notification settings invoke Slack’s current native popup without implem
  const old=env.controls[2];env.controls[2]={...old,clicks:0};menu.children[2].handlers.get('click')();
  assert.equal(old.clicks,0);assert.equal(env.controls[2].clicks,1);assert.equal(env.api.overlayOpen(),false);env.api.dispose();
 });
+
+test('native first-DM selection waits for its composer without clicking the blank New Message action',async()=>{
+ const env=setup();let clicked=0;
+ const result=await env.api.open({kind:'compose',workspaceId:'TONE',peer:'UNEW'},{nativeNavigate(){clicked++;setTimeout(()=>{env.composePage.mounted=true;env.location.pathname='/client/TONE';},20);return true;}});
+ assert.equal(result.ok,true);assert.equal(env.api.status().target.kind,'compose');assert.equal(clicked,1);assert.equal(env.native.composeClicks,0);assert.equal(env.api.status().ready,true);assert.equal(env.recipient.focused,true);env.api.dispose();
+});
+test('a missing first-DM search result does not open an unrelated blank composer',async()=>{
+ const env=setup();const result=await env.api.open({kind:'compose',workspaceId:'TONE'},{nativeNavigate:()=>false});
+ assert.equal(result.ok,false);assert.match(result.error,/Search again/);assert.equal(env.native.composeClicks,0);assert.equal(env.api.status().ready,false);env.api.dispose();
+});

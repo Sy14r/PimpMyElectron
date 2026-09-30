@@ -5,7 +5,7 @@ import {DEFAULT_ACCENT,validAccent} from './accent-theme.mjs';
 export const validKey=k=>typeof k==='string'&&/^[TE][A-Z0-9]+:[CDG][A-Z0-9]+:(?:\d+\.\d+)?$/.test(k);
 export const validThreadKey=k=>validKey(k)&&/:[0-9]+\.[0-9]+$/.test(k);
 const validAlias=value=>typeof value==='string'&&value.length<=120&&!/[\u0000-\u001f\u007f]/.test(value);
-const defaults={edge:'right',rest:'strip',display:'main',inboxDensity:'expanded',accentColor:DEFAULT_ACCENT,inboxGlass:false,inboxOpacity:28,detailOpacityBoost:35,idleSeconds:60,shortcut:'cmd-shift-y',stockShortcut:'cmd-shift-u',expandOnActivity:true,reopenNew:true,workspace:null,notificationMode:'all',notificationWorkspaces:[]};
+const defaults={edge:'right',rest:'strip',display:'main',inboxDensity:'expanded',accentColor:DEFAULT_ACCENT,inboxGlass:false,inboxOpacity:28,detailOpacityBoost:35,idleSeconds:60,shortcut:'cmd-shift-y',stockShortcut:'cmd-shift-u',helpShortcut:'cmd-shift-comma',expandOnActivity:true,reopenNew:true,workspace:null,notificationMode:'all',notificationWorkspaces:[]};
 export class TriageState {
   records=new Map();aliases=new Map();settings={...defaults};undo=null;error=null;tail=Promise.resolve();
   constructor(file,{now=Date.now}={}){this.file=file;this.now=now;}
@@ -27,14 +27,15 @@ export class TriageState {
     ...(['strip','cluster','hidden'].includes(patch.rest)?{rest:patch.rest}:{}),
     ...(typeof patch.display==='string'&&/^(main|\d+)$/.test(patch.display)?{display:patch.display}:{}),
     ...([0,5,15,30,60,300].includes(patch.idleSeconds)?{idleSeconds:patch.idleSeconds}:{}),
-    ...(['cmd-shift-y','cmd-shift-u','ctrl-option-space','option-space'].includes(patch.shortcut)?{shortcut:patch.shortcut}:{}),
-    ...(['cmd-shift-y','cmd-shift-u','ctrl-option-space','option-space'].includes(patch.stockShortcut)?{stockShortcut:patch.stockShortcut}:{}),
+    ...(['cmd-shift-y','cmd-shift-u','cmd-shift-comma','ctrl-option-space','option-space'].includes(patch.shortcut)?{shortcut:patch.shortcut}:{}),
+    ...(['cmd-shift-y','cmd-shift-u','cmd-shift-comma','ctrl-option-space','option-space'].includes(patch.stockShortcut)?{stockShortcut:patch.stockShortcut}:{}),
+    ...(['cmd-shift-y','cmd-shift-u','cmd-shift-comma','ctrl-option-space','option-space'].includes(patch.helpShortcut)?{helpShortcut:patch.helpShortcut}:{}),
     ...(typeof patch.expandOnActivity==='boolean'?{expandOnActivity:patch.expandOnActivity}:{}),
     ...(['all','selected','inbox'].includes(patch.notificationMode)?{notificationMode:patch.notificationMode}:{}),
     ...(Array.isArray(patch.notificationWorkspaces)&&patch.notificationWorkspaces.length<=12&&patch.notificationWorkspaces.every(id=>typeof id==='string'&&/^[TE][A-Z0-9]+$/.test(id))?{notificationWorkspaces:[...new Set(patch.notificationWorkspaces)]}:{}),
     ...((patch.workspace==='*'||typeof patch.workspace==='string'&&/^[TE][A-Z0-9]+$/.test(patch.workspace))?{workspace:patch.workspace}:{}),
     ...(typeof patch.reopenNew==='boolean'?{reopenNew:patch.reopenNew}:{})};
-    if(next.shortcut===next.stockShortcut){next.shortcut=this.settings.shortcut;next.stockShortcut=this.settings.stockShortcut;}
+    if(new Set([next.shortcut,next.stockShortcut,next.helpShortcut]).size!==3){for(const key of ['shortcut','stockShortcut','helpShortcut'])next[key]=this.settings[key];}
     return next;}
 
   project(item){

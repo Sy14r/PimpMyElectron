@@ -2,6 +2,38 @@ import AppKit
 import Carbon.HIToolbox
 import Darwin
 
+// Shared by Settings and the shortcut sheet so utility windows keep the same theme.
+enum TriagePreferencesTheme {
+    static let background = NSColor(calibratedRed:0.078,green:0.098,blue:0.145,alpha:1)
+    static let inset = NSColor(calibratedRed:0.064,green:0.08,blue:0.12,alpha:1)
+    static func label(_ text:String,heading:Bool=false) -> NSTextField {
+        let field=NSTextField(wrappingLabelWithString:text)
+        field.font=heading ? .systemFont(ofSize:14,weight:.semibold) : .systemFont(ofSize:12)
+        field.textColor=heading ? .labelColor : .secondaryLabelColor
+        return field
+    }
+    static func shortcutRow(_ keys:String,_ description:String) -> NSStackView {
+        let row=NSStackView();row.orientation = .horizontal;row.alignment = .centerY;row.spacing=16
+        let badge=NSView();badge.wantsLayer=true;badge.layer?.backgroundColor=inset.cgColor
+        badge.layer?.cornerRadius=6;badge.layer?.borderWidth=1
+        badge.layer?.borderColor=NSColor.white.withAlphaComponent(0.08).cgColor
+        let key=label(keys);key.font = .monospacedSystemFont(ofSize:12,weight:.medium);key.textColor = .labelColor
+        key.alignment = .center;key.translatesAutoresizingMaskIntoConstraints=false;badge.addSubview(key)
+        NSLayoutConstraint.activate([badge.widthAnchor.constraint(equalToConstant:150),key.leadingAnchor.constraint(equalTo:badge.leadingAnchor,constant:8),key.trailingAnchor.constraint(equalTo:badge.trailingAnchor,constant:-8),key.topAnchor.constraint(equalTo:badge.topAnchor,constant:6),key.bottomAnchor.constraint(equalTo:badge.bottomAnchor,constant:-6)])
+        let text=label(description);text.setContentHuggingPriority(.defaultLow,for:.horizontal)
+        text.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+        row.addArrangedSubview(badge);row.addArrangedSubview(text)
+        text.widthAnchor.constraint(equalTo:row.widthAnchor,constant:-166).isActive=true
+        return row
+    }
+}
+
+final class ShortcutPanel: NSPanel {
+    var onDismiss: (() -> Void)?
+    override func cancelOperation(_ sender: Any?) { close() }
+    override func close() { super.close();onDismiss?() }
+}
+
 func accentColor(_ value: String?) -> NSColor {
     let hex=value ?? "#bca9f0"
     guard hex.range(of:"^#[0-9a-fA-F]{6}$",options:.regularExpression) != nil,
@@ -295,6 +327,12 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let socketPath: String
     var item: NSStatusItem!
     var stockHotKey: EventHotKeyRef?
+    var helpHotKey: EventHotKeyRef?
+    var helpHotKeyOK = false
+    var helpShortcut = ""
+    var shortcutWindow: ShortcutPanel?
+    var shortcutWindowSignature = ""
+    var shortcutReturnApp: NSRunningApplication?
     var stockHotKeyOK = false
     var stockToggleBusy = false
     var hotKey: EventHotKeyRef?
@@ -354,16 +392,18 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         item.button?.imagePosition = .imageLeading
         item.button?.toolTip = "Slack triage — local attention queue"
         var type = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, event, pointer in
+        let handlerStatus = InstallEventHandler(GetApplicationEventTarget(), { _, event, pointer in
             guard let pointer else { return OSStatus(eventNotHandledErr) }
             let controller = Unmanaged<Controller>.fromOpaque(pointer).takeUnretainedValue()
             var identifier = EventHotKeyID()
             guard GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &identifier) == noErr,
-                  identifier.signature == 0x504D4554, [1, 2].contains(identifier.id) else { return OSStatus(eventNotHandledErr) }
+                  identifier.signature == 0x504D4554, [1, 2, 3].contains(identifier.id) else { return OSStatus(eventNotHandledErr) }
+            if identifier.id == 3 { DispatchQueue.main.async { controller.toggleShortcutHelp() };return noErr }
             let op = identifier.id == 2 ? "stock-toggle" : "toggle"
             DispatchQueue.main.async { controller.perform(op) }
             return noErr
         }, 1, &type, Unmanaged.passUnretained(self).toOpaque(), &handler)
+        if handlerStatus != noErr { shortcutDiagnostic("event handler failed: \(handlerStatus)") }
         inboxBackdrop.start(socketPath)
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.refresh() }
@@ -422,7 +462,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             let combination = self.settings["shortcut"] as? String ?? "cmd-shift-y"
             let stockCombination = self.settings["stockShortcut"] as? String ?? "cmd-shift-u"
-            if combination != self.shortcut || stockCombination != self.stockShortcut { self.registerShortcuts(combination, stockCombination) }
+            let helpCombination = self.settings["helpShortcut"] as? String ?? "cmd-shift-comma"
+            if combination != self.shortcut || stockCombination != self.stockShortcut || helpCombination != self.helpShortcut { self.registerShortcuts(combination, stockCombination, helpCombination) }
+            self.renderShortcutHelp()
             self.renderSettings()
             self.showPreview(state["preview"] as? [String: Any])
             self.showEdgeStrip(state["edgeStrip"] as? [String: Any])
@@ -613,19 +655,23 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
     func shortcutLabel(_ value: String) -> String {
-        return ["cmd-shift-y":"⌘⇧Y", "cmd-shift-u":"⌘⇧U", "ctrl-option-space":"⌃⌥Space", "option-space":"⌥Space"][value] ?? value
+        return ["cmd-shift-y":"⌘⇧Y", "cmd-shift-u":"⌘⇧U", "cmd-shift-comma":"⌘⇧,", "ctrl-option-space":"⌃⌥Space", "option-space":"⌥Space"][value] ?? value
     }
-    func registerShortcuts(_ triage: String, _ stock: String) {
-        // Release both before registering so swapping their assignments works.
+    func registerShortcuts(_ triage: String, _ stock: String, _ help: String) {
+        // Release all assignments first so swapping shortcuts works.
         if let hotKey { UnregisterEventHotKey(hotKey) }; hotKey = nil
         if let stockHotKey { UnregisterEventHotKey(stockHotKey) }; stockHotKey = nil
+        if let helpHotKey { UnregisterEventHotKey(helpHotKey) }; helpHotKey = nil
         func register(_ value: String, _ id: UInt32, _ ref: inout EventHotKeyRef?) -> Bool {
-            let code = value == "cmd-shift-y" ? UInt32(kVK_ANSI_Y) : value == "cmd-shift-u" ? UInt32(kVK_ANSI_U) : UInt32(kVK_Space)
+            let code = value == "cmd-shift-y" ? UInt32(kVK_ANSI_Y) : value == "cmd-shift-u" ? UInt32(kVK_ANSI_U) : value == "cmd-shift-comma" ? UInt32(kVK_ANSI_Comma) : UInt32(kVK_Space)
             let modifiers = value.hasPrefix("cmd-shift-") ? UInt32(cmdKey | shiftKey) : value == "option-space" ? UInt32(optionKey) : UInt32(controlKey | optionKey)
-            return RegisterEventHotKey(code, modifiers, EventHotKeyID(signature: 0x504D4554, id: id), GetApplicationEventTarget(), 0, &ref) == noErr
+            let status=RegisterEventHotKey(code, modifiers, EventHotKeyID(signature: 0x504D4554, id: id), GetApplicationEventTarget(), 0, &ref)
+            if status != noErr { shortcutDiagnostic("register \(value) failed: \(status)") }
+            return status == noErr
         }
         hotKeyOK = register(triage, 1, &hotKey); stockHotKeyOK = register(stock, 2, &stockHotKey)
-        shortcut = triage; stockShortcut = stock
+        helpHotKeyOK = register(help, 3, &helpHotKey)
+        shortcut = triage; stockShortcut = stock; helpShortcut = help
     }
     func perform(_ op: String, workspace: String? = nil) {
         let optimistic=["toggle","queue"].contains(op) && (edgePanel?.isVisible == true || ["strip","hidden"].contains(shellMode))
@@ -682,13 +728,91 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func entry(_ title: String, data: [String: Any], checked: Bool = false) -> NSMenuItem {
         let row = NSMenuItem(title: title, action: #selector(action(_:)), keyEquivalent: ""); row.target = self; row.representedObject = data; row.state = checked ? .on : .off; return row
     }
+    let inboxShortcutRows: [(String,String)] = [
+        ("J / K · ↓ / ↑","Move between inbox rows"),
+        ("0","Jump to the first inbox row"),
+        ("1","Jump to the first unstarred row in the current filter"),
+        ("H / L · ← / →","Cycle inbox filters"),
+        ("Enter","Open the selected item and focus its composer"),
+        ("X","Toggle the selected item read / unread"),
+        ("N","Toggle the new-message composer"),
+        ("/","Focus the conversation filter"),
+        ("⇧/","Clear the conversation filter without moving focus"),
+        ("⌘K","Search Slack and switch conversations"),
+        ("⌥⇧↓ / ⌥⇧↑","Open the next / previous unread item"),
+        ("F6 / ⇧F6","Cycle inbox, messages, and composer focus (Fn may be needed)"),
+        ("Escape","Leave text focus first, then close the conversation, then collapse the inbox")
+    ]
+    func shortcutDiagnostic(_ message:String) {
+        FileHandle.standardError.write(Data("[triage-shortcuts] \(message)\n".utf8))
+    }
+    @objc func toggleShortcutHelp() {
+        if shortcutWindow?.isVisible == true && shortcutWindow?.isKeyWindow == true { shortcutWindow?.close() }
+        else { openShortcutHelp() }
+    }
+    @objc func openShortcutHelp() {
+        if NSWorkspace.shared.frontmostApplication?.processIdentifier != getpid() { shortcutReturnApp=NSWorkspace.shared.frontmostApplication }
+        if shortcutWindow == nil {
+            let window=ShortcutPanel(contentRect:NSRect(x:0,y:0,width:590,height:570),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
+            window.title="Slack Triage Shortcuts";window.isReleasedWhenClosed=false
+            window.contentMinSize=NSSize(width:490,height:360);window.level = .floating
+            window.hidesOnDeactivate=false
+            window.backgroundColor=TriagePreferencesTheme.background
+            window.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary]
+            window.appearance=NSAppearance(named:.darkAqua)
+            window.onDismiss={ [weak self] in
+                guard let self,NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid(),let previous=self.shortcutReturnApp,!previous.isTerminated else { return }
+                previous.activate(options:[])
+            }
+            window.center();shortcutWindow=window
+        }
+        renderShortcutHelp();shortcutWindow?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
+    }
+    func renderShortcutHelp() {
+        guard let window=shortcutWindow else { return }
+        let signature="\(shortcut)|\(stockShortcut)|\(helpShortcut)|\(helpHotKeyOK)|\(accentTheme["--pme-accent-text"] ?? "")"
+        guard signature != shortcutWindowSignature else { return };shortcutWindowSignature=signature
+        let oldOffset=(window.contentView as? NSScrollView)?.contentView.bounds.origin.y ?? 0
+        let scroll=NSScrollView();scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true;scroll.drawsBackground=false
+        window.contentView=scroll
+        let document=SettingsDocumentView();document.translatesAutoresizingMaskIntoConstraints=false;scroll.documentView=document
+        let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=12;stack.translatesAutoresizingMaskIntoConstraints=false;document.addSubview(stack)
+        NSLayoutConstraint.activate([document.widthAnchor.constraint(equalTo:scroll.contentView.widthAnchor),stack.leadingAnchor.constraint(equalTo:document.leadingAnchor,constant:24),stack.trailingAnchor.constraint(equalTo:document.trailingAnchor,constant:-24),stack.topAnchor.constraint(equalTo:document.topAnchor,constant:20),stack.bottomAnchor.constraint(equalTo:document.bottomAnchor,constant:-24)])
+        func fill(_ view:NSView) { stack.addArrangedSubview(view);view.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true }
+        func section(_ title:String) {
+            let divider=NSBox();divider.boxType = .separator;fill(divider)
+            fill(TriagePreferencesTheme.label(title,heading:true))
+        }
+        let header=NSStackView();header.orientation = .horizontal;header.spacing=10;header.alignment = .centerY
+        let icon=NSImageView();icon.image=NSImage(systemSymbolName:"keyboard",accessibilityDescription:nil);icon.contentTintColor=currentAccent
+        icon.widthAnchor.constraint(equalToConstant:24).isActive=true;icon.heightAnchor.constraint(equalToConstant:24).isActive=true
+        header.addArrangedSubview(icon);header.addArrangedSubview(TriagePreferencesTheme.label("Keyboard shortcuts",heading:true));fill(header)
+        fill(TriagePreferencesTheme.label("Single-key shortcuts stay inactive while typing."))
+        section("Global shortcuts")
+        fill(TriagePreferencesTheme.shortcutRow(shortcutLabel(shortcut),"Toggle triage"))
+        fill(TriagePreferencesTheme.shortcutRow(shortcutLabel(stockShortcut),"Open normal Slack, or hide / show its window"))
+        fill(TriagePreferencesTheme.shortcutRow(shortcutLabel(helpShortcut),"Show / close this cheat sheet"))
+        section("Inbox navigation")
+        for (keys,text) in inboxShortcutRows { fill(TriagePreferencesTheme.shortcutRow(keys,text)) }
+        let divider=NSBox();divider.boxType = .separator;fill(divider)
+        fill(TriagePreferencesTheme.label("Escape closes this window and returns focus to the previous app."))
+        let settingsButton=NSButton(title:"Shortcut settings…",target:self,action:#selector(openShortcutSettings))
+        settingsButton.bezelStyle = .rounded;settingsButton.contentTintColor=currentAccent;stack.addArrangedSubview(settingsButton)
+        window.contentView?.layoutSubtreeIfNeeded()
+        scroll.contentView.scroll(to:NSPoint(x:0,y:min(oldOffset,max(0,document.frame.height-scroll.contentSize.height))))
+        scroll.reflectScrolledClipView(scroll.contentView)
+    }
+    @objc func openShortcutSettings() {
+        shortcutWindow?.orderOut(nil);openSettings()
+        if let section=settingsSectionButtons.first(where:{$0.title == "Global shortcuts"}) { jumpToSettingsSection(section) }
+    }
     @objc func openSettings() {
         if settingsWindow == nil {
             let window = NSWindow(contentRect:NSRect(x:0,y:0,width:900,height:720),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
             window.contentMinSize=NSSize(width:820,height:420)
             window.title="Slack Triage Settings";window.isReleasedWhenClosed=false
             window.appearance=NSAppearance(named:.darkAqua)
-            window.backgroundColor=NSColor(calibratedRed:0.078,green:0.098,blue:0.145,alpha:1)
+            window.backgroundColor=TriagePreferencesTheme.background
             window.center();window.setFrameAutosaveName("SlackTriageSettings")
             if (window.contentView?.bounds.width ?? 0) < 820 { window.setContentSize(NSSize(width:900,height:max(420,window.contentView?.bounds.height ?? 720))) }
             settingsWindow=window
@@ -727,7 +851,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     func renderSettings() {
         guard let window=settingsWindow else { return }
-        let data: [String:Any] = ["settings":settings,"backdrop":backdrop,"accentTheme":accentTheme,"workspaces":workspaces,"displays":displays,"inbox":inboxWorkspace ?? "","online":shellOnline,"saving":settingsSaving,"error":settingsError,"triageHotkey":hotKeyOK,"stockHotkey":stockHotKeyOK]
+        let data: [String:Any] = ["settings":settings,"backdrop":backdrop,"accentTheme":accentTheme,"workspaces":workspaces,"displays":displays,"inbox":inboxWorkspace ?? "","online":shellOnline,"saving":settingsSaving,"error":settingsError,"triageHotkey":hotKeyOK,"stockHotkey":stockHotKeyOK,"helpHotkey":helpHotKeyOK]
         let signature=String(data:(try? JSONSerialization.data(withJSONObject:data,options:[.sortedKeys])) ?? Data(),encoding:.utf8) ?? ""
         if signature == settingsSignature { return };settingsSignature=signature
         let oldOffset=settingsScrollView?.contentView.bounds.origin.y ?? 0
@@ -735,7 +859,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settingsSectionHeaders=[];settingsSectionButtons=[];settingsJump=nil
         let content=NSView();window.contentView=content
         let sidebar=NSView();sidebar.translatesAutoresizingMaskIntoConstraints=false;sidebar.wantsLayer=true
-        sidebar.layer?.backgroundColor=NSColor(calibratedRed:0.064,green:0.08,blue:0.12,alpha:1).cgColor;content.addSubview(sidebar)
+        sidebar.layer?.backgroundColor=TriagePreferencesTheme.inset.cgColor;content.addSubview(sidebar)
         let navigation=NSStackView();navigation.orientation = .vertical;navigation.alignment = .leading;navigation.spacing=6;navigation.translatesAutoresizingMaskIntoConstraints=false;sidebar.addSubview(navigation)
         let scroll=NSScrollView();scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true;scroll.drawsBackground=false;scroll.translatesAutoresizingMaskIntoConstraints=false;content.addSubview(scroll);settingsScrollView=scroll
         NSLayoutConstraint.activate([sidebar.leadingAnchor.constraint(equalTo:content.leadingAnchor),sidebar.topAnchor.constraint(equalTo:content.topAnchor),sidebar.bottomAnchor.constraint(equalTo:content.bottomAnchor),sidebar.widthAnchor.constraint(equalToConstant:180),navigation.leadingAnchor.constraint(equalTo:sidebar.leadingAnchor,constant:12),navigation.trailingAnchor.constraint(equalTo:sidebar.trailingAnchor,constant:-12),navigation.topAnchor.constraint(equalTo:sidebar.topAnchor,constant:20),scroll.leadingAnchor.constraint(equalTo:sidebar.trailingAnchor),scroll.trailingAnchor.constraint(equalTo:content.trailingAnchor),scroll.topAnchor.constraint(equalTo:content.topAnchor),scroll.bottomAnchor.constraint(equalTo:content.bottomAnchor)])
@@ -745,8 +869,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSLayoutConstraint.activate([document.widthAnchor.constraint(equalTo:scroll.contentView.widthAnchor),stack.leadingAnchor.constraint(equalTo:document.leadingAnchor,constant:24),stack.trailingAnchor.constraint(equalTo:document.trailingAnchor,constant:-24),stack.topAnchor.constraint(equalTo:document.topAnchor,constant:20),stack.bottomAnchor.constraint(equalTo:document.bottomAnchor,constant:-24)])
         let enabled=shellOnline && !settingsSaving
         func label(_ text:String,heading:Bool=false)->NSTextField {
-            let field=NSTextField(wrappingLabelWithString:text);field.font=heading ? .systemFont(ofSize:14,weight:.semibold) : .systemFont(ofSize:12)
-            field.textColor=heading ? .labelColor : .secondaryLabelColor;return field
+            return TriagePreferencesTheme.label(text,heading:heading)
         }
         func note(_ text:String) { let field=label(text);stack.addArrangedSubview(field);field.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true }
         func section(_ title:String) {
@@ -765,7 +888,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             control.setAccessibilityLabel(title);control.setContentHuggingPriority(.defaultLow,for:.horizontal)
             for (title,value) in choices {
                 control.addItem(withTitle:title);control.lastItem?.representedObject=value
-                if key == "shortcut" || key == "stockShortcut" { let other=settings[key == "shortcut" ? "stockShortcut" : "shortcut"] as? String;control.lastItem?.isEnabled = String(describing:value) != other }
+                let shortcutKeys=["shortcut","stockShortcut","helpShortcut"]
+                if shortcutKeys.contains(key) { control.lastItem?.isEnabled = !shortcutKeys.filter { $0 != key }.contains { settings[$0] as? String == String(describing:value) } }
             }
             control.menu?.autoenablesItems=false
             if let current=settings[key] { for (index,choice) in choices.enumerated() { if String(describing:choice.1) == String(describing:current) { control.selectItem(at:index) } } }
@@ -851,32 +975,20 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         checkbox("Expand the edge strip when new activity arrives",key:"expandOnActivity")
         note("Opens only the pill, without taking focus. Turn this off to keep the strip quiet while its unread dots continue to update.")
         section("Global shortcuts")
-        let choices:[(String,Any)]=[("⌘⇧Y","cmd-shift-y"),("⌘⇧U","cmd-shift-u"),("⌃⌥Space","ctrl-option-space"),("⌥Space","option-space")]
+        let choices:[(String,Any)]=[("⌘⇧Y","cmd-shift-y"),("⌘⇧U","cmd-shift-u"),("⌘⇧,","cmd-shift-comma"),("⌃⌥Space","ctrl-option-space"),("⌥Space","option-space")]
         popup("Toggle triage shortcut",key:"shortcut",choices:choices)
         note(!shellOnline ? "Triage shortcut: controller disconnected." : hotKeyOK ? "Triage shortcut: registered globally." : "Triage shortcut: unavailable. Another app may be using it; choose a different combination.")
         popup("Normal Slack shortcut",key:"stockShortcut",choices:choices)
         note(!shellOnline ? "Normal Slack shortcut: controller disconnected." : stockHotKeyOK ? "Normal Slack shortcut: registered globally." : "Normal Slack shortcut: unavailable. Another app may be using it; choose a different combination.")
         note("Opens normal Slack from triage; then hides or restores its window. Each global action needs a different shortcut.")
+        popup("Shortcut cheat sheet",key:"helpShortcut",choices:choices)
+        note(helpHotKeyOK ? "Cheat sheet shortcut: registered globally." : "Cheat sheet shortcut: unavailable. Use the menu-bar item or choose another combination.")
         section("Keyboard reference")
         func shortcutRow(_ keys:String,_ text:String) {
-            let row=NSStackView();row.orientation = .horizontal;row.spacing=16;row.alignment = .top
-            let key=label(keys);key.font = .monospacedSystemFont(ofSize:12,weight:.medium);key.widthAnchor.constraint(equalToConstant:150).isActive=true
-            let description=label(text);description.setContentHuggingPriority(.defaultLow,for:.horizontal)
-            row.addArrangedSubview(key);row.addArrangedSubview(description);stack.addArrangedSubview(row);row.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+            let row=TriagePreferencesTheme.shortcutRow(keys,text)
+            stack.addArrangedSubview(row);row.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         }
-        shortcutRow("J / K · ↓ / ↑","Move between inbox rows")
-        shortcutRow("0","Jump to the first inbox row")
-        shortcutRow("1","Jump to the first unstarred row in the current filter")
-        shortcutRow("H / L · ← / →","Cycle inbox filters")
-        shortcutRow("Enter","Open the selected item and focus its composer")
-        shortcutRow("X","Toggle the selected item read / unread")
-        shortcutRow("N","Toggle the new-message composer")
-        shortcutRow("/","Focus the conversation filter")
-        shortcutRow("⇧/","Clear the conversation filter without moving focus")
-        shortcutRow("⌘K","Search Slack and switch conversations")
-        shortcutRow("⌥⇧↓ / ⌥⇧↑","Open the next / previous unread item")
-        shortcutRow("F6 / ⇧F6","Cycle inbox, messages, and composer focus (Fn may be needed)")
-        shortcutRow("Escape","Leave text focus first, then close the conversation, then collapse the inbox")
+        for (keys,text) in inboxShortcutRows { shortcutRow(keys,text) }
         note("Single-key shortcuts stay inactive while typing. In the conversation filter, Down Arrow moves into results. Dialogs handle Escape before the inbox.")
         let status=label(!shellOnline ? "Controller disconnected. Settings will be available after reconnecting." : settingsSaving ? "Saving…" : settingsError.isEmpty ? "Changes save automatically on this Mac." : settingsError)
         status.setAccessibilityIdentifier("settings-status");stack.addArrangedSubview(status);status.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
@@ -936,13 +1048,14 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for (title,op) in [("Hide triage","hide"),("Minimize","minimize"),("Open normal Slack","stock")] { let row=entry(title,data:["op":op]);row.isEnabled=connected;windowActions.addItem(row) }
         let more=NSMenuItem(title:"More window actions",action:nil,keyEquivalent:"");more.submenu=windowActions;menu.addItem(more)
         menu.addItem(.separator())
+        let help=NSMenuItem(title:"Keyboard shortcuts (\(shortcutLabel(helpShortcut)))…",action:#selector(openShortcutHelp),keyEquivalent:"");help.target=self;menu.addItem(help)
         let preferences=NSMenuItem(title:"Settings…",action:#selector(openSettings),keyEquivalent:",");preferences.target=self;menu.addItem(preferences)
         if !workspaces.isEmpty { let sub=NSMenu();for ws in workspaces { if let id=ws["id"] as? String { let row=entry(ws["name"] as? String ?? id,data:["op":"switch","workspace":id]);row.isEnabled=ws["connected"] as? Bool == true;sub.addItem(row) } };let row=NSMenuItem(title:"Workspaces",action:nil,keyEquivalent:"");row.submenu=sub;menu.addItem(row) }
         menu.addItem(.separator());let quit=NSMenuItem(title:"Quit menu controller",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"");menu.addItem(quit);item.menu=menu
     }
     func menuWillOpen(_ menu: NSMenu) { trackingMenu=true }
     func menuDidClose(_ menu: NSMenu) { trackingMenu=false }
-    func applicationWillTerminate(_ notification: Notification) { for observer in settingsScrollObservers { NotificationCenter.default.removeObserver(observer) };timer?.invalidate();edgeView?.cancelHover();edgePanel?.orderOut(nil);if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) };if let hotKey { UnregisterEventHotKey(hotKey) };if let stockHotKey { UnregisterEventHotKey(stockHotKey) };if let handler { RemoveEventHandler(handler) } }
+    func applicationWillTerminate(_ notification: Notification) { for observer in settingsScrollObservers { NotificationCenter.default.removeObserver(observer) };timer?.invalidate();edgeView?.cancelHover();edgePanel?.orderOut(nil);if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) };if let hotKey { UnregisterEventHotKey(hotKey) };if let stockHotKey { UnregisterEventHotKey(stockHotKey) };if let helpHotKey { UnregisterEventHotKey(helpHotKey) };if let handler { RemoveEventHandler(handler) } }
 }
 let app=NSApplication.shared
 let controller=Controller(CommandLine.arguments.dropFirst().first ?? "")

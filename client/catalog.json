@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "apps": [
     {
       "id": "slack",
@@ -12,7 +12,7 @@
         {
           "id": "slack-triage",
           "name": "Slack Triage",
-          "version": "0.21.0",
+          "version": "0.22.0",
           "author": "PimpMyElectron",
           "summary": "A quieter way to stay on top of your messages.",
           "description": "An edge-docked inbox, hover previews, and quick replies. Keep your conversations close without keeping all of Slack open.",
