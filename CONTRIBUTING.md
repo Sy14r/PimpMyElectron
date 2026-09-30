@@ -62,8 +62,9 @@ The standard test suite uses fixtures, mocks, temporary directories, and some
 native checks; an Apple Silicon Mac with Command Line Tools is the full supported
 development environment. Tests do not require signing in to Slack or Spotify.
 The packaged smoke check verifies the copied runtime, service, and shortcut
-resources without launching Slack. There is no checked-in GitHub Actions workflow;
-report the commands and results actually run in your PR.
+resources without launching Slack. The GitHub Actions Pages workflow deploys only
+the product website; it does not run the app test suite or publish app releases.
+Report the commands and results actually run in your PR.
 
 For native UI changes, also exercise the affected flow in the correct local
 build. Check keyboard focus, Escape behavior, window transitions, and Reduce
@@ -133,6 +134,8 @@ contributors changing that service; Cloudflare/GitHub App credentials are not
 needed to work on the ordinary client.
 
 ## Documentation and releases
+
+For the public product site, see [Website development](docs/WEBSITE.md).
 
 Keep current instructions in the root guides and `docs/`. Put dated experiments
 in `research/`, with the tested versions and limits. Do not promote a one-machine

@@ -9,6 +9,7 @@ their signed application bundles on disk.
 official Slack or Spotify app separately. Spotify uses Chromium Embedded Framework
 (CEF), rather than Electron; PME has a dedicated adapter for it.
 
+[Product tour](https://sy14r.github.io/PimpMyElectron/) ·
 [Download PME](https://github.com/Sy14r/PimpMyElectron/releases/latest) ·
 [Install and update](docs/CLIENT-RELEASES.md#install-and-update) ·
 [Develop from source](SETUP.md) · [Contribute](CONTRIBUTING.md)
@@ -70,6 +71,8 @@ still cause Slack's normal requests. Coverage depends on available cached state;
 it is not a complete independent synchronization client.
 
 ## Documentation
+
+- [Website development and screenshot updates](docs/WEBSITE.md)
 
 - [Contributor guide and architecture map](CONTRIBUTING.md)
 - [Mod platform compatibility](docs/MOD-COMPATIBILITY.md)
