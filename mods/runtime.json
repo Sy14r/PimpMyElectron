@@ -56,6 +56,16 @@
         "slackPage",
         "dom"
       ]
+    },
+    {
+      "id": "quote-reply",
+      "version": "0.1.0",
+      "source": "src/renderer/quote-reply.js",
+      "global": "__PME_QUOTE_REPLY__",
+      "requires": [
+        "slackPage",
+        "dom"
+      ]
     }
   ]
 }

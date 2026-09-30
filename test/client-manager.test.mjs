@@ -18,7 +18,7 @@ test('mod catalog resolves dependencies once and blocks unknown IDs, cycles and 
 });
 test('first client selection enables the triage suite and disables API adapters; choices persist',async t=>{
  const f=await fixture(t),app=(await f.m.snapshot()).apps[0];assert.deepEqual(app.selectedMods,['slack-triage']);
- assert.deepEqual(moduleSelection(app,app.selectedMods,f.m.modules).disabled,['history-reader','mark-read']);
+ assert.deepEqual(moduleSelection(app,app.selectedMods,f.m.modules).disabled,['history-reader','mark-read','quote-reply']);
  await f.m.select({appId:'slack',modIds:[]});assert.deepEqual(JSON.parse(await fs.readFile(path.join(f.dataDir,'client.json'),'utf8')).apps.slack.selected,[]);
  await assert.rejects(f.m.start('slack'),/Enable at least one/);
  await assert.rejects(f.m.select({appId:'slack',modIds:['slack-triage'],installationPath:'/unverified/Slack.app'}),/verified/);assert.deepEqual(f.m.config.apps.slack.selected,[]);
@@ -26,7 +26,7 @@ test('first client selection enables the triage suite and disables API adapters;
 test('launch uses the bundled runtime with no developer flag, selected modules, and separate writable state',async t=>{
  const f=await fixture(t);await f.m.start('slack');const call=f.calls.find(c=>c.node);
  assert.equal(call.node,'/bundled/node');assert.deepEqual(call.args,[path.join(root,'scripts/dev.mjs')]);assert.equal(call.options.detached,true);assert.equal(call.options.env.PME_SLACK_APP,f.installation.app);assert.equal(call.options.env.PME_DATA_DIR,f.m.runtimeDir('slack'));
- const config=JSON.parse(await fs.readFile(path.join(f.m.runtimeDir('slack'),'mods.json'),'utf8'));assert.deepEqual(config.disabled,['history-reader','mark-read']);assert.equal((await fs.stat(path.join(f.m.runtimeDir('slack'),'mods.json'))).mode&0o777,0o600);
+ const config=JSON.parse(await fs.readFile(path.join(f.m.runtimeDir('slack'),'mods.json'),'utf8'));assert.deepEqual(config.disabled,['history-reader','mark-read','quote-reply']);assert.equal((await fs.stat(path.join(f.m.runtimeDir('slack'),'mods.json'))).mode&0o777,0o600);
  await f.m.stop('slack');assert.equal((await f.m.runtime('slack')).running,false);
 });
 test('external Slack and unowned existing profiles are never stopped, adopted or overwritten',async t=>{
@@ -52,4 +52,11 @@ test('backend rejects an incompatible selection and launch even if UI controls a
  await assert.rejects(f.m.select({appId:'slack',modIds:['slack-triage']}),/cannot run on macOS/);
  await assert.rejects(f.m.start('slack'),/cannot run on macOS/);
  const app=(await f.m.select({appId:'slack',modIds:[]})).apps.find(a=>a.id==='slack');assert.equal(app.mods[0].compatible,false);assert.equal(f.calls.some(c=>c.node),false);
+});
+
+test('a standalone renderer mod opens normal Slack without calling triage controls',async t=>{
+ const f=await fixture(t);f.m.runtime=async()=>({running:true,mode:'everyday',triageEnabled:false});
+ const calls=[];f.m.request=async(file,request)=>{calls.push({file,request});return {shown:true};};
+ await f.m.show('slack','queue');assert.deepEqual(calls,[{file:path.join(f.m.runtimeDir('slack'),'control.sock'),request:{op:'show'}}]);
+ await assert.rejects(f.m.show('slack','preferences'),/no settings window/);assert.equal(calls.length,1);
 });

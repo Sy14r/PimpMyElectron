@@ -45,7 +45,7 @@ export class ClientManager {
   try{const state=await this.request(path.join(this.runtimeDir(id),'control.sock'),{op:'status'});
    if(id==='spotify')return state.adapter==='spotify'?{running:true,pid:state.pid,mode:'everyday',helperRunning:true,mods:state.mods??['spotify-menu'],cameraStatus:state.cameraStatus,cameraOwnsPause:state.cameraOwnsPause,appRunning:state.appRunning,signedIn:true,error:state.error,appPath:state.appPath}: {running:false};
    return {running:state.running===true,pid:state.pid,mode:state.controlMode,appPath:state.installation?.app,version:state.installation?.version,error:state.featureError,
-    helperRunning:state.helperRunning,signedIn:state.pages?.some(p=>p.signedIn)===true,modules:state.feature?.mods?.pages?.[0]?.modules||{},customApiRequests:state.feature?.customApi?.requests||0};
+    helperRunning:state.helperRunning,triageEnabled:state.feature?.liveUI!==false,signedIn:state.pages?.some(p=>p.signedIn)===true,modules:state.feature?.mods?.pages?.[0]?.modules||{},customApiRequests:state.feature?.customApi?.requests||0};
   }catch{return {running:false};}
  }
  async snapshot(){
@@ -152,7 +152,8 @@ export class ClientManager {
   });
  }
  async stop(appId){const dir=this.runtimeDir(appId),state=await this.runtime(appId);if(!state.running)return this.snapshot();if(state.mode!=='everyday')throw Error('This session was not started in everyday mode. Stop it from its original launcher.');await this.request(path.join(dir,'control.sock'),{op:'stop'});for(let i=0;i<40;i++){await new Promise(r=>setTimeout(r,150));if(!(await this.runtime(appId)).running)break;}return this.snapshot();}
- async show(appId,op){if(!['queue','preferences','stock','camera-settings'].includes(op))throw Error('Unsupported view');const state=await this.runtime(appId);if(!state.running||state.mode!=='everyday')throw Error('Launch the app with PME first.');await this.request(path.join(this.runtimeDir(appId),appId==='spotify'?'control.sock':'shell.sock'),{op:appId==='spotify'?(op==='camera-settings'?'camera-settings':'show'):op});return this.snapshot();}
+ async show(appId,op){if(!['queue','preferences','stock','camera-settings'].includes(op))throw Error('Unsupported view');const state=await this.runtime(appId);if(!state.running||state.mode!=='everyday')throw Error('Launch the app with PME first.');if(appId==='slack'&&state.triageEnabled===false){if(op==='preferences'||op==='camera-settings')throw Error('The enabled Slack mods have no settings window.');await this.request(path.join(this.runtimeDir(appId),'control.sock'),{op:'show'});}
+  else await this.request(path.join(this.runtimeDir(appId),appId==='spotify'?'control.sock':'shell.sock'),{op:appId==='spotify'?(op==='camera-settings'?'camera-settings':'show'):op});return this.snapshot();}
  async importSetup(appId,source){
   this.app(appId);if(appId!=='slack')throw Error('Import is only supported for Slack.');if((await this.runtime(appId)).running)throw Error('Stop the PME-managed app before importing settings.');
   if(!path.isAbsolute(source))throw Error('Choose your existing PME project folder.');

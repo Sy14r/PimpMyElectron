@@ -19,6 +19,17 @@ const teamFromURL = value => { try { const url = new URL(value); if (url.origin 
   return url.pathname.match(/^\/client\/([TE][A-Z0-9]+)(?:\/|$)/)?.[1] || null; } catch { return null; } };
 export async function createRuntime({ cdp, contextGuard, sessions, root, runtimeDir=path.join(root,'.lab/dev'), slackPID=0, slackVersion }) {
   if (!contextGuard) throw Error('A trusted CDP context guard is required');
+  const mods=await createModLoader({cdp,root,runtimeDir,slackVersion});
+  // Renderer-only mods do not need triage's message observer, bindings, window
+  // controller or network instrumentation. Discovery reconciles their lifecycle.
+  if(['state-observer','history-reader','mark-read','native-reply','triage-surface'].every(id=>!mods.enabled(id))){
+    return {
+      attach:async entry=>{if(contextGuard.current(entry))await mods.reconcile(entry);},
+      detach:async entry=>mods.detach(entry),
+      status:()=>({mode:'renderer-only',mods:mods.status(),liveUI:false,customApi:{requests:0},shell:{connected:false}}),
+      dispose:()=>mods.dispose(sessions)
+    };
+  }
   const store = new ActivityStore({maxMessagesPerItem:200,maxWorkspaces:12});
   const local=await new TriageState(path.join(runtimeDir,'triage-state.json')).load();
   let actionError=null,returnEpoch=0,settingsEpoch=0,nativeHotkey=false,nativeStockHotkey=false,edgeHelperAt=0,edgeHelperReady=null;
@@ -36,7 +47,6 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   const metricMethods=new Set(['auth.test','users.conversations','client.counts','subscriptions.thread.getView','conversations.history','conversations.replies','users.info','conversations.mark']);
   const socketTypes = new Map();
   const stats = { readResponses: 0, domSnapshots: 0, clientStateSnapshots:0, skippedBodies: 0, errors: 0, lastPush: 0 };
-  const mods=await createModLoader({cdp,root,runtimeDir,slackVersion});
   let disposed = false, polling = false, bodyReads = 0;
   const entryFor = sessionId => [...sessions.values()].find(e => e.sessionId === sessionId);
   const evaluate = (e, expression) => cdp.evaluate(expression, e.sessionId);

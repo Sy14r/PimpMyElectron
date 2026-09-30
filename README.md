@@ -18,6 +18,7 @@ official Slack or Spotify app separately. Spotify uses Chromium Embedded Framewo
 | App | Mod | What it adds |
 | --- | --- | --- |
 | Slack | [Slack Triage](docs/SLACK-TRIAGE.md) | Edge strip, unread pill previews, keyboard-driven inbox, and native conversations, threads, compose, search, and Activity alongside the inbox. |
+| Slack | [Quote in Reply](docs/SLACK-QUOTE-REPLY.md) | Quote a message into the current native composer without creating a thread. Works alone or with Triage. |
 | Spotify | [Menu Player](docs/SPOTIFY-MENU.md) | Menu-bar player with artwork treatments, playback controls, Mini Library, search, and queue. |
 | Spotify | [Camera Pause](docs/SPOTIFY-CAMERA-PAUSE.md) | Pause when selected apps use the camera, then resume after a configurable delay only if the mod paused playback. Works without Menu Player. |
 

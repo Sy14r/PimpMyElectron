@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "apps": [
     {
       "id": "slack",
@@ -31,6 +31,29 @@
           ],
           "access": "Uses Slack\u2019s cached state and native interface. Background API polling is disabled.",
           "defaultEnabled": true,
+          "platforms": [
+            "mac"
+          ]
+        },
+        {
+          "id": "slack-quote-reply",
+          "name": "Quote in Reply",
+          "version": "0.1.0",
+          "author": "PimpMyElectron",
+          "summary": "Quote a message without starting a new thread.",
+          "description": "Adds Quote in reply to Slack\u2019s message action bar. Inserts a blockquote into the current channel, DM, or existing thread composer, preserving your draft. Works independently or alongside Slack Triage.",
+          "modules": [
+            "quote-reply"
+          ],
+          "requires": [],
+          "features": [
+            "Quote rendered message text into the native composer",
+            "Preserves existing drafts and native undo",
+            "Works in ordinary Slack and triage conversations",
+            "Never sends messages automatically"
+          ],
+          "access": "Reads the clicked message\u2019s rendered text and edits the local native composer. No API calls, background message collection, or additional permissions.",
+          "defaultEnabled": false,
           "platforms": [
             "mac"
           ]

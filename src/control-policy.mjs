@@ -1,4 +1,4 @@
-const everyday = new Set(['status', 'reload', 'restart-shell', 'stop']);
+const everyday = new Set(['status', 'reload', 'restart-shell', 'stop', 'show']);
 const development = new Set(['inspect', 'screenshot', 'test-network-offline', 'test-network-restore']);
 export function createControlPolicy(args = []) {
   if (args.some(arg => arg !== '--development') || args.length > 1) throw Error('Usage: node scripts/dev.mjs [--development]');

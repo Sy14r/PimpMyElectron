@@ -77,6 +77,13 @@ async function loadFeature() {
   }
 }
 function startHelper() {
+  // Native triage controls are not part of independent renderer-only mods.
+  try {
+    const config=JSON.parse(fs.readFileSync(path.join(dir,'mods.json'),'utf8'));
+    if(config.disabled?.includes('triage-surface'))return;
+  } catch(error) {
+    if(error.code!=='ENOENT'){logStatus('Invalid module selection; menu controller not started.');return;}
+  }
   const binary = process.env.PME_HELPER_PATH || path.join(root, '.lab/bin/SlackTriage');
   if(process.env.PME_HELPER_PATH&&!fs.existsSync(binary)){logStatus('Packaged menu controller is missing.');return;}
   const source = path.join(root, 'native/TriageController.swift');
@@ -158,6 +165,11 @@ const server = net.createServer(connection => {
         result=await testOffline(request.durationMs);
       } else if(request.op==='test-network-restore'){
         result=await restoreTestNetwork();
+      } else if (request.op === 'show') {
+        if(stopping)throw Error('Session is stopping');
+        const opened=spawnSync('/usr/bin/open',['-a',installation.app],{encoding:'utf8'});
+        if(opened.status!==0)throw Error('Could not bring Slack forward');
+        result={shown:true};
       } else if (request.op === 'reload') {
         result = await serial(async () => {
           if (stopping) throw Error('Session is stopping');

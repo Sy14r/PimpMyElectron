@@ -46,6 +46,7 @@ export async function createModLoader({cdp,root,runtimeDir,slackVersion}){
   }
   await ledger();
  }
+ await config();
  return {reconcile,status:()=>({slackVersion,previouslyTested:manifest.testedSlackVersions?.includes(slackVersion)===true,configError,
   pages:[...pages.values()].map(p=>({capabilities:p.capabilities,modules:Object.fromEntries([...p.modules].map(([id,r])=>[id,r.state]))}))}),
   enabled:id=>!disabled.has(id),

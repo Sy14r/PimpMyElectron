@@ -79,7 +79,7 @@ test('passive runtime scopes snapshots, ignores write responses, and cleans up',
   event('Network.webSocketFrameReceived',{response:{opcode:1,payloadData:JSON.stringify({type:'message',channel:'CONE',ts:'100.000004',text:'bad-origin'})}});
   assert.equal(runtime.status().messages,4);
   await runtime.dispose();cdp.contextGuard.dispose();assert.equal(cdp.listenerCount('event'),0);assert.equal(runtime.status().messages,0);
-  assert.equal(cdp.commands.filter(c=>c.method==='Page.removeScriptToEvaluateOnNewDocument').length,10);
+  assert.equal(cdp.commands.filter(c=>c.method==='Page.removeScriptToEvaluateOnNewDocument').length,cdp.commands.filter(c=>c.method==='Page.addScriptToEvaluateOnNewDocument').length);
 });
 
 test('cache snapshots hydrate authorized background workspaces and reject stale renderer attribution without API calls',async t=>{
@@ -218,4 +218,14 @@ test('a normal thread send clears inbox and pill indicators only after success a
  assert.equal(cdp.captures.get('s1').workspaces[0].items.find(i=>i.key===key).pendingRead,true);
  binding('__pmeClientState',{...cache,messages:[...cache.messages,{channel:'CONE',ts:'100.000004',thread_ts:'100.000001',text:'newer than reply'}]});await new Promise(r=>setTimeout(r,1600));
  assert.equal((await state()).attention,1);assert.equal(runtime.status().customApi.requests,0);
+});
+
+test('renderer-only Slack mods attach without triage bindings, network observation, or shell',async t=>{
+ const cdp=new FakeCDP(),entry={targetId:'one',sessionId:'s1',url:'https://app.slack.com/client/TONE/CONE'},sessions=new Map([['one',entry]]);
+ const runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'quote-runtime-'));t.after(()=>fs.rm(runtimeDir,{recursive:true,force:true}));
+ await fs.writeFile(path.join(runtimeDir,'mods.json'),JSON.stringify({disabled:['state-observer','history-reader','mark-read','native-reply','triage-surface']}));
+ const runtime=await createRuntime({cdp,contextGuard:cdp.contextGuard,sessions,root,runtimeDir});t.after(()=>runtime.dispose());await runtime.attach(entry);
+ assert.equal(runtime.status().mode,'renderer-only');assert.equal(runtime.status().mods.pages[0].modules['quote-reply'],'active');
+ assert.equal(cdp.commands.some(c=>c.method.startsWith('Network.')||c.method==='Runtime.addBinding'),false);
+ assert.equal(await fs.stat(path.join(runtimeDir,'shell.sock')).catch(()=>null),null);
 });

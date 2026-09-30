@@ -12,7 +12,9 @@ Download the versioned ZIP from [GitHub Releases](https://github.com/Sy14r/PimpM
 extract it, and move **PimpMyElectron.app** into Applications. The repository and release downloads are public. Node, a compiler, and a clone are not
 needed to run it. macOS performs its normal signed-app first-open check.
 
-Choose Slack, enable Slack Triage, and click Launch Slack. Quit any existing Slack
+Choose Slack, enable the mods you want, and click Launch Slack. **Slack Triage**
+adds the inbox interface; **Quote in Reply** also works on its own in standard
+Slack. Quit any existing Slack
 session normally first. Use Add app if the desired official Slack installation is
 outside Applications. PME uses a separate Slack sign-in profile. Existing source
 users can use **Import existing setup** and choose their PME repository on the
@@ -26,7 +28,7 @@ Closing the manager alone intentionally leaves managed sessions running.
 
 ## Launch shortcuts
 
-On the Slack or Spotify page, choose **Create shortcut…** beside the app’s Launch button (or **Open inbox** for running Slack). Save it in
+On the Slack or Spotify page, choose **Create shortcut…** beside the app’s Launch button (or **Open inbox** / **Open Slack** for running Slack). Save it in
 `~/Applications` (the default) or another folder you own. Finder and Spotlight
 recognize it as an app; it can also be dragged onto the Dock. Its default name is
 **Slack — PME** or **Spotify — PME**. Launching it runs PME's bundled service in the background and
