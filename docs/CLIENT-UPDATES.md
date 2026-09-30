@@ -12,10 +12,21 @@ feed and release assets are public; no GitHub login/token is needed. Users of
 - Sparkle shows release notes, skip/later options and install controls. No
   unattended download/install is enabled. It validates the signed archive before
   extraction, replaces the app and relaunches it.
-- Before replacement, stop mods in PME and quit managed Slack/Spotify sessions
-  normally, then retry Install and Relaunch. PME refuses to install while those
-  sessions run; it does not force-quit host apps or discard drafts. Launch mods
-  again through PME or a shortcut after updating.
+- If mod sessions are running when you choose Install and Relaunch, PME offers
+  **Stop sessions and update** or **Not now**. Choosing Stop asks the exact
+  PME-managed Slack and Spotify instances to quit normally, stops their helpers,
+  and waits for shutdown before continuing the installation. Spotify playback may
+  stop; review unfinished work first. Launch mods again through PME or a shortcut
+  after updating. There is no automatic restart of managed sessions.
+- Camera Pause alone can attach to ordinary Spotify: in that case only its helper
+  stops, leaving Spotify open. A Mini Library host left running after its widget
+  closes is still detected and shut down along with its managed Spotify instance.
+- If an app refuses to quit, a controller cannot be verified, or a development or
+  orphaned session remains, installation stays blocked with instructions to close
+  it normally and retry. PME never force-quits apps for an update. **Not now**
+  leaves sessions running. Closing the manager normally still leaves mods running.
+- The stop-and-update option is available once a client containing this change is
+  installed; older clients still require manually stopping sessions for that update.
 - Settings, sign-ins and shortcut profiles remain outside the bundle. Camera
   Pause does not preserve auto-resume ownership across helper shutdown.
 
@@ -48,8 +59,9 @@ so existing clients continue to trust updates.
 ## Validation
 
 Automated checks cover active-session refusal, background-host detection,
-process-inspection failure, cancellation, gate expiry, new-build recovery and
-serialization with shortcut launches. Distribution checks verify nested code,
+process-inspection failure, cancellation, gate expiry, new-build recovery,
+explicit stop consent, exact app PID selection, Camera Pause-only shutdown,
+leftover library hosts, refused quits, and serialization with shortcut launches. Distribution checks verify nested code,
 notarization, archive hashes, signed feeds and the packaged runtime. Use an
 isolated older signed app and signed feed for live installation testing.
 

@@ -1,6 +1,6 @@
 import {submitFeedback} from './feedback.mjs';
 import {releaseHistory} from './releases.mjs';
-import {assertNoUpdate,prepareUpdate,clearUpdate} from './update-gate.mjs';
+import {assertNoUpdate,prepareUpdate,stopForUpdate,waitForUpdate,clearUpdate} from './update-gate.mjs';
 import {inspectSpotify,waitForSpotifyHelper} from './spotify.mjs';
 import {supportedApps} from './app-support.mjs';
 import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import {spawn,spawnSync} from 'node:child_process';
@@ -41,8 +41,8 @@ export class ClientManager {
   for(const app of this.catalog.apps){const pref=this.config.apps[app.id],matches=this.installations.filter(i=>i.appId===app.id&&i.verified);if(!matches.some(i=>i.path===pref.path))pref.path=matches[0]?.path||null;}
   await this.save();return this.snapshot();
  }
- async runtime(id){
-  try{const state=await this.request(path.join(this.runtimeDir(id),'control.sock'),{op:'status'});
+ async runtime(id,options){
+  try{const state=await this.request(path.join(this.runtimeDir(id),'control.sock'),{op:'status'},options);
    if(id==='spotify')return state.adapter==='spotify'?{running:true,pid:state.pid,mode:'everyday',helperRunning:true,mods:state.mods??['spotify-menu'],cameraStatus:state.cameraStatus,cameraOwnsPause:state.cameraOwnsPause,appRunning:state.appRunning,signedIn:true,error:state.error,appPath:state.appPath}: {running:false};
    return {running:state.running===true,pid:state.pid,mode:state.controlMode,appPath:state.installation?.app,version:state.installation?.version,error:state.featureError,
     helperRunning:state.helperRunning,triageEnabled:state.feature?.liveUI!==false,signedIn:state.pages?.some(p=>p.signedIn)===true,modules:state.feature?.mods?.pages?.[0]?.modules||{},customApiRequests:state.feature?.customApi?.requests||0};
@@ -178,8 +178,9 @@ export class ClientManager {
   if(request.op==='feedback-submit')return submitFeedback(this.root,{title:request.title,body:request.body,requestId:request.requestId});
   if(request.op==='status')return this.snapshot();
   if(request.op==='release-history')return releaseHistory(this.root,this.clientVersion.version);
+  if(request.op==='update-cancel')return withLaunchLock(this.dataDir,()=>clearUpdate(this));
   if(this.busy)throw Error('Please wait for the current action to finish.');this.busy=true;
-  try{switch(request.op){case 'update-prepare':return await withLaunchLock(this.dataDir,()=>prepareUpdate(this,{processes:()=>{const p=spawnSync('/bin/ps',['-axo','command='],{encoding:'utf8'});if(p.status!==0)throw Error('Could not verify running mod sessions. Retry the update.');return p.stdout.split('\n');}}));case 'update-cancel':return await withLaunchLock(this.dataDir,()=>clearUpdate(this));case 'update-finish':return await withLaunchLock(this.dataDir,()=>clearUpdate(this,true));case 'scan':return await this.rescan();case 'add-app':return await this.rescan(request.path);case 'shortcut-create':return await this.createShortcut(request.appId,request.path);case 'shortcut-update':return await this.updateShortcut(request.appId,request.profileId);case 'shortcut-location':return await this.shortcutLocation(request.profileId,request.path);case 'shortcut-forget':await fs.rm(profileFile(this.dataDir,request.profileId),{force:true});return this.snapshot();case 'select':return await this.select(request);case 'launch':return await this.start(request.appId);case 'stop':return await this.stop(request.appId);case 'show':return await this.show(request.appId,request.view);case 'import':return await this.importSetup(request.appId,request.path);default:throw Error('Unsupported client action');}}
+  try{switch(request.op){case 'update-prepare':case 'update-stop':case 'update-wait':return await withLaunchLock(this.dataDir,()=>({'update-prepare':prepareUpdate,'update-stop':stopForUpdate,'update-wait':waitForUpdate}[request.op])(this,{processes:()=>{const p=spawnSync('/bin/ps',['-axo','command='],{encoding:'utf8'});if(p.status!==0)throw Error('Could not verify running mod sessions. Retry the update.');return p.stdout.split('\n');}}));case 'update-finish':return await withLaunchLock(this.dataDir,()=>clearUpdate(this,true));case 'scan':return await this.rescan();case 'add-app':return await this.rescan(request.path);case 'shortcut-create':return await this.createShortcut(request.appId,request.path);case 'shortcut-update':return await this.updateShortcut(request.appId,request.profileId);case 'shortcut-location':return await this.shortcutLocation(request.profileId,request.path);case 'shortcut-forget':await fs.rm(profileFile(this.dataDir,request.profileId),{force:true});return this.snapshot();case 'select':return await this.select(request);case 'launch':return await this.start(request.appId);case 'stop':return await this.stop(request.appId);case 'show':return await this.show(request.appId,request.view);case 'import':return await this.importSetup(request.appId,request.path);default:throw Error('Unsupported client action');}}
   finally{this.busy=false;}
  }
 }

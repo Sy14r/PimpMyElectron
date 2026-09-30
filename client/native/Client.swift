@@ -14,6 +14,10 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     lazy var updaterController=SPUStandardUpdaterController(startingUpdater:false,updaterDelegate:self,userDriverDelegate:nil)
     var installingUpdate=false
     var updateReady=false
+    var updateTerminationPending=false
+    var updateAttempt=UUID()
+    var updateProgress:NSAlert?
+    var updatePrompt:NSAlert?
     var nativeSequence = -1
     var nativeReplies=[Int:([String:Any])->Void]()
     var window:NSWindow!
@@ -108,7 +112,7 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
                 if self.buffer.count>2*1024*1024 { self.buffer.removeAll();return }
                 while let newline=self.buffer.firstIndex(of:10) {
                     let line=Data(self.buffer.prefix(upTo:newline));self.buffer.removeSubrange(...newline)
-                    if let response=(try? JSONSerialization.jsonObject(with:line)) as? [String:Any] { DispatchQueue.main.async { self.reply(response) } }
+                    if let response=(try? JSONSerialization.jsonObject(with:line)) as? [String:Any] { RunLoop.main.perform(inModes:[.default,.modalPanel,.eventTracking]) { self.reply(response) } }
                 }
             }
         }
@@ -118,9 +122,13 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     func nativeRequest(_ op:String,completion:@escaping([String:Any])->Void){
         let id=nativeSequence;nativeSequence-=1;nativeReplies[id]=completion
         send(["id":id,"op":op])
-        DispatchQueue.main.asyncAfter(deadline:.now()+15){[weak self] in
+        // AppKit may enter a nested termination loop from a main-queue callback.
+        // Main-queue work cannot re-enter there; replies and deadlines must use
+        // the run loop so an Install and Relaunch request cannot deadlock.
+        let timeout=Timer(timeInterval:op.hasPrefix("update-") ? 60:15,repeats:false){[weak self] _ in
             self?.nativeReplies.removeValue(forKey:id)?(["ok":false,"error":"The update readiness check timed out. Please reopen PME and retry."])
         }
+        RunLoop.main.add(timeout,forMode:.common);RunLoop.main.add(timeout,forMode:.modalPanel)
     }
     @objc func toggleUpdateChecks(_ sender:NSMenuItem){
         let updater=updaterController.updater
@@ -128,15 +136,73 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     }
     func updater(_ updater:SPUUpdater,willInstallUpdate item:SUAppcastItem){installingUpdate=true}
     func updater(_ updater:SPUUpdater,didAbortWithError error:Error){
-        installingUpdate=false;updateReady=false;nativeRequest("update-cancel"){_ in}
+        installingUpdate=false;updateReady=false;updateAttempt=UUID()
+        if updateTerminationPending {finishUpdateTermination(false)}
+        else {nativeRequest("update-cancel"){_ in}}
+    }
+    func finishUpdateTermination(_ ready:Bool,error:String?=nil){
+        guard updateTerminationPending else{return}
+        updateTerminationPending=false;updateReady=ready
+        if let prompt=updatePrompt {updatePrompt=nil;window.endSheet(prompt.window,returnCode:.abort);prompt.window.orderOut(nil)}
+        if let progress=updateProgress {window.endSheet(progress.window);progress.window.orderOut(nil);updateProgress=nil}
+        if !ready {nativeRequest("update-cancel"){_ in}}
+        NSApp.reply(toApplicationShouldTerminate:ready)
+        if let error {showError("Update paused",error)}
+    }
+    func stopSessionsForUpdate(_ attempt:UUID){
+        let progress=NSAlert();progress.messageText="Stopping mod sessions…"
+        progress.informativeText="Waiting for managed apps and helpers to close before installing the update."
+        progress.addButton(withTitle:"Stopping…").isEnabled=false
+        let spinner=NSProgressIndicator(frame:NSRect(x:0,y:0,width:24,height:24));spinner.style = .spinning;spinner.startAnimation(nil);progress.accessoryView=spinner
+        updateProgress=progress;progress.beginSheetModal(for:window)
+        nativeRequest("update-stop"){[weak self] response in
+            guard let self,self.updateTerminationPending,self.updateAttempt==attempt else{return}
+            guard response["ok"] as? Bool == true,let result=response["result"] as? [String:Any],let targets=result["targets"] as? [[String:Any]] else{
+                self.finishUpdateTermination(false,error:response["error"] as? String ?? "Could not stop the mod sessions.");return
+            }
+            for target in targets {
+                guard let pid=target["pid"] as? Int,pid>1,pid<=Int(Int32.max),let bundle=target["bundleIdentifier"] as? String,["com.tinyspeck.slackmacgap","com.spotify.client"].contains(bundle) else{
+                    self.finishUpdateTermination(false,error:"Could not verify a managed app. Close it normally and retry the update.");return
+                }
+                // PID comes from the session's private controller, never a name
+                // search. Re-check identity before requesting a normal macOS quit.
+                guard let app=NSRunningApplication(processIdentifier:pid_t(pid)),!app.isTerminated else{continue}
+                guard app.bundleIdentifier==bundle,app.terminate() else{
+                    self.finishUpdateTermination(false,error:"A managed app could not close. Finish any open dialogs, quit it normally, then retry the update.");return
+                }
+            }
+            self.nativeRequest("update-wait"){[weak self] response in
+                guard let self,self.updateTerminationPending,self.updateAttempt==attempt else{return}
+                let result=response["result"] as? [String:Any]
+                let ready=response["ok"] as? Bool == true && result?["ready"] as? Bool == true
+                self.finishUpdateTermination(ready,error:ready ? nil:(response["error"] as? String ?? "Some mod sessions are still running. Close them normally and retry."))
+            }
+        }
     }
     func applicationShouldTerminate(_ sender:NSApplication)->NSApplication.TerminateReply {
         guard installingUpdate,!updateReady else{return .terminateNow}
+        if updateTerminationPending {return .terminateLater}
+        updateTerminationPending=true;updateAttempt=UUID();let attempt=updateAttempt
         nativeRequest("update-prepare"){[weak self] response in
-            guard let self else{return}
-            let ready=response["ok"] as? Bool == true
-            self.updateReady=ready;sender.reply(toApplicationShouldTerminate:ready)
-            if !ready {self.showError("Finish your mod sessions before updating",response["error"] as? String ?? "Could not verify that PME is ready to update.")}
+            guard let self,self.updateTerminationPending,self.updateAttempt==attempt else{return}
+            guard response["ok"] as? Bool == true,let result=response["result"] as? [String:Any] else{
+                self.finishUpdateTermination(false,error:response["error"] as? String ?? "Could not verify that PME is ready to update.");return
+            }
+            if result["ready"] as? Bool == true {self.finishUpdateTermination(true);return}
+            guard result["canStop"] as? Bool == true else{
+                self.finishUpdateTermination(false,error:"Close any remaining development or background mod sessions normally, then retry Install and Relaunch.");return
+            }
+            let names=(result["sessions"] as? [String] ?? []).joined(separator:", ")
+            let alert=NSAlert();alert.messageText="Stop mod sessions and update?"
+            alert.informativeText="Active sessions: \(names). PME will ask managed apps to quit and stop their helpers before installing. Spotify playback may stop. Settings and sign-ins are kept; review unfinished work first. Relaunch your mods through PME after the update."
+            alert.addButton(withTitle:"Stop sessions and update");alert.addButton(withTitle:"Not now").keyEquivalent="\u{1b}"
+            self.updatePrompt=alert
+            alert.beginSheetModal(for:self.window){[weak self] choice in
+                guard let self,self.updateTerminationPending,self.updateAttempt==attempt else{return}
+                self.updatePrompt=nil
+                if choice == .alertFirstButtonReturn {self.stopSessionsForUpdate(attempt)}
+                else {self.finishUpdateTermination(false)}
+            }
         }
         return .terminateLater
     }

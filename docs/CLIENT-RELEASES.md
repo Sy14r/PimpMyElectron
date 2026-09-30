@@ -21,6 +21,11 @@ users can use **Import existing setup** and choose their PME repository on the
 same Mac to reuse ownership/settings and their existing integration sign-in.
 Import does not copy Slack credentials or replace existing destination settings.
 
+When installing through **Check for Updates**, choose **Stop sessions and update**
+if prompted to close active mod sessions and continue. PME waits for a normal
+shutdown and leaves installation blocked if an app cannot close. Relaunch mods
+through PME after updating.
+
 For a manual update, stop the PME-managed sessions from PME, quit the managed
 apps and PME normally, replace the app in Applications, and reopen it. Settings live outside the app at
 `~/Library/Application Support/PimpMyElectron/`. PME also offers Sparkle update checks and installation on request; see [Client updates](CLIENT-UPDATES.md).
