@@ -1,5 +1,9 @@
 # Spotify widget: capability and UX exploration
 
+> Design history: this document records experiments and alternatives, some of
+> which were superseded. See [Spotify Menu Player](SPOTIFY-MENU.md) for current
+> behavior and [SETUP.md](../SETUP.md) for development instructions.
+
 Research date: September 24, 2026. This document preserves the original design
 exploration. The user selected concept C; the native Mini Library is now implemented
 and live-tested. See [current implementation and limits](SPOTIFY-MENU.md). The HTML

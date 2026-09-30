@@ -1,0 +1,23 @@
+PimpMyElectron licensing
+=======================
+
+This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0. If a copy of the MPL was not distributed with this
+file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+This notice applies to the original PimpMyElectron source, build scripts,
+tests, and accompanying documentation and assets in this repository, except
+where a file or component explicitly states different terms. The full,
+unmodified license text is in LICENSE. This project does not attach the
+optional Exhibit B notice to its source.
+
+Source: https://github.com/Sy14r/PimpMyElectron
+Release source is available under the corresponding client-vX.Y.Z tag.
+Local development builds may contain unpublished changes; their source is
+the checkout used to build them. Anyone distributing modified builds must
+provide the corresponding covered source and tell recipients where to get it.
+
+Third-party components retain their own licenses and notices. The app bundles
+Node-LICENSE.txt and Sparkle-LICENSE.txt alongside its PME license, including
+those components' third-party notices. Our license does not grant rights to
+Slack, Spotify, Electron, or other third-party names, logos, or software.

@@ -1,7 +1,13 @@
 # API traffic audit and mitigation — 0.12.0
 
-Audited September 18, 2026 following reported automatic sign-outs on a corporate
-Mac. This machine only has the two development workspaces. No corporate logs,
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
+
+Audited September 18, 2026 following reported automatic sign-outs on another
+Mac. The audit machine had only two development workspaces. No logs from the
+affected installation,
 429 responses or session-revocation reasons were available for this audit.
 
 ## Findings in 0.11.1
@@ -25,7 +31,7 @@ The background enrichment path was unnecessarily chatty:
 The base three-request batch means roughly **90 added requests/hour/workspace
 while idle**, or **1,080/hour/workspace with sustained triggering activity** at
 one batch per ten seconds. These are source-derived estimates, not measurements
-of the corporate device, and exclude identity, names, explicit reads and native
+of the affected installation, and exclude identity, names, explicit reads and native
 Slack traffic. They are not claims about a documented per-method limit.
 
 The 1.5-second host tick, two-second shell heartbeat, DOM observers and socket
@@ -100,16 +106,16 @@ these optional custom paths while keeping native chat and passive observations.
 ## What remains unconfirmed
 
 Excess traffic is a demonstrated implementation problem. It is not yet a proven
-explanation for the corporate sign-out. Slack documents HTTP 429 plus Retry-After
+explanation for the reported sign-out. Slack documents HTTP 429 plus Retry-After
 as its Web API rate-limit response:
 https://docs.slack.dev/apis/web-api/rate-limits/
 
 Those public tiers do not establish limits for the desktop client's private
-interfaces or the corporate workspace's session/security policies. A clean
-native-only comparison and the actual sanitized error/IT explanation are needed
+interfaces or the affected workspace's session/security policies. A clean
+native-only comparison and the actual sanitized error or session-policy explanation are needed
 to distinguish throttling, credential revocation, session policy and other causes.
-Do not stress-test the corporate workspace to find a threshold. No claim is made
-that this release has resolved corporate sign-outs.
+Do not stress-test an affected workspace to find a threshold. No claim is made
+that this release has resolved the reported sign-outs.
 
 ## Passive-only feature envelope
 

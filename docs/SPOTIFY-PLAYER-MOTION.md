@@ -1,5 +1,9 @@
 # Spotify player motion research
 
+> Design history: this document records experiments and alternatives, some of
+> which were superseded. See [Spotify Menu Player](SPOTIFY-MENU.md) for current
+> behavior and [SETUP.md](../SETUP.md) for development instructions.
+
 Researched 2026-09-24 after live user testing still found stuttering and incorrect
 scaling in the compact ↔ tab transition. Compilation and endpoint screenshots do
 not validate motion quality. No further runtime changes were made for this research.

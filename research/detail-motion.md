@@ -1,5 +1,10 @@
 # Side-pane motion and pill-only idle collapse — 0.18.0
 
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
+
 Slack's exposed desktop window bridge accepts `setBounds(bounds, true)` on this
 Mac. The native resize produces intermediate renderer viewport widths over roughly
 350–400ms. That gives us a usable animation path without patching the app bundle

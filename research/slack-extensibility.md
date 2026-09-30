@@ -1,5 +1,10 @@
 # How far can the official Slack client be extended?
 
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
+
 Research date: September 17–18, 2026. Local source and runtime inspection are the primary evidence for claims about this particular build. Links to general platform documentation are provided where relevant.
 
 ## Finding

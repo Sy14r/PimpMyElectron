@@ -131,5 +131,5 @@ artist pages, folders, local files, saved shows, complete catalog pagination, or
 all of the optional controls demonstrated by the mock. Queue data refreshes when
 opened; it is not yet a continuously subscribed queue view.
 
-The user chose Mini Library (concept C) from the [design exploration](SPOTIFY-WIDGET-EXPLORATION.md).
+Mini Library implements concept C from the [design exploration](SPOTIFY-WIDGET-EXPLORATION.md).
 The HTML mocks remain simulations; this native widget is the working implementation.

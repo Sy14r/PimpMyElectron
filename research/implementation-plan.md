@@ -1,5 +1,10 @@
 # Delivery status: official Slack triage
 
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
+
 The target is a usable development workflow inside signed, unmodified Slack: quiet resting presence, global keyboard access, progressive disclosure, local attention management, and return to the previous task. SlackAssist/Ledge is a read-only reference. Slack owns sending, reactions, presence and its native read behavior. The read adapter remains read-only; the native-reply module now exposes Slack’s own verified editor inside triage.
 
 Updated September 18, 2026. The six phases are implemented; acceptance boundaries below remain explicit.
@@ -29,11 +34,11 @@ Multiple monitors/hot-unplug, full-screen combinations, popout windows, real Sla
 
 A clean source transfer bundle with preflight and Start/Stop command files is now built by `npm run package:pilot`. No notarized installer, login item or production-profile migration was installed. Start with `npm run dev`, recover with `npm run shell -- stock`, and stop with `npm run dev:stop`. The isolated development sign-in is preserved.
 
-## Next: work-laptop productivity pilot
+## Next: cross-machine compatibility pilot
 
-The user is preparing an Apple Silicon work-Mac test later today. Follow [the next proof points](pilot-next.md): busy-workspace coverage, exact-thread/native-composer reply flow, explicit Mark read, faster local decisions, and portable setup. `npm run doctor` is implemented and passed on the development machine; the target laptop is not yet qualified. A separately removable, user-invoked conversation read-cursor action is now enabled; there is no custom send API. User-operated native composition and authorized experimental native sends are now proven in the test workspaces.
+At this stage, an additional Apple Silicon Mac was scheduled for compatibility testing. Follow [the next proof points](pilot-next.md): busy-workspace coverage, exact-thread/native-composer reply flow, explicit Mark read, faster local decisions, and portable setup. `npm run doctor` is implemented and passed on the development machine; the target laptop is not yet qualified. A separately removable, user-invoked conversation read-cursor action is now enabled; there is no custom send API. User-operated native composition and authorized experimental native sends are now proven in the test workspaces.
 
-**Accepted stretch goal:** reply directly from the compact triage flow using official Slack client capabilities. Explore the native composer in place, then an integrated compact native reply window if needed. Exact-thread routing, draft preservation, composition keyboard behavior and return-to-triage are required; a full Slack handoff alone does not fulfill the stretch. See the [stretch acceptance criteria](pilot-next.md#accepted-sprint-stretch-reply-from-the-triage-view). The user subsequently authorized automated experimental sends in haxx and Personal Test only; verify destination and use clearly labeled test messages.
+**Accepted stretch goal:** reply directly from the compact triage flow using official Slack client capabilities. Explore the native composer in place, then an integrated compact native reply window if needed. Exact-thread routing, draft preservation, composition keyboard behavior and return-to-triage are required; a full Slack handoff alone does not fulfill the stretch. See the [stretch acceptance criteria](pilot-next.md#accepted-sprint-stretch-reply-from-the-triage-view). That experiment had explicit permission for labeled automated sends in two designated test workspaces; this is not standing permission for future runs.
 
 ## Native reply sprint result
 
@@ -63,7 +68,7 @@ Selecting a queue item now opens Slack's native conversation/thread pane immedia
 
 Live acceptance passed for four destinations across both test workspaces, zero custom-history requests before fallback, rapid selection, collapse/reopen, native local controls and decision restoration. The unread-row hold was checked with a renderer-only simulated count refresh. The navigation probe exposed a workspace/thread restore race; bounded native sidebar retries now recover the missing composer. Destination masking and send guards remain in place. Fifty-one automated tests pass. No automated sends were needed for this change.
 
-Remaining native limitations: unloaded thread roots, conversations absent from Slack's sidebar, arbitrary navigation into secondary native panes, and richer composer controls. Use known thread entries in the triage queue or Normal Slack. Work-laptop distribution qualification and actual sleep/wake remain open.
+Remaining native limitations: unloaded thread roots, conversations absent from Slack's sidebar, arbitrary navigation into secondary native panes, and richer composer controls. Use known thread entries in the triage queue or Normal Slack. Cross-machine distribution qualification and actual sleep/wake remain open.
 
 ## 0.11.0 portability and source repository
 

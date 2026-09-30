@@ -1,5 +1,10 @@
 # Quick triage prototype (local, not released)
 
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
+
 The macOS cached preview accepts pointer input and provides Mark read, Reply and Inbox. A host-issued preview gets a short lease while the helper reports the pointer inside the card. Leaving both badge and card expires it. Changing mode, notification scope, unread state or losing the helper invalidates it. The lease also pauses pill collapse; leaving starts the configured idle period again.
 
 Reply opens a compact, 460 × 660 Slack-owned window. The custom header identifies the recipient/workspace. Slack's original conversation or thread pane provides the scrollable history and composer, using the same embedding as the inbox detail view. No editor cloning, custom send API, draft copying or credential extraction is involved. Close/Escape preserves Slack's draft. Open inbox continues in the full triage conversation.

@@ -866,6 +866,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         shortcutRow("J / K · ↓ / ↑","Move between inbox rows")
         shortcutRow("0","Jump to the first inbox row")
+        shortcutRow("1","Jump to the first unstarred row in the current filter")
         shortcutRow("H / L · ← / →","Cycle inbox filters")
         shortcutRow("Enter","Open the selected item and focus its composer")
         shortcutRow("X","Toggle the selected item read / unread")

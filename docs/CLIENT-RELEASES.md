@@ -19,29 +19,28 @@ users can use **Import existing setup** and choose their PME repository on the
 same Mac to reuse ownership/settings and their existing integration sign-in.
 Import does not copy Slack credentials or replace existing destination settings.
 
-For updates, stop the PME-managed Slack session from PME, quit PME, replace the
-app in Applications, and reopen it. Settings live outside the app at
-`~/Library/Application Support/PimpMyElectron/`. Version 0.5.0 adds Sparkle update checks and installation on request; see [Client updates](CLIENT-UPDATES.md).
-Closing the manager alone intentionally leaves a running modded Slack session up.
+For a manual update, stop the PME-managed sessions from PME, quit the managed
+apps and PME normally, replace the app in Applications, and reopen it. Settings live outside the app at
+`~/Library/Application Support/PimpMyElectron/`. PME also offers Sparkle update checks and installation on request; see [Client updates](CLIENT-UPDATES.md).
+Closing the manager alone intentionally leaves managed sessions running.
 
-## Launch shortcuts (client 0.2.0)
+## Launch shortcuts
 
-On the Slack page, choose **Create shortcut…** beside **Launch Slack** (or **Open inbox** while running). Save it in
+On the Slack or Spotify page, choose **Create shortcut…** beside the app’s Launch button (or **Open inbox** for running Slack). Save it in
 `~/Applications` (the default) or another folder you own. Finder and Spotlight
 recognize it as an app; it can also be dragged onto the Dock. Its default name is
-**Slack — PME**. Launching it runs PME's bundled service in the background and
+**Slack — PME** or **Spotify — PME**. Launching it runs PME's bundled service in the background and
 never opens the manager window.
 
-A shortcut saves the chosen Slack installation and enabled mod IDs. Changing the
+A shortcut saves the chosen app installation and enabled mod IDs. Changing the
 manager's selection later does not change existing shortcuts; **Update selection**
 copies the current selection into that shortcut. It uses the mod implementation
 shipped with the installed PME version, not an archived copy of old mod code.
-Settings/sign-in remain shared with the normal PME-managed Slack session.
+Settings/sign-in remain shared with the normal PME-managed session for that app.
 
 A matching running session is brought forward. An ordinary Slack session or a
 PME session with different mods is left alone, with an explanation to stop it first.
 Concurrent launches are serialized across the manager and shortcut processes.
-Sessions started before 0.2.0 need one restart before selection matching is known.
 
 PME checks saved shortcut locations when refreshing the manager. A shortcut deleted
 or moved in Finder is shown as missing, with **Remove from list** to forget its
@@ -87,10 +86,17 @@ About, the bundled runtime metadata, release tag, and ZIP filename. Tags are
 package version. `client/catalog.json` separately versions the bundled catalog
 and its individual mods.
 
-## Local release, GitHub distribution
+## Local development builds
 
-This adapts the local Keychain workflow from SlackAssist/Ledge: build → Developer
-ID sign → test → Apple notarization → staple → Gatekeeper check → GitHub Release.
+Contributors should use `npm run client:build` and `npm run client:smoke`; see
+[SETUP.md](../SETUP.md#build-the-complete-client). These ad-hoc-signed local builds
+require no Apple Developer ID, notarization profile, Sparkle private key, or
+GitHub release access. They are not distributable releases.
+
+## Maintainer release workflow
+
+The release path is build → Developer ID sign → test → Apple notarization →
+staple → Gatekeeper check → GitHub Release.
 Signing/notarization run on a trusted Apple Silicon Mac. GitHub stores the source,
 tag, ZIP, checksums, and non-secret manifest. Signing credentials remain in the
 local Keychain; no signing keys or Apple passwords are put into GitHub Actions.
@@ -106,8 +112,15 @@ DEVELOPER_DIR=/Library/Developer/CommandLineTools \
 ```
 
 Apple prompts for credentials; do not put passwords in chat, shell arguments, or
-tracked files. An existing profile for the same Apple team, including
-`ledge-notary`, can be reused without copying/exporting its credentials.
+tracked files. An existing profile for the same Apple team can be reused without
+copying/exporting its credentials.
+
+Publishing also requires the existing Sparkle Ed25519 private key in the release
+Mac's Keychain, matching `client/updater.json`. Coordinate access with the release
+maintainer; do not generate a replacement key or change the public key just to
+make a build pass. See [update signing](CLIENT-UPDATES.md#build-and-publish).
+The publisher targets `Sy14r/PimpMyElectron` explicitly; it is not a generic fork
+release command. Fork distribution needs a deliberate identity/feed/signing setup.
 
 Set only identifiers in your shell:
 
@@ -118,11 +131,23 @@ export PME_TEAM_ID=YOURTEAMID
 export PME_NOTARY_PROFILE=pme-notary
 ```
 
-Update version/build and write `client/releases/X.Y.Z.md`. Commit the source and
-push main normally; release preparation rejects a dirty checkout. Then:
+Before publishing:
+
+1. Review the intended changes and validation, including any required live checks.
+   Do not treat automated tests as proof of every host-app version's compatibility.
+2. Increase `client/version.json` version and numeric build. Update affected mod
+   versions deliberately; do not synchronize all version fields blindly.
+3. Write `client/releases/X.Y.Z.md` with user-facing changes and known limits.
+   These files ship inside About PME → What's new; never include private test data.
+4. Update current setup/feature documentation, commit the complete intended source,
+   and push `main`. Release preparation rejects a dirty checkout. Verify that the
+   release version has not already been published.
+
+Then, from the repository root:
 
 ```sh
-npm run client:release -- all --notes client/releases/0.1.0.md
+PME_RELEASE_VERSION=$(node -p "require('./client/version.json').version")
+npm run client:release -- all --notes "client/releases/$PME_RELEASE_VERSION.md"
 ```
 
 This builds into an isolated `.lab/releases/` directory, never overwriting the
@@ -151,8 +176,11 @@ it is not failure or acceptance. Resume the **same** printed directory:
 ```sh
 npm run client:release -- notarize /absolute/path/to/release-directory
 npm run client:release -- publish /absolute/path/to/release-directory \
-  --notes client/releases/0.1.0.md
+  --notes client/releases/X.Y.Z.md
 ```
+
+Replace `X.Y.Z` with the version recorded in that release directory, not a newer
+checkout version. Do not edit release notes after they have been signed/published.
 
 Individual stages are also available with `prepare`, `notarize`, `publish`, and
 `verify-download`. `npm run client:release -- --help` lists them.
@@ -181,3 +209,17 @@ quarantine/Gatekeeper behavior. Local acceptance and a CLI download check do not
 replace that separate-machine test. Intel builds are not offered in this version.
 
 The release pipeline embeds pinned Sparkle 2.10.0, signs its framework and installer components before the outer app, and signs the final archive/feed using the `com.pimpmyElectron.client` Sparkle Keychain account. The app reads the latest release’s `appcast.xml` asset. Keep this feed asset on every future client release; publish only client releases as GitHub’s latest release.
+
+## License and corresponding source
+
+PME's original code is MPL-2.0; see [COPYING](../COPYING) and [LICENSE](../LICENSE).
+The builder includes the PME license and source notice in the main app and each
+nested helper/shortcut app, and preserves Node and Sparkle license files. About
+PME provides access to the license and source repository. Each bundled SOURCE.txt
+identifies the release tag; local development builds may differ from that tag.
+
+Before publishing a binary, ensure its corresponding source is available under
+the release tag recorded in the manifest, including the relevant build scripts.
+The existing publisher pins that tag to the committed release source. Modified
+redistributions must provide their own corresponding source location rather than
+pointing to an unchanged upstream release. Never remove third-party notices.

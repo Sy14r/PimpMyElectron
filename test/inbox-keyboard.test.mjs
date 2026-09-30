@@ -2,16 +2,16 @@ import {test} from 'node:test';import assert from 'node:assert/strict';import fs
 const source=await fs.readFile(new URL('../src/renderer/triage.js',import.meta.url),'utf8');
 const helpers=source.slice(source.indexOf('  const pendingInboxRead='),source.indexOf('  function nextUnreadItem('));
 function setup(){
- const calls=[],host={},rows=[{key:'one',unread:true,latest:'100.1'},{key:'two',unread:true,latest:'100.2'},{key:'three',unread:false}],nodes=new Map();
+ const scrolls=[],calls=[],host={},rows=[{key:'one',unread:true,latest:'100.1'},{key:'two',unread:true,latest:'100.2'},{key:'three',unread:false}],nodes=new Map();
  const shadow={activeElement:null};
- const list={children:rows.map(item=>({dataset:{key:item.key},focus(){shadow.activeElement=this;calls.push(['focus',item.key]);},scrollIntoView(){}}))};
+ const list={children:rows.map(item=>({dataset:{key:item.key},focus(){shadow.activeElement=this;calls.push(['focus',item.key]);},scrollIntoView(options){scrolls.push([item.key,options.block]);}}))};
  const search={value:'',dataset:{},matches:()=>true,focus(){shadow.activeElement=this;},select(){calls.push(['select-filter']);}};nodes.set('list',list);nodes.set('search',search);nodes.set('notice',{});
  const status={ready:true,target:{key:'two'}};
  const env={replyDismissed:()=>false,mode:'queue',filter:'all',quickReply:null,pillReadPending:null,selection:null,openingKey:null,shadow,host,startCompose:()=>calls.push(['compose']),filtered:()=>env.filter==='unread'?rows.filter(r=>r.unread):rows,$:id=>nodes.get(id),connected:()=>true,render(){},touch(){},openItem:key=>calls.push(['open',key]),
    document:{activeElement:null},setInboxInput:input=>{env.inputMode=input;},window:{__PME_REPLY__:{status:()=>status,focus:()=>calls.push(['composer'])}},heldRow:null,transition:async mode=>{env.mode=mode;calls.push(['mode',mode]);},focusInbox:()=>calls.push(['inbox']),readFromPill:async(item,opts)=>{calls.push(['read',item.key,opts.inbox,opts.unread]);item.unread=opts.unread;return {ok:true};}};
  vm.runInNewContext(helpers,env);
  const event=(key,extra={})=>({key,composedPath:()=>[shadow.activeElement,host],preventDefault(){this.prevented=true;},stopImmediatePropagation(){this.stopped=true;},...extra});
- return {env,calls,rows,list,shadow,search,event,status};
+ return {env,calls,scrolls,rows,list,shadow,search,event,status};
 }
 test('J/K and arrows move only the filtered row focus, wrapping without native navigation',()=>{
  const f=setup();f.shadow.activeElement=f.list.children[0];
@@ -31,15 +31,15 @@ test('0 focuses the first filtered row and resets scroll without opening or repl
  const f=setup();f.env.filtered=()=>[];f.list.scrollTop=100;
  assert.equal(f.env.inboxNavigationKey(f.event('0')),true);assert.equal(f.list.scrollTop,0);assert.deepEqual(f.calls,[]);
 });
-test('0 leaves typing, modified keys, native overlays and normal Slack alone',()=>{
- const f=setup();f.shadow.activeElement=f.search;assert.equal(f.env.inboxNavigationKey(f.event('0')),false);
+for(const key of ['0','1'])test(`${key} leaves typing, modified keys, native overlays and normal Slack alone`,()=>{
+ const f=setup();f.shadow.activeElement=f.search;assert.equal(f.env.inboxNavigationKey(f.event(key)),false);
  f.shadow.activeElement=null;
- for(const extra of [{metaKey:true},{ctrlKey:true},{altKey:true},{shiftKey:true},{isComposing:true},{defaultPrevented:true}])assert.equal(f.env.inboxNavigationKey(f.event('0',extra)),false);
- f.env.mode='reply';const nativeEvent=f.event('0',{composedPath:()=>[{}]});
+ for(const extra of [{metaKey:true},{ctrlKey:true},{altKey:true},{shiftKey:true},{isComposing:true},{defaultPrevented:true}])assert.equal(f.env.inboxNavigationKey(f.event(key,extra)),false);
+ f.env.mode='reply';const nativeEvent=f.event(key,{composedPath:()=>[{}]});
  f.env.window.__PME_REPLY__.overlayOpen=()=>true;assert.equal(f.env.inboxNavigationKey(nativeEvent),false);
  f.env.window.__PME_REPLY__.overlayOpen=()=>false;f.env.document.activeElement={closest:()=>({})};assert.equal(f.env.inboxNavigationKey(nativeEvent),false);
  f.env.document.activeElement=null;assert.equal(f.env.inboxNavigationKey(nativeEvent),true);assert.equal(f.shadow.activeElement.dataset.key,'one');
- f.env.mode='stock';assert.equal(f.env.inboxNavigationKey(f.event('0')),false);
+ f.env.mode='stock';assert.equal(f.env.inboxNavigationKey(f.event(key)),false);
 });
 test('Enter opens the highlighted destination, or focuses an already mounted editor without reopening',()=>{
  const f=setup();f.shadow.activeElement=f.list.children[1];f.env.inboxNavigationKey(f.event('Enter'));assert.deepEqual(f.calls,[['open','two']]);
@@ -126,7 +126,7 @@ test('native editors and their descendants keep inbox shortcuts until focus is r
  for(const viaPath of [true,false]){
   const f=setup();f.env.mode='reply';const editor={closest:()=>({})};
   f.env.document.activeElement=editor;
-  for(const key of ['j','k','h','l','x','/','Enter','ArrowDown','ArrowLeft']){
+  for(const key of ['j','k','h','l','x','/','0','1','Enter','ArrowDown','ArrowLeft']){
    assert.equal(f.env.inboxNavigationKey(f.event(key,{composedPath:()=>viaPath?[editor]:[{}]})),false);
   }
   assert.deepEqual(f.calls,[]);
@@ -169,4 +169,29 @@ test('Enter into the already mounted editor clears the search before moving focu
  const f=setup();f.env.mode='reply';f.search.value='two';f.shadow.activeElement=f.list.children[1];
  assert.equal(f.env.inboxNavigationKey(f.event('Enter')),true);
  assert.equal(f.search.value,'');assert.deepEqual(f.calls,[['composer']]);
+});
+
+test('1 focuses the first unstarred filtered result without opening it or replacing an open detail',()=>{
+ for(const mode of ['queue','reply','reading']){
+  const f=setup();f.env.mode=mode;f.env.selection='one';f.rows[0].starred=true;f.rows[1].starred=false;f.rows[2].starred=false;
+  // The earlier unstarred conversation is excluded by the current filter.
+  f.env.filtered=()=>[f.rows[0],f.rows[2]];f.shadow.activeElement=f.list.children[0];
+  f.list.children.unshift({dataset:{},focus(){throw Error('A section heading must not receive focus');}});
+  assert.equal(f.env.inboxNavigationKey(f.event('1')),true);
+  assert.equal(f.shadow.activeElement.dataset.key,'three');assert.equal(f.env.selection,mode==='queue'?'three':'one');
+  assert.deepEqual(f.calls,[['focus','three']]);assert.deepEqual(f.scrolls,[['three','start']]);assert.equal(f.env.inputMode,'keyboard');
+ }
+});
+test('1 preserves focus and scroll if the current filter has no unstarred results',()=>{
+ for(const empty of [false,true]){
+  const f=setup();f.rows.forEach(row=>row.starred=true);if(empty)f.env.filtered=()=>[];
+  f.shadow.activeElement=f.list.children[1];f.env.selection='two';f.list.scrollTop=500;
+  assert.equal(f.env.inboxNavigationKey(f.event('1')),true);
+  assert.equal(f.shadow.activeElement.dataset.key,'two');assert.equal(f.env.selection,'two');assert.equal(f.list.scrollTop,500);
+  assert.deepEqual(f.calls,[]);assert.deepEqual(f.scrolls,[]);
+ }
+});
+test('1 behaves like 0 when the first visible result is already unstarred',()=>{
+ const f=setup();f.list.scrollTop=500;f.shadow.activeElement=f.list.children[2];
+ f.env.inboxNavigationKey(f.event('1'));assert.equal(f.shadow.activeElement.dataset.key,'one');assert.equal(f.list.scrollTop,0);assert.deepEqual(f.scrolls,[]);
 });

@@ -152,7 +152,13 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage) {
         guard message.frameInfo.isMainFrame,message.frameInfo.request.url?.standardizedFileURL==uiURL.appendingPathComponent("index.html").standardizedFileURL,
               let raw=message.body as? [String:Any],let id=raw["id"] as? Int,let op=raw["op"] as? String else{return}
-        guard ["feedback-copy","feedback-open","feedback-submit","release-history","status","scan","select","launch","stop","show","add-app","import","data-folder","shortcut-create","shortcut-update","shortcut-rename","shortcut-remove","shortcut-reveal","shortcut-forget","update-check"].contains(op) else {fail(id,"Unsupported client action");return}
+        guard ["license-open","source-open","feedback-copy","feedback-open","feedback-submit","release-history","status","scan","select","launch","stop","show","add-app","import","data-folder","shortcut-create","shortcut-update","shortcut-rename","shortcut-remove","shortcut-reveal","shortcut-forget","update-check"].contains(op) else {fail(id,"Unsupported client action");return}
+        if op=="license-open" || op=="source-open" {
+            // These destinations are fixed; web content cannot supply a path or URL.
+            let destination = op=="license-open" ? Bundle.main.resourceURL?.appendingPathComponent("LICENSE.txt") : URL(string:"https://github.com/Sy14r/PimpMyElectron")
+            guard let destination,NSWorkspace.shared.open(destination) else {fail(id,"Could not open the license or source location.");return}
+            reply(["id":id,"ok":true]);return
+        }
         if op=="feedback-submit" {
             guard let title=raw["title"] as? String, let body=raw["body"] as? String, let requestId=raw["requestId"] as? String,
                   !title.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,title.count<=120,body.count<=6000,requestId.count<=60 else {fail(id,"Invalid feedback report.");return}

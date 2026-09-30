@@ -1,5 +1,10 @@
 # Native thread navigation and scroll positioning — 0.16.0
 
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
+
 The previous thread opener searched rendered message rows for a root timestamp,
 then clicked its reply bar. Slack virtualizes those rows, so an observed thread
 could be in our queue while its parent was absent from the DOM. The old opener

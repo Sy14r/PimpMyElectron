@@ -1,13 +1,15 @@
 # Local experiment evidence
 
-Experiment reports and screenshots are generated here on the development Mac.
-They are deliberately excluded from Git, including in this private repository.
-Research documents summarize the results and refer to local filenames; the
-referenced artifacts will not exist in a fresh clone until those experiments run.
+Experiment reports and screenshots are generated here during development and are
+excluded from Git. Research documents sometimes reference local artifacts that
+will not exist in a fresh clone. Do not commit generated evidence containing
+account data; use sanitized fixtures for regression tests.
 
-Use `npm test` for the automated unit suite. Live experiments are separate and
-may navigate Slack or change state; some explicitly send messages or mark items
-read in the original test workspaces. They are not part of laptop setup.
+Use `npm test` for the automated suite. Live probes are separate, may depend on
+historical UI assumptions, and can navigate Slack, send messages, or change read
+state. Inspect each script and obtain permission for the specific test accounts
+and actions. An old experiment's authorization is not permission for a new run.
+See [the contributor guide](../CONTRIBUTING.md#testing).
 
-Do not copy Slack profiles, `.lab/`, credentials, screenshots or message captures
+Do not copy Slack profiles, `.lab/`, credentials, screenshots, or message captures
 between machines to set up the application. Sign in normally on each machine.

@@ -1,5 +1,10 @@
 # Native new-message composer — 0.17.0
 
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
+
 The inbox header's Compose button requests a workspace-scoped compose target in
 native-reply. A specific inbox workspace takes precedence; All workspaces uses
 Slack's active renderer workspace. The tooltip identifies that workspace before

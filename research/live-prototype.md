@@ -1,5 +1,10 @@
 # Official Slack triage: development workflow
 
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
+
 Built and tested September 18, 2026 against signed Mac App Store and direct-download Slack **4.52.155**, Electron 44, macOS arm64. The messages and reader live inside official Slack. A small native menu controller provides the global shortcut and focus return. SlackAssist/Ledge was a read-only design reference.
 
 ## Start and use

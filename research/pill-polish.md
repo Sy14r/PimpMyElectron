@@ -1,5 +1,10 @@
 # Centered unread pill — 0.14.0
 
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
+
 The 12px resting strip and 44px expanded pill share the vertical center of the
 selected display's work area, on either edge. Their height grows with the active
 unread count. Count changes and display changes recenter them. Existing window

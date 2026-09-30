@@ -1,6 +1,14 @@
 // Validate the built runtime without reading live Slack state or starting Slack.
 import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import assert from 'node:assert/strict';import {spawn,spawnSync} from 'node:child_process';import {pathToFileURL} from 'node:url';
 const app=path.resolve(process.argv[2]||'dist/PimpMyElectron.app'),resources=path.join(app,'Contents/Resources'),runtime=path.join(resources,'runtime');
+const expectedLicense=await fs.readFile(new URL('../LICENSE',import.meta.url),'utf8');
+const clientVersion=JSON.parse(await fs.readFile(path.join(runtime,'client/version.json'),'utf8'));
+for(const bundle of [app,...['SlackLauncher.app','SpotifyLauncher.app','SpotifyMenu.app'].map(name=>path.join(app,'Contents/Helpers',name))]){
+ const notices=path.join(bundle,'Contents/Resources');
+ assert.equal(await fs.readFile(path.join(notices,'LICENSE.txt'),'utf8'),expectedLicense,'Every distributable app must retain the complete PME license');
+ assert.match(await fs.readFile(path.join(notices,'COPYING.txt'),'utf8'),/This Source Code Form is subject to the terms of the Mozilla Public/);
+ assert.ok((await fs.readFile(path.join(notices,'SOURCE.txt'),'utf8')).includes(`https://github.com/Sy14r/PimpMyElectron/tree/client-v${clientVersion.version}`),'Source notice must identify the built release');
+}
 const {ClientManager}=await import(pathToFileURL(path.join(runtime,'client/core/manager.mjs')));
 const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'pme-bundle-smoke-'));
 try{

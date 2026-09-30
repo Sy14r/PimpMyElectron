@@ -1,5 +1,10 @@
 # Passive client-state observer — 0.13.0
 
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
+
 September 18, 2026, official direct-download Slack 4.52.155 / Electron 44,
 Apple Silicon. Work performed with history-reader and mark-read disabled.
 

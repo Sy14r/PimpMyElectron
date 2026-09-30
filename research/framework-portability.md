@@ -1,5 +1,15 @@
 # Portability beyond Slack
 
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
+
+Since this assessment, PME has gained a standalone manager, app-specific adapters,
+platform/dependency metadata, and Spotify mods. See the [current architecture
+map](../CONTRIBUTING.md#architecture-map) and [mod compatibility](../docs/MOD-COMPATIBILITY.md).
+The review below remains a record of the Slack-only baseline, not today's feature inventory.
+
 Assessment date: September 19, 2026. Implementation baseline: `9a25785` (`Add native quick triage, global notifications, and edge pill polish`). The latest validation at that baseline passed all 154 tests.
 
 This document records a source review and platform-documentation research. No second application was tested, and no implementation changes were made for this assessment. The proposed architecture and qualification work below are deferred ideas, not an active implementation plan.

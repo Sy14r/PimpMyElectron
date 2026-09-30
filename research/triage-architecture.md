@@ -1,8 +1,13 @@
 # A triage layer for the official Slack client
 
-**Original design/research proposal.** The implementation has since advanced through the six phases below. For current behavior and acceptance limits, use [the live workflow guide](live-prototype.md) and [delivery status](implementation-plan.md). Tables below preserve confidence levels at the time of the original proposal.
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
 
-This recommendation incorporates `/Users/geoffp/Projects/SlackAssist` (Ledge), especially `README.md`, `Ledge/App/ShadeWindowController.swift`, `Ledge/App/KeyboardShortcuts.swift`, `Ledge/UI/ShadeView.swift`, `Ledge/Model/Models.swift`, and `Ledge/Model/ThreadInbox.swift`. The repository was read as a reference implementation; it was not modified, built, or launched.
+**Original design/research proposal.** The implementation has since advanced through the six phases below. For current behavior, use [Slack Triage](../docs/SLACK-TRIAGE.md); [delivery status](implementation-plan.md) records the earlier implementation phases. Tables below preserve confidence levels at the time of the original proposal.
+
+This recommendation incorporates the SlackAssist (Ledge) reference project (not included in this repository), especially `README.md`, `Ledge/App/ShadeWindowController.swift`, `Ledge/App/KeyboardShortcuts.swift`, `Ledge/UI/ShadeView.swift`, `Ledge/Model/Models.swift`, and `Ledge/Model/ThreadInbox.swift`. The repository was read as a reference implementation; it was not modified, built, or launched.
 
 ## Preserve the interaction model
 

@@ -1,5 +1,10 @@
 # Inbox translucency prototype
 
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
+
 September 23, 2026. Default off; local testing only, not a broad performance qualification.
 
 ## Implementation
@@ -118,7 +123,7 @@ remain noisy and do not establish sustained power cost. WindowServer was about
 44–48% across the measurements. All 308 automated tests passed after the fix.
 
 Still needed: longer normal work sessions, native-history scrolling and typing, moving background
-content, external displays, and work-laptop battery/thermal checks. Conversation
+content, external displays, and battery/thermal checks on additional Macs. Conversation
 background blur remains deferred until this smaller trial is satisfactory.
 
 ## Inactive windows and opening animation

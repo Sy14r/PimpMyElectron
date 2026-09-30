@@ -1,201 +1,155 @@
-# Run on an Apple Silicon work Mac
+# Develop and run PME from source
 
-Repository: https://github.com/Sy14r/PimpMyElectron (private).
-
-The launcher detects **Mac App Store or official direct-download Slack** and
-selects a separate integration-test profile for that distribution. Slack normally
-lives at `/Applications/Slack.app`. Both distributions of Slack 4.52.155 /
-Electron 44 have passed signed-in checks on this Apple Silicon Mac. Direct-download
-acceptance includes two workspaces, native DM/thread opening and delivery, draft
-preservation, local triage actions, module lifecycle and a full restart. See the
-[validation record](research/direct-download.md) for the exact coverage and limits.
-
-Run the preflight below before launching. A managed laptop can still restrict
-sign-in or debugging even when the distribution matches. A successful source
-clone does not prove compatibility with that laptop.
-
-## Corporate logout / API traffic update (0.12.0)
-
-Stop an older running triage build before updating. Version 0.12.0 removes all
-background enrichment polling and message/reconnect-triggered API refreshes.
-Queue workspace selection is local; opening native chat uses Slack's own UI.
-Optional manual refresh is scoped to one workspace and limited to once per
-minute, and read-only history/Mark read still make explicit custom requests.
-Background unread and thread coverage now depends on what Slack itself reports.
-See the [traffic audit](research/api-traffic.md) for evidence and limitations.
-
-`npm run dev:status` should show `feature.apiPolicy: "manual-only"`.
-`feature.customApi.requests` should remain unchanged while you only leave triage
-idle, switch its queue scope, or use native chat. Counters reset on runtime
-restart/reload. The older `feature.methods` counter includes native Slack traffic.
-The [pilot guide](pilot/README.md#api-traffic-diagnostics) also describes disabling
-both optional API adapters for a strictly native-only test.
-
-## Passive cache observer (0.13.0)
-
-The `state-observer` module reads Slack's existing local state and subscribes to
-local changes. It adds no API calls and works with both `history-reader` and
-`mark-read` disabled. Those disable settings survive updates. Cached previews now
-work without trying to load history; use Native chat for content Slack has not
-already loaded. `feature.clientStateSnapshots` in `npm run dev:status` counts
-accepted cache observations. See [coverage and validation](research/passive-state.md).
-
-If a Slack update breaks this optional observer, disable it with
-`npm run mods -- disable state-observer`; the existing DOM/network observation
-and native UI continue to work. No fallback API polling is enabled.
-
-## Centered unread pill (0.14.0)
-
-The **0.14.0** pill polish works with the passive observer and preserves disabled
-API adapters. After updating, the strip stays centered on either edge. Dots count
-active unread conversations/threads in the selected workspace scope. Hover to
-expand, then hover a badge for its cached preview. Clicking opens native Slack
-and may mark the destination read. Done/snoozed items are omitted from the pill.
-
-## Native hover previews (0.15.0)
-
-For **0.15.0**, after `git pull --ff-only`, run `npm run dev:reload` followed by
-`npm run shell:restart`. Both processes must be updated for the new native hover
-preview. A full stop/start also works. The helper rebuilds automatically using
-Command Line Tools; existing API-adapter disable settings remain in effect.
+For a prebuilt app, use the [installation guide](docs/CLIENT-RELEASES.md#install-and-update).
+These instructions are for contributors working from a checkout.
 
 ## Prerequisites
 
+- Apple Silicon Mac running macOS 13.3+ for the native client and helpers.
+- Node.js 22 or later and Git.
+- Apple Command Line Tools for Swift, SDKs, code signing, and icon tools.
+- An official Slack and/or Spotify installation for live mod testing.
 
-- Node.js 22 or newer, including npm.
-- Apple Command Line Tools (the native menu controller compiles locally).
-- Git and access to the private repository as `Sy14r`, or another authorized account.
-- GitHub CLI (`gh`) for the authentication steps below.
-
-If Homebrew is already installed, `brew install node gh` installs Node and the
-GitHub CLI. Run `xcode-select --install` if Command Line Tools are missing and
-finish its installer before continuing. Existing installations can be reused.
-There are no npm dependencies to install.
-
-## Clone
-
-Authenticate on the work laptop; this does not copy credentials from another Mac:
+Install Command Line Tools with `xcode-select --install` if needed. The native
+builder uses `/Library/Developer/CommandLineTools` explicitly. The macOS version
+minimum applies to the built app; compilation also needs an SDK capable of building
+the current Swift sources. Windows, Linux, and Intel Mac app builds are not provided.
 
 ```sh
-gh auth login --hostname github.com --git-protocol https --web
-gh auth setup-git
-mkdir -p ~/Projects
-cd ~/Projects
 git clone https://github.com/Sy14r/PimpMyElectron.git
 cd PimpMyElectron
-```
-
-Use a short local path like the one above because macOS limits Unix socket paths.
-If Git reports an unaccepted full-Xcode license but Command Line Tools are already
-installed, `export DEVELOPER_DIR=/Library/Developer/CommandLineTools` selects that
-toolchain for this Terminal session without changing the system's selection.
-
-## Check and launch
-
-```sh
-npm run doctor
+node --version
 npm test
 ```
 
-Resolve any `BLOCK` results before launch. The doctor checks distribution,
-signature, profile ownership, toolchain and socket paths without reading account
-data. `REVIEW` results identify things that still need a live check. If installation or distribution
-is blocked, share the doctor output so that build can be checked; do not bypass
-the check or replace a managed Slack installation just to run this prototype.
+No GitHub authentication or `npm install` is needed. Use your own fork when
+contributing. `package.json` is marked private to prevent npm publishing; the
+GitHub repository itself is public.
 
-Quit Slack normally with **⌘Q**, then:
+## Build the complete client
 
 ```sh
+npm run client:build
+npm run client:smoke
+npm run client:open
+```
+
+The builder downloads checksum-pinned Node and Sparkle artifacts, compiles the
+native helpers, and creates an ad-hoc-signed `dist/PimpMyElectron.app`. It bundles
+the current catalog, UI, runtime code, and release notes. The smoke check uses
+temporary data and does not launch Slack or read its messages. This local build
+is not a notarized distribution; use the [maintainer release workflow](docs/CLIENT-RELEASES.md#maintainer-release-workflow)
+for publication.
+
+Quit PME and stop its managed sessions before replacing a build they are using.
+To keep another build intact, build to a **new**, absolute output path:
+
+```sh
+PME_CLIENT_OUTPUT="$PWD/.lab/client-dev-1/PimpMyElectron.app" npm run client:build
+npm run client:smoke -- "$PWD/.lab/client-dev-1/PimpMyElectron.app"
+open "$PWD/.lab/client-dev-1/PimpMyElectron.app"
+```
+
+Custom output destinations must not already exist. `client:open` always opens the
+default `dist` path, so use the explicit `open` command for a custom build.
+Different copies of PME still share its normal user settings and managed sessions;
+a different output directory is not an isolated account environment.
+
+In the manager, select an app and mods, then launch. Quit an ordinary running
+Slack session first. Slack uses a separate integration sign-in profile; sign in
+normally there. Spotify uses its existing sign-in and may request macOS Automation
+permission to control playback. See the [Menu Player](docs/SPOTIFY-MENU.md) and
+[Camera Pause](docs/SPOTIFY-CAMERA-PAUSE.md) guides for their separate capabilities.
+
+## Develop Slack Triage directly
+
+This path runs code from the checkout instead of a built PME bundle. Quit any
+running Slack session normally, then:
+
+```sh
+npm run doctor
 npm run dev
 ```
 
-Keep this Terminal running. The launcher starts the installed official Slack app,
-builds the native menu controller, and uses a separate development profile. Sign
-in normally on this Mac; no sessions or credentials are included in the repository.
-Start with a test workspace to check behavior, then sign into your work workspace.
-The first sign-in may still need ordinary workspace approval or SSO.
+Doctor checks the installed distribution, signature, profile ownership, and local
+tools without launching Slack or reading account data. The launcher defaults to
+`/Applications/Slack.app`; override it for both checks and launch if necessary:
 
-Press **⌘⇧Y** from another app to open triage. Select an item to open its native
-Slack conversation and composer. Slack owns normal read behavior and sending;
-Done/Later/Pin/Undo remain local triage actions. Press **⌘⇧Y** again to collapse and
-return to work. Menu-bar controls configure edge, display and resting behavior.
-Preferences and local decisions are independent on each Mac.
+```sh
+PME_SLACK_APP="$HOME/Applications/Slack.app" npm run doctor
+PME_SLACK_APP="$HOME/Applications/Slack.app" npm run dev
+```
 
-You can also open `pilot/Start Triage.command` and `pilot/Stop Triage.command`
-from this checkout. See [the pilot workflow](pilot/README.md) for more controls
-and the remaining compatibility limitations.
+The launcher detects supported direct-download and Mac App Store distributions
+and uses a separate integration profile for the installed distribution. It retains
+sign-ins across restarts and refuses to take over a conflicting profile. An
+unrecognized installation or successful static check alone does not establish
+live compatibility with a new Slack version.
 
-## Stop, recover and update
+The launcher builds/starts the native controller. Once Slack is signed in and
+ready, startup selects Home to seed cached state, then opens the triage inbox.
+An empty inbox can reflect incomplete cached state; do not add polling to hide
+that condition. Test with accounts and conversations you control.
 
-Run these commands in another Terminal opened in this checkout:
+In another terminal in the same checkout:
 
 ```sh
 npm run dev:status
+npm run dev:reload
+npm run shell:restart
 npm run shell -- stock
 npm run dev:stop
 ```
 
-`stock` restores the normal Slack window while the launcher stays running.
-`dev:stop` stops the owned development instance and preserves its sign-ins and
-local decisions. After stopping, launch Slack normally for your ordinary profile.
+- `dev:reload` reapplies renderer/runtime mods from source.
+- `shell:restart` rebuilds and restarts the native Slack controller.
+- `shell -- stock` restores the standard Slack view.
+- `dev:stop` stops the owned session while keeping sign-ins and preferences.
+- Changes to launcher/control code require a full stop/start.
 
-To update this checkout, stop the development instance first, then:
+### Know which runtime you are editing
 
-```sh
-git pull --ff-only
-npm run doctor
-npm test
-npm run dev
-```
+| Running workflow | Runtime and control data | Apply changes |
+| --- | --- | --- |
+| `npm run dev` | Source in this checkout; controls under `.lab/dev/` | Reload mods, restart the helper, or stop/start as above. |
+| PME app or launch shortcut | Copied code inside that PME app; state under `~/Library/Application Support/PimpMyElectron/` | Rebuild PME, stop the old managed session, open the new build explicitly, then launch again. |
 
-If you made source changes, save them before pulling. Keep the checkout in the
-same location and preserve its ignored `.lab/` directory. Do not copy `.lab/`,
-Slack profiles or credentials from another Mac. A conflicting preexisting
-integration-test profile causes setup to stop instead of overwriting it.
+The checkout's `dev:status`, `dev:reload`, `dev:stop`, `shell`, and `mods` commands
+target `.lab/dev`; they do **not** update a session launched from a PME app.
+Changing source or running `git pull` does not update code already copied into a
+bundle. Closing the manager window alone does not stop its mods.
 
-For a Slack installation in a different location, set its absolute path before
-running both doctor and dev (the bundle must still verify as official Slack):
+## Debugging and live experiments
 
-```sh
-export PME_SLACK_APP="$HOME/Applications/Slack.app"
-npm run doctor
-npm run dev
-```
-
-The application bundle remains unmodified. New Slack releases may require
-adapter changes; private Slack interfaces are not a stable extension API.
-Mac sleep/wake, all rich composer controls and every Slack distribution are not
-yet qualified. Automated live send/mark-read experiments are not setup steps;
-`npm test` uses the unit suite and does not send Slack messages.
-
-## Everyday controls and development mode (0.19.0)
-
-After pulling this release, **fully stop and restart** the launcher. Reloading the
-mod alone cannot replace the old launcher's developer control interface:
+Everyday mode is the default. To enable arbitrary renderer evaluation,
+screenshots, and experimental inspection, fully stop the source session and run:
 
 ```sh
-npm run dev:stop
-npm run dev
+npm run dev:debug
 ```
 
-`npm run dev` and **Start Triage.command** now use everyday mode. The native menu,
-shortcuts, observer, previews and compose remain available. The local control
-socket permits status, stop, module reload and helper restart; it rejects arbitrary
-JavaScript evaluation, screenshots and network experiments. `npm run dev:status`
-reports `controlMode: "everyday"` and callback-context health. Existing module and
-cache settings are unchanged.
+Debug mode uses the same integration sign-ins as `dev`; it does not provide a new
+account sandbox. Stop it and relaunch with `npm run dev` to return to everyday
+controls. A renderer reload cannot change the launcher's security mode.
 
-For deliberate debugging against test workspaces, stop the everyday instance and
-launch `npm run dev:debug`. This enables arbitrary renderer evaluation and capture
-for that process only, prints a development-mode notice, and reports
-`controlMode: "development"`. A socket request cannot enable it. Live smoke scripts
-that use `inspect()` require this mode. Stop and start with `npm run dev` afterward.
-The existing integration-test profile is reused; development mode does not choose
-or isolate a different set of signed-in workspaces.
+Use `npm test` for automated regression tests. Scripts named `live-*`,
+`acceptance-*`, `experiment`, and similar are separate, scenario-specific probes;
+some depend on old UI versions or named test workspaces, and some send messages or
+change read state. Inspect each script before use and obtain permission for the
+specific accounts/actions. Historical research notes do not grant authorization.
+See [testing guidance](CONTRIBUTING.md#testing).
 
-Callbacks are restricted to the current default top-level Slack context, using
-CDP frame/origin metadata. Old contexts and child frames are rejected, and bindings
-are re-established after navigation. This does not sandbox trusted mod code or
-protect against scripts already executing in the authorized Slack context. The
-private CDP pipe remains necessary internally; repository and launcher code remain
-trusted. Cache retention and sign-out behavior are not changed in this release.
+## Update and recover
+
+Stop the source session before pulling launcher changes, then `git pull --ff-only`,
+run relevant tests, and restart. For the GUI path, rebuild and smoke-test the app.
+Keep local modifications on a branch before updating.
+
+If a native pane cannot open, use its recovery controls or Open in Slack. For
+launch problems, run Doctor and check local runtime logs. Review and redact any
+log before sharing it. Do not delete a profile or copy credentials to bypass an
+ownership error. Never include `.lab/`, integration profiles, account caches, or
+raw message captures in a contribution.
+
+The old `package:pilot` source ZIP is a [historical prototype](pilot/README.md),
+not the supported way to build or distribute the current client.

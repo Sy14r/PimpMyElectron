@@ -1,5 +1,10 @@
 # Native Activity and neutral background parking
 
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
+
 Validated locally on Slack direct-download 4.52.155, macOS, September 22, 2026.
 
 ## Problem and implementation

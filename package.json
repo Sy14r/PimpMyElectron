@@ -28,5 +28,6 @@
     "client:open": "open dist/PimpMyElectron.app",
     "client:release": "node scripts/release-client.mjs",
     "client:smoke": "node scripts/smoke-client.mjs"
-  }
+  },
+  "license": "MPL-2.0"
 }

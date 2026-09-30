@@ -1,5 +1,10 @@
 # Direct-download qualification — September 18, 2026
 
+> Historical research: findings and status below describe the recorded prototype,
+> not the current release. See the [research index](README.md),
+> [current setup](../SETUP.md), and [Slack guide](../docs/SLACK-TRIAGE.md).
+> Old test permissions and experiment commands are not authorization for new runs.
+
 The official [Slack Mac download](https://slack.com/downloads/mac) supplied
 Slack 4.52.155 / Electron 44 as a universal DMG. The test copy was extracted under
 ignored `.lab/`; the installed `/Applications/Slack.app` was not replaced or modified.
@@ -79,7 +84,7 @@ reports it embeds. No profiles, credentials, captures or raw reports are committ
 
 ## Still pending
 
-The actual work laptop needs its own doctor and live check, including any SSO or
+The target Mac needs its own doctor and live check, including any SSO or
 device-management restrictions. Arbitrarily old threads, missing-sidebar
 conversations, richer native controls, hands-on composer focus across Spaces and
 actual Mac sleep/wake still need dedicated acceptance. These checks qualify the
