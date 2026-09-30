@@ -16,6 +16,15 @@ Open <http://127.0.0.1:57411/>. Edit `site/index.html`, `site/style.css`, or
 walkthrough steps, keyboard tab navigation, FAQ disclosures, and download links.
 Keep asset paths relative so the site works under GitHub Pages' project prefix.
 
+## Page structure
+
+`site/index.html` is the landing page. Each mod has a dedicated page under
+`site/mods/`: Slack Triage, Quote in Reply, Spotify Menu Player, and Camera Pause.
+They share `style.css`, `details.css`, and `details.js`. The landing-page links and
+related-mod links should stay within the product site; technical guides remain
+linked separately. The quote, player, and camera examples are fictional browser
+demos, not connections to the installed apps.
+
 ## Product visuals
 
 Inbox, pill, strip, and manager screenshots use the actual checked-in renderers
