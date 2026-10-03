@@ -416,7 +416,12 @@
     openingKey=null;
     // Reveal the loading pane immediately; Slack can finish mounting while it
     // slides out. Keep focus in the inbox until both operations have finished.
-    const opening=window.__PME_REPLY__?.open(destination,{focusEditor:!stage&&!quickReply?.readOnly&&focusAfter==='composer',nativeNavigate,preservePosition});
+    const opening=window.__PME_REPLY__?.open(destination,{focusEditor:!stage&&!quickReply?.readOnly&&focusAfter==='composer',nativeNavigate,preservePosition,onDestinationResolved:resolved=>{
+      // Keep the loading cover and selected row on the same verified target
+      // when an initially uncached search member opens an existing DM.
+      if(run!==openSequence||disposed||mode!=='reply'||selection!==destination.key)return;
+      selection=resolved.key;heldRow=null;clearInboxFilter(false);
+    }});
     if(stage)await Promise.all([opening,transition('reply')]);else await opening;
     if(run!==openSequence||disposed||mode!=='reply')return;
     // Notifications-only app DMs have no composer to receive focus. Explicitly
@@ -1442,7 +1447,7 @@
       return {ok:true,home:home?.ok===true,seeded};
     })().then(result=>startupResult=result);return startupTask;
   }
-  window.__PME_TRIAGE__={startup,setInboxGlass,threadAlias,version:'0.22.0',update:value=>{const activity=detectPillActivity(value,{reset:!connected()});lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,inboxGlass:undefined,inboxOpacity:undefined,detailOpacityBoost:undefined}),previewWasHeld=snapshot.previewHeld;snapshot=value;acceptAliasResult();if(value.previewHeld||previewWasHeld!==value.previewHeld)touch();syncNativeStrip();acceptLocalResult();settings={...settings,...value.settings};applyAccent(value.accentTheme);edge=settings.edge;applyGlassOpacity();render();if(before!==JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,inboxGlass:undefined,inboxOpacity:undefined,detailOpacityBoost:undefined})&&!['stock','hidden'].includes(mode))void transition(mode);if(activity)revealPillActivity();},transition,command,quick,readFromPill,activity:startActivity,open:openItem,
+  window.__PME_TRIAGE__={startup,setInboxGlass,threadAlias,version:'0.22.1',update:value=>{const activity=detectPillActivity(value,{reset:!connected()});lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,inboxGlass:undefined,inboxOpacity:undefined,detailOpacityBoost:undefined}),previewWasHeld=snapshot.previewHeld;snapshot=value;acceptAliasResult();if(value.previewHeld||previewWasHeld!==value.previewHeld)touch();syncNativeStrip();acceptLocalResult();settings={...settings,...value.settings};applyAccent(value.accentTheme);edge=settings.edge;applyGlassOpacity();render();if(before!==JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,inboxGlass:undefined,inboxOpacity:undefined,detailOpacityBoost:undefined})&&!['stock','hidden'].includes(mode))void transition(mode);if(activity)revealPillActivity();},transition,command,quick,readFromPill,activity:startActivity,open:openItem,
     status:()=>({startup:startupResult,mode,edge,inboxGlass:glassActive,backdropHelper:glassHelper,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
     dispose:async()=>{if(disposed)return;await rememberStockBounds();setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);clearTimeout(pillIdleTimer);
       window.__PME_REPLY__?.cancelSwitcher?.({restore:false});window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});await setInboxGlass(false).catch(()=>{});glassStyle.remove();document.body.style.removeProperty('--pme-detail-opacity');clearDetailMotion();document.body.removeAttribute('data-pme-quick');document.body.removeAttribute('data-pme-quick-read');document.body.removeAttribute('data-pme-background-read');++pillReadRun;await geometry('stock').catch(()=>{});applyAccent(null);host.remove();delete window.__PME_TRIAGE__;

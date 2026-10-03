@@ -144,3 +144,12 @@ test('a first-time member replay rejects removed, mismatched and cross-workspace
   assert.equal(f.events[0].detail.navigate(),false);assert.equal(f.actions.includes('navigate'),false);
  }
 });
+
+test('accepted selection survives the whole search popup unmounting before replay',async()=>{
+ const f=fixture();await f.env.openSwitcher('TONE');const row=f.row('member','UONE',{id:'DONE',user:'UONE',context_team_id:'TONE'});
+ f.selected(row);f.env.switcherAction(f.event());row.isConnected=false;f.modal.isConnected=false;
+ f.env.syncSwitcher();
+ assert.equal(f.env.switcherOpen(),true); // Preserve the accepted handoff until it can report recovery.
+ assert.equal(f.events[0].detail.navigate(),false);
+ assert.equal(f.env.switcherOpen(),false);assert.equal(f.actions.includes('navigate'),false);
+});

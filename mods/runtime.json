@@ -7,7 +7,7 @@
   "modules": [
     {
       "id": "state-observer",
-      "version": "0.15.0",
+      "version": "0.15.1",
       "source": "src/renderer/state-observer.js",
       "global": "__PME_OBSERVER__",
       "requires": [
@@ -38,7 +38,7 @@
     },
     {
       "id": "native-reply",
-      "version": "0.18.2",
+      "version": "0.18.3",
       "source": "src/renderer/native-reply.js",
       "global": "__PME_REPLY__",
       "requires": [
@@ -49,7 +49,7 @@
     },
     {
       "id": "triage-surface",
-      "version": "0.22.0",
+      "version": "0.22.1",
       "source": "src/renderer/triage.js",
       "global": "__PME_TRIAGE__",
       "requires": [

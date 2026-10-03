@@ -142,3 +142,13 @@ test('visible unread app conversations acknowledge through Slack only after open
   f.revealed();await pending;assert.equal(f.calls.includes('read'),variant==='read-only');
  }
 });
+
+test('resolved member DM updates the inbox selection before readiness, but stale callbacks cannot replace a new selection',async()=>{
+ const f=openingEnv();let resolve;
+ f.env.window.__PME_REPLY__.open=(_item,options)=>{resolve=options.onDestinationResolved;return Promise.resolve({ok:true});};
+ const pending=f.env.startReply({kind:'compose',workspaceId:'TONE',key:'TONE:compose',peer:'UNEW'},{nativeNavigate:()=>true});
+ await flush();resolve({workspaceId:'TONE',channelId:'DNEW',key:'TONE:DNEW:'});
+ assert.equal(f.env.selection,'TONE:DNEW:');assert.ok(f.calls.includes('clear-filter'));
+ f.env.selection='TONE:DOTHER:';resolve({workspaceId:'TONE',channelId:'DNEW',key:'TONE:DNEW:'});
+ assert.equal(f.env.selection,'TONE:DOTHER:');f.revealed();await pending;
+});

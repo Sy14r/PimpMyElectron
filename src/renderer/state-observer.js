@@ -108,6 +108,19 @@
       return latest?compare(latest,thread.last_read)>0:null;
     }catch{health.errors++;return null;}
   }
+  function matchesMemberConversation(request){
+    // Check one already-cached DM after a native member selection. No search,
+    // discovery, dispatch, projection of messages, or network request is needed.
+    if(disposed||!teamId(request?.workspaceId)||!userId(request?.peer)||!/^D[A-Z0-9]+$/.test(request?.channelId||''))return false;
+    const watch=watches.get(request.workspaceId);if(!watch)return false;
+    try{
+      const state=watch.store.getState(),account=accounts().find(w=>w.id===request.workspaceId);
+      if(!account||state.selfTeamIds?.teamId!==request.workspaceId||account.userId&&state.bootData?.user_id&&account.userId!==state.bootData.user_id)return false;
+      const channel=data(state.channels,request.channelId);
+      return !!channel&&data(channel,'id')===request.channelId&&data(channel,'is_im')===true&&data(channel,'user')===request.peer&&
+        !data(channel,'isUnknown')&&!data(channel,'isNonExistent')&&(!data(channel,'context_team_id')||data(channel,'context_team_id')===request.workspaceId);
+    }catch{health.errors++;return false;}
+  }
   function schedule(watch){if(!disposed&&!watch.timer)watch.timer=setTimeout(()=>publish(watch),500);}
   function discover(){
     if(disposed)return;
@@ -144,6 +157,6 @@
     for(const [workspaceId,watch] of watches){clearTimeout(watch.timer);const published=publish(watch,true);if(workspaceId===id&&published)current=true;}
     return current;
   }
-  window.__PME_OBSERVER__={version:'0.15.0',readState,capture,status:()=>({...health}),dispose(){disposed=true;clearInterval(scanTimer);for(const w of watches.values()){w.unsubscribe();clearTimeout(w.timer);}watches.clear();delete window.__PME_OBSERVER__;}};
+  window.__PME_OBSERVER__={version:'0.15.1',readState,matchesMemberConversation,capture,status:()=>({...health}),dispose(){disposed=true;clearInterval(scanTimer);for(const w of watches.values()){w.unsubscribe();clearTimeout(w.timer);}watches.clear();delete window.__PME_OBSERVER__;}};
   discover();scanTimer=setInterval(discover,10000);
 })();

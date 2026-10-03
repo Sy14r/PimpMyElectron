@@ -127,7 +127,7 @@ A selection is captured before Slack navigates, using the actual highlighted res
 
 Command-K can open a conversation under `/client/<team>/dms`, rather than a channel-ID URL. The renderer accepts that hub only when the native workspace and exact channel input match the requested destination; the normal unique-input and thread checks still apply. This fixes a reproduced case where Slack had loaded the DM but triage kept showing “Loading conversation…”. If resizing replaces the selected search result before replay, the mod resolves the same ID/type and verified DM mapping again. If that result disappears, it closes its search popup and uses the existing native conversation navigation instead of silently waiting for a click that never happened.
 
-Workflows and suggestions without a verified conversation identity (including a DM without native cached mapping) hand off to full Slack and perform the original selection there. Full-search queries are now an independent embedded pane, described below. This is intentionally a compatibility fallback, not a claim of supporting every native result type in the pane. Slack's native search can generate its ordinary requests while a user searches.
+Workflow suggestions without a supported destination hand off to full Slack and perform the original selection there. A selected member without cached DM metadata is provisionally treated as a native New Message destination; it can resolve to an existing DM as described below. Full-search queries are now an independent embedded pane, described below. This is intentionally a compatibility fallback, not a claim of supporting every native result type in the pane. Slack's native search can generate its ordinary requests while a user searches.
 
 Escape closes only the popup, then restores the original element and selection after native layout/focus restoration. Message drafts are never copied or rewritten. The session is cleaned up when leaving triage, reloading or disabling the module. Repeated keys and IME confirmation do not trigger duplicate selections.
 
@@ -143,3 +143,34 @@ The switcher recognizes both current queries (`queryUser`) and search history (`
 The native results pane is themed for the available width, with a readable sender/context/timestamp layout and an Open in Slack control. Clicking a message body, timestamp or reply count enters the verified conversation/thread navigation path and preserves the matching message position. Native result metadata can supplement a thread root only when workspace, channel and message timestamp all agree. Profile controls and filter dialogs remain native. Escape closes an open popup first; otherwise it returns from results to the inbox.
 
 Live checks on Slack 4.52.155 covered searches from the queue and an open thread, a four-result channel search, the native filter dialog, result-body navigation to an exact thread reply, and a reply-count click opening the thread. No messages were sent. Automated checks cover search identity and recipient rejection, send guarding, promotion from native search, query/history routing, result metadata matching, and body/reply-count navigation.
+
+## Uncached member selection resolving to an existing DM
+
+A missing `suggestion.im` on a Command-K member result does not establish that the
+DM is new. Slack can load the mapping during native navigation and open the
+existing DM directly, including inside its DMs hub. Previously PME kept waiting
+for `composer_page`, timed out after ten seconds, and failed to frame the already
+loaded chat. Repeating search could then work because the suggestion now had the
+DM mapping. This sequence is reproduced in a renderer regression fixture; it has
+not yet been reproduced and revalidated in the current live Slack session.
+
+During that specific native member navigation, the adapter now accepts a unique
+mounted non-thread DM only when the active workspace and route match and the
+existing observer cache confirms the exact selected member, channel, and account.
+The observer reads one cached channel entry, without selectors, dispatch, history
+projection, search requests, or network calls. Unknown or mismatched identity
+never authorizes a composer. Genuine first-DM compose navigation is unchanged.
+
+Resolving a member updates the triage selection before reporting native readiness,
+so the loading cover and editor agree on the destination key. Cancelled or
+superseded requests cannot change the selection. Regression coverage includes
+delayed cache metadata, wrong workspace/peer/route, thread inputs, missing observer,
+account changes, inherited cache entries, tombstones, draft retention, and the
+existing first-DM composer path.
+
+A second regression fixture covers the entire search popup unmounting while
+triage prepares its pane. The timer previously discarded the accepted selection,
+so replay returned without requesting native recovery. The selected handoff now
+survives until replay (or its existing timeout); a missing row explicitly requests
+the existing exact-destination recovery path. This is distinct from replacing a
+single result within a still-mounted popup.

@@ -469,3 +469,40 @@ test('a missing first-DM search result does not open an unrelated blank composer
  const env=setup();const result=await env.api.open({kind:'compose',workspaceId:'TONE'},{nativeNavigate:()=>false});
  assert.equal(result.ok,false);assert.match(result.error,/Search again/);assert.equal(env.native.composeClicks,0);assert.equal(env.api.status().ready,false);env.api.dispose();
 });
+
+test('uncached member search can resolve to a verified existing DM instead of New Message',async()=>{
+ const env=setup();let resolved;
+ env.window.__PME_OBSERVER__={matchesMemberConversation:request=>request.workspaceId==='TONE'&&request.channelId==='DNEW'&&request.peer==='UNEW'};
+ const result=await env.api.open({kind:'compose',workspaceId:'TONE',peer:'UNEW',name:'Demo person'}, {
+  nativeNavigate(){env.box.channel='DNEW';env.location.pathname='/client/TONE/dms';return true;},
+  onDestinationResolved:destination=>{resolved=destination;}
+ });
+ assert.equal(result.ok,true);assert.equal(env.api.status().ready,true);
+ assert.equal(env.api.status().target.channelId,'DNEW');assert.equal(env.api.status().target.peer,'UNEW');
+ assert.equal(resolved.key,'TONE:DNEW:');assert.equal(env.native.composeClicks,0);
+ assert.equal(env.editor.textContent,'untouched user draft');env.api.dispose();
+});
+
+test('member DM adoption waits for cache confirmation and never focuses an unverified editor',async()=>{
+ const env=setup();let confirmed=false,checks=0;
+ env.window.__PME_OBSERVER__={matchesMemberConversation(){checks++;return confirmed;}};
+ const pending=env.api.open({kind:'compose',workspaceId:'TONE',peer:'UNEW'}, {
+  nativeNavigate(){env.box.channel='DNEW';env.location.pathname='/client/TONE/DNEW';return true;}
+ });
+ await new Promise(resolve=>setTimeout(resolve,180));
+ assert.ok(checks>0);assert.equal(env.api.status().ready,false);assert.equal(env.focused(),false);
+ confirmed=true;assert.equal((await pending).ok,true);assert.equal(env.focused(),true);env.api.dispose();
+});
+test('member DM adoption rejects wrong routes, threads and missing or mismatched identity; cancellation stays final',async()=>{
+ for(const variation of ['missing','wrong-peer','thread','wrong-route','wrong-workspace']){
+  const env=setup();let adopted=false;
+  if(variation!=='missing')env.window.__PME_OBSERVER__={matchesMemberConversation:()=>variation!=='wrong-peer'};
+  const pending=env.api.open({kind:'compose',workspaceId:'TONE',peer:'UNEW'}, {
+   nativeNavigate(){env.box.channel='DNEW';env.box.thread=variation==='thread'?'100.000001':null;env.location.pathname=variation==='wrong-route'?'/client/TONE/COLD':variation==='wrong-workspace'?'/client/TTWO/DNEW':'/client/TONE/DNEW';return true;},
+   onDestinationResolved(){adopted=true;}
+  });
+  await new Promise(resolve=>setTimeout(resolve,180));
+  assert.equal(env.api.status().ready,false,variation);assert.equal(adopted,false,variation);assert.equal(env.focused(),false,variation);
+  env.api.suspend();assert.equal((await pending).cancelled,true);assert.equal(adopted,false);env.api.dispose();
+ }
+});

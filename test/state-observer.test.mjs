@@ -199,3 +199,28 @@ test('starred cache changes group parent conversations and threads independently
  assert.ok(store.snapshot().workspaces.find(w=>w.id==='TONE').items.every(i=>i.starred===false));
  assert.equal(env.network(),0);assert.equal(env.dispatches(),0);env.api.dispose();
 });
+
+test('member navigation verifies one current cached DM without publishing or network requests',()=>{
+ const e=setup(),request={workspaceId:'TONE',channelId:'DONE',peer:'UPEER'};
+ assert.equal(e.api.matchesMemberConversation(request),true);
+ assert.equal(e.snapshots.length,0);assert.equal(e.network(),0);assert.equal(e.dispatches(),0);
+ // The exact channel can be newly cached after the original search selection.
+ e.stores[0].state.channels.DNEW={id:'DNEW',is_im:true,user:'UNEW',context_team_id:'TONE'};
+ assert.equal(e.api.matchesMemberConversation({...request,channelId:'DNEW',peer:'UNEW'}),true);
+ for(const change of [{peer:'UOTHER'},{workspaceId:'TTWO'},{channelId:'CONE'},{channelId:'DMISSING'},{peer:'invalid'}])assert.equal(e.api.matchesMemberConversation({...request,...change}),false);
+ e.stores[0].state.channels.DONE=undefined;
+ assert.equal(e.api.matchesMemberConversation(request),false);e.api.dispose();
+ assert.equal(e.api.matchesMemberConversation(request),false);
+});
+test('member navigation rejects unknown, mismatched and stale-account metadata without invoking getters',()=>{
+ for(const patch of [{is_im:false},{isUnknown:true},{isNonExistent:true},{context_team_id:'TTWO'},{id:'DOTHER'},{user:'UOTHER'}]){
+  const s=state();s.channels.DONE={...s.channels.DONE,...patch};const e=setup([s]);
+  assert.equal(e.api.matchesMemberConversation({workspaceId:'TONE',channelId:'DONE',peer:'UPEER'}),false);e.api.dispose();
+ }
+ const e=setup(),request={workspaceId:'TONE',channelId:'DONE',peer:'UPEER'};
+ e.accounts.TONE.user_id='UACCOUNT';e.stores[0].state.bootData={user_id:'UOTHER'};
+ assert.equal(e.api.matchesMemberConversation(request),false);
+ delete e.stores[0].state.bootData;
+ Object.defineProperty(e.stores[0].state.channels,'DONE',{get(){throw Error('must not invoke channel getter');}});
+ assert.equal(e.api.matchesMemberConversation(request),false);assert.equal(e.api.status().errors,0);e.api.dispose();
+});

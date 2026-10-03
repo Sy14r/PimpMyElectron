@@ -380,6 +380,20 @@
     if(!input||!view)return null;
     return {input,view,recipient:page.querySelector('[data-qa="composer_page__destination-input"]')};
   }
+  function resolvedMemberConversation(){
+    // An absent suggestion.im means "not cached yet", not "no DM exists".
+    // Slack may route to an existing DM after fetching its own metadata. Adopt
+    // only a uniquely mounted, non-thread DM whose cached peer matches exactly.
+    if(target?.kind!=='compose'||!target.peer||!inWorkspace())return null;
+    const boxes=[...document.querySelectorAll('[data-qa="message_input"][data-channel-id]')].filter(node=>!node.getAttribute('data-thread-ts'));
+    if(boxes.length!==1)return null;
+    const channelId=boxes[0].getAttribute('data-channel-id');
+    if(!/^D[A-Z0-9]+$/.test(channelId||'')||![channelId,'dms','activity-inbox'].includes(path()[3]))return null;
+    if(window.__PME_OBSERVER__?.matchesMemberConversation?.({workspaceId:target.workspaceId,peer:target.peer,channelId})!==true)return null;
+    const input=boxes[0].querySelector('[data-qa="texty_input"][contenteditable="true"]'),view=input?.closest('.p-view_contents');
+    if(!input?.isConnected||!view?.isConnected)return null;
+    return {workspaceId:target.workspaceId,workspaceName:target.workspaceName,peer:target.peer,channelId,threadTs:null,key:`${target.workspaceId}:${channelId}:`,name:target.name};
+  }
   function locateReadOnly(threadTs=target?.threadTs){
     if(threadTs||!inConversation())return null;
     const markers=[...document.querySelectorAll('[data-qa="message-input-system-notification-roadblock"]')];
@@ -566,9 +580,9 @@
         }
       }
     }
-    // A selected person can have no DM yet. Replay that exact native result
-    // and embed the recipient-filled New Message page Slack creates for them.
-    if(!channelId&&peer)return {kind:'compose',workspaceId,peer,key:`${workspaceId}:compose`,name:'New message'};
+    // Missing DM metadata is provisional: native selection may open either
+    // New Message or an existing DM whose identity becomes cached afterward.
+    if(!channelId&&peer)return {kind:'compose',workspaceId,peer,key:`${workspaceId}:compose`,name:String(row.getAttribute('aria-label')||'New message').replace(/, Direct Message$/, '').slice(0,180)};
     if(!channelId)return null;
     return {workspaceId,channelId,peer,threadTs:null,key:`${workspaceId}:${channelId}:`,name:String(row.getAttribute('aria-label')||channelId).replace(/, Direct Message$/, '').slice(0,180)};
   }
@@ -662,6 +676,9 @@
   function syncSwitcher(){
     const session=switcher;if(!session)return;
     if(session.modal&&!session.modal.isConnected){
+      // Resizing can unmount the entire popup after Enter was accepted. Keep
+      // the handoff alive so replay can explicitly request exact-ID recovery.
+      if(session.selected&&Date.now()-session.selectedAt<=15000)return;
       const search=session.nativeSearch,workspaceId=search?.workspaceId;
       if(search&&Date.now()-search.at<10000){
         // The popup can unmount before Slack commits its new route.
@@ -682,12 +699,12 @@
     if(!pane.hasAttribute('tabindex')){pane.setAttribute('tabindex','-1');pane.setAttribute('data-pme-message-focus','');}
     pane.focus({preventScroll:true});return document.activeElement===pane;
   }
-  async function open(request,{focusEditor=true,nativeNavigate=null,preservePosition=false}={}){
+  async function open(request,{focusEditor=true,nativeNavigate=null,preservePosition=false,onDestinationResolved=null}={}){
     if(!valid(request)||disposed)return {ok:false,error:'Invalid reply destination'};
     const previousAuxiliary=findAuxiliary();
     const close=previousAuxiliary?.kind==='full search'?document.querySelector('[data-qa="tab_rail_home_button"]'):previousAuxiliary?.view.querySelector('button:has(svg[data-qa="caret-left-full"]),button[aria-label="Close"]');
     const run=++generation;document.body.removeAttribute('data-pme-parking');parkingState='idle';unframe();scrollMethod=null;threadNavigation=null;
-    target=['compose','search','activity'].includes(request.kind)?{kind:request.kind,workspaceId:request.workspaceId,key:`${request.workspaceId}:${request.kind}`,name:request.kind==='activity'?'Activity':request.kind==='search'?'Search results':'New message',workspaceName:String(request.workspaceName||request.workspaceId).slice(0,180)}:
+    target=['compose','search','activity'].includes(request.kind)?{kind:request.kind,workspaceId:request.workspaceId,peer:request.kind==='compose'&&/^[UW][A-Z0-9]+$/.test(request.peer||'')?request.peer:undefined,key:`${request.workspaceId}:${request.kind}`,name:request.kind==='activity'?'Activity':request.kind==='search'?'Search results':String(request.name||'New message').slice(0,180),workspaceName:String(request.workspaceName||request.workspaceId).slice(0,180)}:
       {workspaceId:request.workspaceId,channelId:request.channelId,threadTs:request.threadTs||null,
       key:request.key||`${request.workspaceId}:${request.channelId}:${request.threadTs||''}`,messageTs:/^\d+\.\d+$/.test(request.messageTs||'')?request.messageTs:null,peer:/^[UW][A-Z0-9]+$/.test(request.peer||'')?request.peer:undefined,name:String(request.name||request.channelId).slice(0,180),workspaceName:String(request.workspaceName||request.workspaceId).slice(0,180)};
     active=true;state='loading';reason=target.kind==='activity'?'Opening Slack’s Activity…':target.kind==='search'?'Opening Slack’s search results…':target.kind==='compose'?'Opening Slack’s new message composer…':'Opening Slack’s native editor…';save();notify();
@@ -755,6 +772,10 @@
         const row=[...document.querySelectorAll('[data-qa="channel-sidebar-channel"]')].find(n=>n.getAttribute('data-qa-channel-sidebar-channel-id')===target.channelId);
         if(row){channelClicks++;lastChannelClick=Date.now();row.click();}
         else if(!lookupAttempted&&!inConversation()&&(target.peer||/^[CG]/.test(target.channelId))){lookupAttempted=true;await findMissingConversation(run);continue;}
+      }
+      if(nativeNavigate&&target.kind==='compose'&&target.peer){
+        const resolved=resolvedMemberConversation();
+        if(resolved){target=resolved;onDestinationResolved?.({...resolved});save();notify();}
       }
       const found=target.kind==='activity'?locateActivity():target.kind==='search'?locateSearch():target.kind==='compose'?locateCompose():locate();
       if(found){
