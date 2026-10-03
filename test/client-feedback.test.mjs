@@ -25,3 +25,9 @@ test('native submit sends the reviewed payload only, avoids redirects, and retai
   await assert.rejects(submitFeedback(root,report,{fetcher:async()=>Response.json({error:'secret server detail'},{status:503})}),/temporarily unavailable/);
  }finally{await fs.rm(root,{recursive:true,force:true});}
 });
+
+test('automatic version details exclude private mod names and source metadata',()=>{
+ const fixture=structuredClone(state);fixture.apps[0].selectedMods.push('external:private/example');fixture.apps[0].mods.push({id:'external:private/example',name:'Private company name',version:'99',source:{id:'private',name:'Secret team',path:'/private/path'}});
+ const r=env.feedbackReport({kind:'bug',area:'slack',title:'Test',description:'Steps',versions:true},fixture);
+ assert.doesNotMatch(r.body,/Private company|Secret team|external:|private\/path|99/);assert.match(r.body,/Triage: 0.20/);
+});

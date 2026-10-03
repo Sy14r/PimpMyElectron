@@ -32,6 +32,7 @@ export function resolveSelection(app,selected,{platform=hostPlatform()}={}){
  function add(id){
   if(resolved.has(id))return;if(visiting.has(id))throw Error('Circular mod dependency');
   const mod=lookup.get(id);if(!mod)throw Error('Unknown mod');
+  if(mod.unavailableReason)throw Error(mod.unavailableReason);
   if(platform!==null&&!compatible(mod,platform))throw Error(`${mod.name||mod.id} supports ${(mod.platforms||[]).map(p=>platformLabels[p]).join(', ')||'no declared platforms'}; it cannot run on ${platformLabels[platform]||platform}.`);
   visiting.add(id);for(const dependency of mod.requires)add(dependency);visiting.delete(id);resolved.add(id);
  }

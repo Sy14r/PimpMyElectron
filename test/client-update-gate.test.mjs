@@ -55,3 +55,8 @@ test('development and unowned background processes are never stopped automatical
 test('verification requires the owned gate and catches processes surviving socket shutdown',async t=>{
  const {m,close}=await managed(t);await assert.rejects(()=>waitForUpdate(m),/cancelled/);await stopForUpdate(m);close();await assert.rejects(()=>waitForUpdate(m,{attempts:1,sleep:async()=>{},processes:()=>[m.dataDir+'/Contents/Resources/runtime/scripts/dev.mjs']}),/background mod sessions/);await assertNoUpdate(m.dataDir);
 });
+
+test('a remaining external helper supervisor blocks replacement of its bundled runtime',async t=>{
+ const m=await fixture(t);m.root='/Applications/PimpMyElectron.app/Contents/Resources/runtime';
+ const result=await prepareUpdate(m,{processes:()=>[m.root+'/src/external-helper-host.mjs']});assert.equal(result.ready,false);assert.deepEqual(result.sessions,['background mod sessions']);
+});

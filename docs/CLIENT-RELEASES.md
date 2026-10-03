@@ -9,7 +9,8 @@ Spotify Menu Player uses native macOS Automation and a private inherited-pipe li
 ## Install and update
 
 Download the versioned ZIP from [GitHub Releases](https://github.com/Sy14r/PimpMyElectron/releases),
-extract it, and move **PimpMyElectron.app** into Applications. The repository and release downloads are public. Node, a compiler, and a clone are not
+extract it, and move **PimpMyElectron.app** into Applications. The repository and release downloads are public. Local private mod sources are described
+in [Mod sources](MOD-SOURCES.md); company packages are not included in public builds. Node, a compiler, and a clone are not
 needed to run it. macOS performs its normal signed-app first-open check.
 
 Choose Slack, enable the mods you want, and click Launch Slack. **Slack Triage**

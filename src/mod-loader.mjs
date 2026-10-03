@@ -1,3 +1,5 @@
+import {loadExternalMods} from './external-mods.mjs';
+import {startExternalHelpers} from './external-helpers.mjs';
 import fs from 'node:fs/promises';import path from 'node:path';import {createHash} from 'node:crypto';import {spawnSync} from 'node:child_process';
 export function validateManifest(raw){
  if(raw?.schemaVersion!==1||!Array.isArray(raw.modules))throw Error('Invalid mod manifest');
@@ -5,10 +7,12 @@ export function validateManifest(raw){
   if(!/^[a-z][a-z0-9-]+$/.test(m.id)||ids.has(m.id)||!/^src\/renderer\/[a-z0-9-]+\.js$/.test(m.source)||!/^__PME_[A-Z_]+__$/.test(m.global)||typeof m.version!=='string'||!Array.isArray(m.requires)||m.requires.some(k=>!['slackPage','dom','sessionConfig','windowBridge'].includes(k)))throw Error('Invalid mod entry');ids.add(m.id);
  }return raw;
 }
-export async function createModLoader({cdp,root,runtimeDir,slackVersion}){
+export async function createModLoader({cdp,root,runtimeDir,slackVersion,slackPID=0,appPath=process.env.PME_SLACK_APP||''}){
  const manifest=validateManifest(JSON.parse(await fs.readFile(path.join(root,'mods/runtime.json'),'utf8')));
- const sources=new Map();for(const m of manifest.modules)sources.set(m.id,await fs.readFile(path.join(root,m.source),'utf8'));
+ const external=await loadExternalMods(runtimeDir);manifest.modules.push(...external.modules);
+ const sources=new Map();for(const m of manifest.modules)sources.set(m.id,m.code??await fs.readFile(path.join(root,m.source),'utf8'));
  if(!slackVersion)slackVersion=spawnSync('/usr/bin/plutil',['-extract','CFBundleShortVersionString','raw','-o','-','/Applications/Slack.app/Contents/Info.plist'],{encoding:'utf8'}).stdout?.trim()||'unknown';
+ const helperSession=await startExternalHelpers({helpers:external.helpers,runtimeDir,appPath,targetPID:slackPID});
  let disabled=new Set(),configError=null,lastLedger='',disposed=false;const pages=new Map();
  async function config(){try{const raw=JSON.parse(await fs.readFile(path.join(runtimeDir,'mods.json'),'utf8'));if(!Array.isArray(raw.disabled)||raw.disabled.some(id=>!sources.has(id)))throw Error();disabled=new Set(raw.disabled);configError=null;}catch(e){if(e.code!=='ENOENT')configError='Invalid module configuration; retaining last working selection.';}}
  const probe=`(()=>({slackPage:location.origin==='https://app.slack.com'&&/^\\/client\\/[TE][A-Z0-9]+(?:\\/|$)/.test(location.pathname),dom:!!document.body,
@@ -47,10 +51,10 @@ export async function createModLoader({cdp,root,runtimeDir,slackVersion}){
   await ledger();
  }
  await config();
- return {reconcile,status:()=>({slackVersion,previouslyTested:manifest.testedSlackVersions?.includes(slackVersion)===true,configError,
+ return {reconcile,status:()=>({helpers:helperSession.status(),slackVersion,previouslyTested:manifest.testedSlackVersions?.includes(slackVersion)===true,configError,
   pages:[...pages.values()].map(p=>({capabilities:p.capabilities,modules:Object.fromEntries([...p.modules].map(([id,r])=>[id,r.state]))}))}),
   enabled:id=>!disabled.has(id),
   detach:entry=>pages.delete(entry.sessionId),
-  async dispose(sessions){if(disposed)return;disposed=true;for(const entry of sessions.values()){const page=pages.get(entry.sessionId);if(!page)continue;for(const module of [...manifest.modules].reverse()){const r=page.modules.get(module.id);if(r)await remove(entry,module,r);}}pages.clear();}
+  async dispose(sessions){if(disposed)return;disposed=true;await helperSession.dispose();for(const entry of sessions.values()){const page=pages.get(entry.sessionId);if(!page)continue;for(const module of [...manifest.modules].reverse()){const r=page.modules.get(module.id);if(r)await remove(entry,module,r);}}pages.clear();}
  };
 }

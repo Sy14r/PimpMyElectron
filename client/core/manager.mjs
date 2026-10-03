@@ -1,3 +1,4 @@
+import {ModSources} from './mod-sources.mjs';
 import {submitFeedback} from './feedback.mjs';
 import {releaseHistory} from './releases.mjs';
 import {assertNoUpdate,prepareUpdate,stopForUpdate,waitForUpdate,clearUpdate} from './update-gate.mjs';
@@ -15,12 +16,27 @@ export class ClientManager {
  async init(){
   this.clientVersion=await readJSON(path.join(this.root,'client/version.json'));
   this.modules=(await readJSON(path.join(this.root,'mods/runtime.json'))).modules;
-  this.catalog=validateCatalog(await readJSON(path.join(this.root,'client/catalog.json')),this.modules);
+  this.bundledCatalog=validateCatalog(await readJSON(path.join(this.root,'client/catalog.json')),this.modules);
+  this.sources=await new ModSources(this.dataDir).load();await this.sources.refresh();
+  await this.reloadCatalog();
   this.config=await readJSON(path.join(this.dataDir,'client.json'),{version:1,apps:{},extraPaths:[]});
   if(this.config?.version!==1||!this.config.apps||!Array.isArray(this.config.extraPaths))throw Error('Invalid client settings; existing data has been preserved.');
-  for(const app of this.catalog.apps){const saved=this.config.apps[app.id],requested=saved?.selected??app.mods.filter(m=>m.defaultEnabled).map(m=>m.id);const known=resolveSelection(app,requested,{platform:null});this.config.apps[app.id]={path:typeof saved?.path==='string'?saved.path:null,selected:resolveSelection(app,known.filter(id=>modCompatibility(app,id).compatible))};}
+  for(const app of this.catalog.apps){const saved=this.config.apps[app.id],requested=saved?.selected??app.mods.filter(m=>m.defaultEnabled).map(m=>m.id);const known=requested.filter(id=>app.mods.some(m=>m.id===id));this.config.apps[app.id]={path:typeof saved?.path==='string'?saved.path:null,selected:resolveSelection(app,known.filter(id=>modCompatibility(app,id).compatible))};}
   return this;
  }
+ async reloadCatalog(){
+  this.catalog=structuredClone(this.bundledCatalog);for(const mod of await this.sources.mods())this.catalog.apps.find(a=>a.id===mod.appId)?.mods.push(mod);
+  if(this.config)for(const app of this.catalog.apps){const saved=this.config.apps[app.id];if(saved)saved.selected=resolveSelection(app,saved.selected.filter(id=>modCompatibility(app,id).compatible));}
+ }
+ async sourceAction(request){return withLaunchLock(this.dataDir,async()=>{
+  await assertNoUpdate(this.dataDir);await this.sources.load();
+  if(request.op==='source-add')await this.sources.add(request.path);
+  else if(request.op==='source-refresh')await this.sources.refresh();
+  else if(request.op==='source-install')await this.sources.install(request.sourceId,request.digest);
+  else if(request.op==='source-rollback')await this.sources.rollback(request.sourceId);
+  else if(request.op==='source-remove')await this.sources.remove(request.sourceId);
+  await this.reloadCatalog();await this.save();return this.snapshot();
+ });}
  app(id){const app=this.catalog.apps.find(a=>a.id===id);if(!app)throw Error('Unsupported app');return app;}
  runtimeDir(id){this.app(id);return path.join(this.dataDir,'runtime',id);}
  async save(){await writeJSON(path.join(this.dataDir,'client.json'),this.config);}
@@ -45,7 +61,7 @@ export class ClientManager {
   try{const state=await this.request(path.join(this.runtimeDir(id),'control.sock'),{op:'status'},options);
    if(id==='spotify')return state.adapter==='spotify'?{running:true,pid:state.pid,mode:'everyday',helperRunning:true,mods:state.mods??['spotify-menu'],cameraStatus:state.cameraStatus,cameraOwnsPause:state.cameraOwnsPause,appRunning:state.appRunning,signedIn:true,error:state.error,appPath:state.appPath}: {running:false};
    return {running:state.running===true,pid:state.pid,mode:state.controlMode,appPath:state.installation?.app,version:state.installation?.version,error:state.featureError,
-    helperRunning:state.helperRunning,triageEnabled:state.feature?.liveUI!==false,signedIn:state.pages?.some(p=>p.signedIn)===true,modules:state.feature?.mods?.pages?.[0]?.modules||{},customApiRequests:state.feature?.customApi?.requests||0};
+    externalHelpers:state.feature?.mods?.helpers||[],helperRunning:state.helperRunning,triageEnabled:state.feature?.liveUI!==false,signedIn:state.pages?.some(p=>p.signedIn)===true,modules:state.feature?.mods?.pages?.[0]?.modules||{},customApiRequests:state.feature?.customApi?.requests||0};
   }catch{return {running:false};}
  }
  async snapshot(){
@@ -53,10 +69,13 @@ export class ClientManager {
    let profileConflict=false;const verified=this.verified.get(pref.path);
    if(verified?.profile){try{profileConflict=!!(await fs.stat(verified.profile).catch(()=>null))&&!readProfileOwners(path.join(this.runtimeDir(app.id),'profile-owner.json')).some(p=>p.profile===verified.profile);}catch{profileConflict=true;}}
    const plan=moduleSelection(app,pref.selected,this.modules),applied=await readJSON(path.join(this.runtimeDir(app.id),'mods.json'),null);
-   apps.push({...app,mods:app.mods.map(m=>({...m,...modCompatibility(app,m.id)})),shortcuts:shortcuts.filter(p=>p.appId===app.id),installations:installed,selectedPath:pref.path,selectedMods:pref.selected,runtime,profileConflict,
-    changesPending:runtime.running&&(app.id==='spotify'?JSON.stringify([...pref.selected].sort())!==JSON.stringify([...(runtime.mods||[])].sort()):JSON.stringify([...plan.disabled].sort())!==JSON.stringify([...(applied?.disabled||[])].sort()))});
+   const external=await readJSON(path.join(this.runtimeDir(app.id),'external-mods.json'),{packages:[]});
+   const planned=app.mods.filter(m=>m.source&&pref.selected.includes(m.id)).map(m=>m.id+':'+m.source.digest).sort();
+   const appliedExternal=external.packages.map(m=>m.id+':'+m.digest).sort();
+   apps.push({...app,mods:app.mods.map(m=>{const {manifest,packageRoot,packagePath,...display}=m;return {...display,...modCompatibility(app,m.id)};}),shortcuts:shortcuts.filter(p=>p.appId===app.id),installations:installed,selectedPath:pref.path,selectedMods:pref.selected,runtime,profileConflict,
+    changesPending:runtime.running&&(JSON.stringify(planned)!==JSON.stringify(appliedExternal)|| (app.id==='spotify'?JSON.stringify([...pref.selected].sort())!==JSON.stringify([...(runtime.mods||[])].sort()):JSON.stringify([...plan.disabled].sort())!==JSON.stringify([...(applied?.disabled||[])].sort())))});
   }
-  return {platform:hostPlatform(),clientVersion:this.clientVersion.version,clientBuild:this.clientVersion.build,catalogVersion:this.catalog.version,apps,launching:this.launching,dataDir:this.dataDir};
+  return {platform:hostPlatform(),clientVersion:this.clientVersion.version,clientBuild:this.clientVersion.build,catalogVersion:this.catalog.version,sources:await this.sources.snapshot(),apps,launching:this.launching,dataDir:this.dataDir};
  }
  async select({appId,modIds,installationPath}){
   const app=this.app(appId),pref=this.config.apps[appId];
@@ -76,8 +95,10 @@ export class ClientManager {
   const installation=await this.inspect(pref.path);this.verified.set(pref.path,installation);
   const dir=this.runtimeDir(appId);const owners=readProfileOwners(path.join(dir,'profile-owner.json'));
   if(await fs.stat(installation.profile).catch(()=>null))if(!owners.some(p=>p.profile===installation.profile))throw Error('An existing PME test profile was found. Use “Import existing setup” to bring over its ownership record and settings.');
+  const externalPlan=await this.sources.launchPlan(app,pref.selected);
   await fs.access(this.helper);await fs.mkdir(dir,{recursive:true,mode:0o700});
   if(Buffer.byteLength(path.join(dir,'control.sock'))>=104)throw Error('Your home-folder path is too long for the local controller socket.');
+  await writeJSON(path.join(dir,'external-mods.json'),externalPlan);
   await writeJSON(path.join(dir,'mods.json'),moduleSelection(app,pref.selected,this.modules));
   const log=await fs.open(path.join(dir,'launcher.log'),'w',0o600);this.launching=true;
   try{
@@ -180,7 +201,7 @@ export class ClientManager {
   if(request.op==='release-history')return releaseHistory(this.root,this.clientVersion.version);
   if(request.op==='update-cancel')return withLaunchLock(this.dataDir,()=>clearUpdate(this));
   if(this.busy)throw Error('Please wait for the current action to finish.');this.busy=true;
-  try{switch(request.op){case 'update-prepare':case 'update-stop':case 'update-wait':return await withLaunchLock(this.dataDir,()=>({'update-prepare':prepareUpdate,'update-stop':stopForUpdate,'update-wait':waitForUpdate}[request.op])(this,{processes:()=>{const p=spawnSync('/bin/ps',['-axo','command='],{encoding:'utf8'});if(p.status!==0)throw Error('Could not verify running mod sessions. Retry the update.');return p.stdout.split('\n');}}));case 'update-finish':return await withLaunchLock(this.dataDir,()=>clearUpdate(this,true));case 'scan':return await this.rescan();case 'add-app':return await this.rescan(request.path);case 'shortcut-create':return await this.createShortcut(request.appId,request.path);case 'shortcut-update':return await this.updateShortcut(request.appId,request.profileId);case 'shortcut-location':return await this.shortcutLocation(request.profileId,request.path);case 'shortcut-forget':await fs.rm(profileFile(this.dataDir,request.profileId),{force:true});return this.snapshot();case 'select':return await this.select(request);case 'launch':return await this.start(request.appId);case 'stop':return await this.stop(request.appId);case 'show':return await this.show(request.appId,request.view);case 'import':return await this.importSetup(request.appId,request.path);default:throw Error('Unsupported client action');}}
+  try{if(['source-add','source-refresh','source-install','source-rollback','source-remove'].includes(request.op))return await this.sourceAction(request);switch(request.op){case 'update-prepare':case 'update-stop':case 'update-wait':return await withLaunchLock(this.dataDir,()=>({'update-prepare':prepareUpdate,'update-stop':stopForUpdate,'update-wait':waitForUpdate}[request.op])(this,{processes:()=>{const p=spawnSync('/bin/ps',['-axo','command='],{encoding:'utf8'});if(p.status!==0)throw Error('Could not verify running mod sessions. Retry the update.');return p.stdout.split('\n');}}));case 'update-finish':return await withLaunchLock(this.dataDir,()=>clearUpdate(this,true));case 'scan':return await this.rescan();case 'add-app':return await this.rescan(request.path);case 'shortcut-create':return await this.createShortcut(request.appId,request.path);case 'shortcut-update':return await this.updateShortcut(request.appId,request.profileId);case 'shortcut-location':return await this.shortcutLocation(request.profileId,request.path);case 'shortcut-forget':await fs.rm(profileFile(this.dataDir,request.profileId),{force:true});return this.snapshot();case 'select':return await this.select(request);case 'launch':return await this.start(request.appId);case 'stop':return await this.stop(request.appId);case 'show':return await this.show(request.appId,request.view);case 'import':return await this.importSetup(request.appId,request.path);default:throw Error('Unsupported client action');}}
   finally{this.busy=false;}
  }
 }

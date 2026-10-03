@@ -28,7 +28,7 @@ export async function updateSessions(manager,{processes=()=>[]}={}){
    else unsupported=true;
   }
  }
- const background=(await processes()).some(line=>(line.includes(manager.dataDir)||(manager.root&&line.includes(manager.root)))&&/\/Contents\/(?:Resources\/runtime\/scripts\/(?:spotify-host|dev)\.mjs|Resources\/runtime\/bin\/SlackTriage|Helpers\/SpotifyMenu\.app\/Contents\/MacOS\/SpotifyMenu)(?:\s|$)/.test(line));
+ const background=(await processes()).some(line=>(line.includes(manager.dataDir)||(manager.root&&line.includes(manager.root)))&&/\/Contents\/(?:Resources\/runtime\/(?:scripts\/(?:spotify-host|dev)|src\/external-helper-host)\.mjs|Resources\/runtime\/bin\/SlackTriage|Helpers\/SpotifyMenu\.app\/Contents\/MacOS\/SpotifyMenu)(?:\s|$)/.test(line));
  if(background&&!sessions.length)sessions.push('background mod sessions');
  return {sessions:[...new Set(sessions)],targets,spotifyHelper,canStop:!unsupported&&(targets.length>0||spotifyHelper)};
 }

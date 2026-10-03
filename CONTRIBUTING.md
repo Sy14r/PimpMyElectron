@@ -82,8 +82,10 @@ in an old experiment applies only to that experiment.
 
 ## Mod authoring and compatibility
 
-The catalog is bundled and reviewed with the client. There is no external mod
-marketplace, remote-code installation flow, or stable third-party plugin SDK yet.
+Bundled mods are reviewed with the client. External Slack renderer mods and native
+helpers can be distributed through local folders using [package API v1](docs/MOD-SOURCES.md).
+There is no remote marketplace or download integration. Start with the example
+collection under `examples/local-mod-source`; external mods do not require a PME rebuild.
 
 For a supported app, add or update its entry in `client/catalog.json` and implement
 the corresponding runtime behavior. `requires` there contains **mod IDs for that
@@ -113,7 +115,8 @@ without Menu Player. Check the explicit resource allowlist in
 - Keep everyday launches on private inherited pipes; do not add a network debugger
   listener or make arbitrary evaluation available through normal controls.
 - Validate operation names, destinations, sender identity, and bounded payloads at
-  bridges. Do not turn catalog or shortcut data into executable paths or commands.
+  bridges. External package entry points must stay inside validated, installed snapshots.
+  Shortcuts select package IDs; they must never supply arbitrary paths or commands.
 - Slack background observation must remain passive by default. User-triggered
   native actions can make normal host requests; do not introduce polling or
   credential extraction to fill gaps in cached data.

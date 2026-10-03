@@ -1,7 +1,7 @@
 # PimpMyElectron
 
 PimpMyElectron (PME) is a native macOS mod manager for extending supported desktop
-apps. It discovers installed apps, lets you choose bundled mods, and launches the
+apps. It discovers installed apps, lets you choose bundled or locally supplied mods, and launches the
 official app with those mods active. It does not replace Slack or Spotify or patch
 their signed application bundles on disk.
 
@@ -94,3 +94,6 @@ Original PME code and accompanying project materials are licensed under the
 source availability, and third-party exclusions. Distributed modifications to
 covered files remain under MPL; separate files containing no covered code may
 use other licenses. The license does not require contributing changes upstream.
+
+Private team mods can be supplied through [local mod sources](docs/MOD-SOURCES.md).
+The first external package API supports Slack renderer code and native helpers.

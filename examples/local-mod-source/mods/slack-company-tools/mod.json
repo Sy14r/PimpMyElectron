@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "id": "slack-company-tools",
+  "version": "1.0.0",
+  "name": "Company tools example",
+  "author": "PME example",
+  "app": "slack",
+  "platforms": [
+    "mac"
+  ],
+  "requires": [],
+  "description": "A small Company tools button that proves a local package is active, independently of Slack Triage.",
+  "access": "Adds a button to Slack. Does not read messages, send messages, make requests, or start helpers.",
+  "features": [
+    "Works alongside bundled Slack mods",
+    "No network or message access"
+  ],
+  "renderer": {
+    "script": "main.js",
+    "styles": "styles.css"
+  },
+  "helpers": [],
+  "files": {
+    "main.js": {
+      "sha256": "441813a6949da00a2f467ed199b6d2cb5eb2493f3ac315e213bf95f9d6009410",
+      "executable": false
+    },
+    "styles.css": {
+      "sha256": "a3eb30dd48caf641409c12597743cf5c45b4529e61f403a2ffd995949c84ea80",
+      "executable": false
+    }
+  }
+}

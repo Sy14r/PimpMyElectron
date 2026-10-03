@@ -218,7 +218,7 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage) {
         guard message.frameInfo.isMainFrame,message.frameInfo.request.url?.standardizedFileURL==uiURL.appendingPathComponent("index.html").standardizedFileURL,
               let raw=message.body as? [String:Any],let id=raw["id"] as? Int,let op=raw["op"] as? String else{return}
-        guard ["license-open","source-open","feedback-copy","feedback-open","feedback-submit","release-history","status","scan","select","launch","stop","show","add-app","import","data-folder","shortcut-create","shortcut-update","shortcut-rename","shortcut-remove","shortcut-reveal","shortcut-forget","update-check"].contains(op) else {fail(id,"Unsupported client action");return}
+        guard ["source-add","source-refresh","source-install","source-rollback","source-remove","license-open","source-open","feedback-copy","feedback-open","feedback-submit","release-history","status","scan","select","launch","stop","show","add-app","import","data-folder","shortcut-create","shortcut-update","shortcut-rename","shortcut-remove","shortcut-reveal","shortcut-forget","update-check"].contains(op) else {fail(id,"Unsupported client action");return}
         if op=="license-open" || op=="source-open" {
             // These destinations are fixed; web content cannot supply a path or URL.
             let destination = op=="license-open" ? Bundle.main.resourceURL?.appendingPathComponent("LICENSE.txt") : URL(string:"https://github.com/Sy14r/PimpMyElectron")
@@ -248,7 +248,7 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         if op=="update-check" {updaterController.checkForUpdates(nil);reply(["id":id,"ok":true]);return}
         if op=="data-folder" {NSWorkspace.shared.open(dataURL);reply(["id":id,"ok":true]);return}
         var request:[String:Any]=["id":id,"op":op]
-        for key in ["appId","modIds","installationPath","view","profileId"] {if let value=raw[key] {request[key]=value}}
+        for key in ["appId","modIds","installationPath","view","profileId","sourceId","digest"] {if let value=raw[key] {request[key]=value}}
         if op=="shortcut-create" || op=="shortcut-rename" {
             let panel=NSSavePanel();panel.allowedContentTypes=[.applicationBundle];panel.canCreateDirectories=true
             panel.nameFieldStringValue=raw["appId"] as? String == "spotify" ? "Spotify — PME.app" : "Slack — PME.app";panel.prompt=op=="shortcut-create" ? "Create shortcut" : "Rename"
@@ -271,10 +271,10 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
                 NSWorkspace.shared.recycle([url]){[weak self] _,error in DispatchQueue.main.async {guard let self else{return};if let error {self.fail(id,error.localizedDescription)}else{request["op"]="shortcut-forget";self.send(request)}}};return
             }catch{fail(id,error.localizedDescription);return}
         }
-        if op=="add-app" || op=="import" {
-            let panel=NSOpenPanel();panel.canChooseDirectories=op=="import";panel.canChooseFiles=op=="add-app";panel.allowsMultipleSelection=false
-            panel.treatsFilePackagesAsDirectories=false;panel.prompt=op=="import" ? "Import setup" : "Add app"
-            panel.message=op=="import" ? "Choose your existing PimpMyElectron project folder. Settings stay on this Mac; no Slack account data is copied." : "Choose an installed official Slack or Spotify application."
+        if op=="add-app" || op=="import" || op=="source-add" {
+            let panel=NSOpenPanel();panel.canChooseDirectories=op != "add-app";panel.canChooseFiles=op=="add-app";panel.allowsMultipleSelection=false
+            panel.treatsFilePackagesAsDirectories=false;panel.prompt=op=="source-add" ? "Add mod source" : op=="import" ? "Import setup" : "Add app"
+            panel.message=op=="source-add" ? "Choose a local folder containing a PME catalog.json. Adding a source only reads metadata; mods stay disabled until installed and enabled." : op=="import" ? "Choose your existing PimpMyElectron project folder. Settings stay on this Mac; no Slack account data is copied." : "Choose an installed official Slack or Spotify application."
             panel.directoryURL=op=="import" ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Projects") : URL(fileURLWithPath:"/Applications")
             panel.beginSheetModal(for:window){ [weak self] result in
                 guard let self else{return};if result == .OK,let url=panel.url {request["path"]=url.path;self.send(request)}else{self.reply(["id":id,"ok":true])}

@@ -19,7 +19,7 @@ const teamFromURL = value => { try { const url = new URL(value); if (url.origin 
   return url.pathname.match(/^\/client\/([TE][A-Z0-9]+)(?:\/|$)/)?.[1] || null; } catch { return null; } };
 export async function createRuntime({ cdp, contextGuard, sessions, root, runtimeDir=path.join(root,'.lab/dev'), slackPID=0, slackVersion }) {
   if (!contextGuard) throw Error('A trusted CDP context guard is required');
-  const mods=await createModLoader({cdp,root,runtimeDir,slackVersion});
+  const mods=await createModLoader({cdp,root,runtimeDir,slackVersion,slackPID});
   // Renderer-only mods do not need triage's message observer, bindings, window
   // controller or network instrumentation. Discovery reconciles their lifecycle.
   if(['state-observer','history-reader','mark-read','native-reply','triage-surface'].every(id=>!mods.enabled(id))){
