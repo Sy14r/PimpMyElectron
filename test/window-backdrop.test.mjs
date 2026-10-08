@@ -94,3 +94,9 @@ test('detail opacity derives from inbox opacity, caps at opaque, and never chang
  for(const [inbox,boost,result] of [[35,35,'0.7'],[80,35,'1'],[0,10,'0.1'],[60,0,'0.6']]){env.settings={inboxOpacity:inbox,detailOpacityBoost:boost};env.applyGlassOpacity();assert.equal(body.get('--pme-detail-opacity'),result);assert.equal(host.get('--pme-detail-opacity'),result);}
  assert.equal([...host.keys(),...body.keys()].some(k=>k==='opacity'),false);
 });
+
+test('native detail opacity clears composer ancestors but keeps the composer card solid',async()=>{
+ const source=await fs.readFile(new URL('../src/renderer/native-reply.js',import.meta.url),'utf8');
+ assert.ok(source.includes('html[data-pme-inbox-glass] [data-pme-native-reply-pane] :has([data-pme-native-composer]){background:transparent!important;}'));
+ assert.ok(source.includes('[data-pme-native-reply-pane] [data-pme-native-composer]{background:#202735!important;'));
+});

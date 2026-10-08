@@ -261,6 +261,10 @@ final class PillPlaceholderView: NSView {
 
 final class SettingsDocumentView: NSView { override var isFlipped: Bool { true } }
 
+final class SettingsTextApplyButton: NSButton {
+    weak var editor: NSTextView?
+}
+
 // Draw sample rows rather than fetching any workspace content for Settings.
 final class InboxDensityPreview: NSButton {
     var accent=accentColor(nil)
@@ -348,6 +352,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var slackPID: pid_t = 0
     var lastReturn = 0
     var settings: [String: Any] = [:]
+    var modSettings: [String: [String: Any]] = [:]
+    var enabledMods = Set<String>()
     var accentTheme: [String:String] = [:]
     var backdrop: [String:Any] = [:]
     let inboxBackdrop=InboxBackdrop()
@@ -388,9 +394,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.previousApp = nil
         }
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.image = NSImage(systemSymbolName: "tray", accessibilityDescription: "Slack triage")
+        item.button?.image = NSImage(systemSymbolName: "tray", accessibilityDescription: "Slack Companion")
         item.button?.imagePosition = .imageLeading
-        item.button?.toolTip = "Slack triage — local attention queue"
+        item.button?.toolTip = "Slack Companion — controls and live settings"
         var type = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         let handlerStatus = InstallEventHandler(GetApplicationEventTarget(), { _, event, pointer in
             guard let pointer else { return OSStatus(eventNotHandledErr) }
@@ -444,12 +450,14 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard !polling else { return }; polling = true
         call(["op": "state", "hotKeyOK": hotKeyOK, "stockHotKeyOK": stockHotKeyOK, "edgeStripVersion": 1, "backdropVersion":1, "backdropReady":inboxBackdrop.ready ?? "", "stripReady": stripReady ?? "", "previewHover": previewPanel?.isVisible == true && (previewPanel!.frame.contains(NSEvent.mouseLocation) || Date().timeIntervalSince(previewLastInside) < 0.9) ? previewKey ?? "" : ""]) { [weak self] state in
             guard let self else { return }; self.polling = false
-            guard let state else { self.shellOnline = false; self.inboxBackdrop.hide(); self.renderSettings(); self.showPreview(nil); self.showEdgeStrip(nil); self.dismissPillPlaceholder(); self.item.button?.title = "!"; self.item.button?.toolTip = "Triage controller disconnected — normal Slack remains available"; self.menu(connected: false); return }
+            guard let state else { self.shellOnline = false; self.inboxBackdrop.hide(); self.renderSettings(); self.showPreview(nil); self.showEdgeStrip(nil); self.dismissPillPlaceholder(); self.item.button?.title = "!"; self.item.button?.toolTip = "Slack Companion disconnected — normal Slack remains available"; self.menu(connected: false); return }
             self.shellOnline = true
             self.shellMode = state["mode"] as? String ?? self.shellMode
             self.slackPID = pid_t(state["slackPID"] as? Int ?? 0)
             self.inboxBackdrop.expectedPID=self.slackPID
             self.settings = state["settings"] as? [String: Any] ?? [:]
+            if let mods=state["modSettings"] as? [String:Any] { for (id,value) in mods { if let values=value as? [String:Any] { self.modSettings[id]=values } } }
+            self.enabledMods=Set(state["enabledMods"] as? [String] ?? ["slack-triage"])
             self.backdrop = state["backdrop"] as? [String:Any] ?? [:]
             self.accentTheme = state["accentTheme"] as? [String:String] ?? [:]
             self.workspaces = state["workspaces"] as? [[String: Any]] ?? []
@@ -458,12 +466,15 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let settingsEpoch = state["settingsEpoch"] as? Int ?? 0
             if settingsEpoch != self.lastSettingsEpoch {
                 let advanced = settingsEpoch > self.lastSettingsEpoch; self.lastSettingsEpoch = settingsEpoch
-                if advanced { self.openSettings() }
+                if advanced { self.openSettingsSection(state["settingsSection"] as? String) }
             }
-            let combination = self.settings["shortcut"] as? String ?? "cmd-shift-y"
-            let stockCombination = self.settings["stockShortcut"] as? String ?? "cmd-shift-u"
-            let helpCombination = self.settings["helpShortcut"] as? String ?? "cmd-shift-comma"
-            if combination != self.shortcut || stockCombination != self.stockShortcut || helpCombination != self.helpShortcut { self.registerShortcuts(combination, stockCombination, helpCombination) }
+            let combination = self.settings["shortcut"] as? String ?? "cmd-shift-y",stockCombination = self.settings["stockShortcut"] as? String ?? "cmd-shift-u",helpCombination = self.settings["helpShortcut"] as? String ?? "cmd-shift-comma"
+            if self.enabledMods.contains("slack-triage") {
+                if combination != self.shortcut || stockCombination != self.stockShortcut || helpCombination != self.helpShortcut { self.registerShortcuts(combination, stockCombination, helpCombination) }
+            } else if self.hotKey != nil || self.stockHotKey != nil || self.helpHotKey != nil {
+                if let hotKey=self.hotKey { UnregisterEventHotKey(hotKey) };if let stockHotKey=self.stockHotKey { UnregisterEventHotKey(stockHotKey) };if let helpHotKey=self.helpHotKey { UnregisterEventHotKey(helpHotKey) }
+                self.hotKey=nil;self.stockHotKey=nil;self.helpHotKey=nil;self.hotKeyOK=false;self.stockHotKeyOK=false;self.helpHotKeyOK=false;self.shortcut="";self.stockShortcut="";self.helpShortcut=""
+            }
             self.renderShortcutHelp()
             self.renderSettings()
             self.showPreview(state["preview"] as? [String: Any])
@@ -471,7 +482,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let attention = state["attention"] as? Int ?? 0
             self.attentionCount = attention
             self.item.button?.title = attention > 0 ? " \(attention)" : ""
-            self.item.button?.toolTip = self.hotKeyOK ? "Slack triage — \(attention) unread conversations and threads" : "Global shortcut unavailable; use this menu or choose another shortcut"
+            self.item.button?.toolTip = self.enabledMods.contains("slack-triage") ? (self.hotKeyOK ? "Slack Companion — \(attention) unread conversations and threads" : "Triage shortcut unavailable; use Slack Companion settings") : "Slack Companion — live mod settings"
             let epoch = state["returnEpoch"] as? Int ?? 0
             if epoch != self.lastReturn {
                 let advanced = epoch > self.lastReturn; self.lastReturn = epoch
@@ -810,14 +821,20 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if settingsWindow == nil {
             let window = NSWindow(contentRect:NSRect(x:0,y:0,width:900,height:720),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
             window.contentMinSize=NSSize(width:820,height:420)
-            window.title="Slack Triage Settings";window.isReleasedWhenClosed=false
+            window.title="Slack Settings";window.isReleasedWhenClosed=false
             window.appearance=NSAppearance(named:.darkAqua)
             window.backgroundColor=TriagePreferencesTheme.background
-            window.center();window.setFrameAutosaveName("SlackTriageSettings")
+            window.center();window.setFrameAutosaveName("SlackCompanionSettings")
             if (window.contentView?.bounds.width ?? 0) < 820 { window.setContentSize(NSSize(width:900,height:max(420,window.contentView?.bounds.height ?? 720))) }
             settingsWindow=window
         }
         settingsSignature="";renderSettings();settingsWindow?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
+    }
+    func openSettingsSection(_ section:String?) {
+        openSettings()
+        let titles=["slack-layout":"Slack Layout","slack-message-polish":"Message Polish","slack-quote-reply":"Reply Tools","slack-appearance":"Slack Appearance","slack-custom-css":"Slack Custom CSS","slack-personal-emoji":"Personal Emoji","slack-sidebar-productivity":"Sidebar Productivity","slack-triage":"Triage appearance"]
+        let title=section.flatMap { titles[$0] }
+        if let title,let button=settingsSectionButtons.first(where:{$0.title == title}) { jumpToSettingsSection(button) }
     }
     @objc func jumpToSettingsSection(_ sender: NSButton) {
         guard let scroll=settingsScrollView,let document=scroll.documentView,settingsSectionHeaders.indices.contains(sender.tag) else { return }
@@ -851,19 +868,20 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     func renderSettings() {
         guard let window=settingsWindow else { return }
-        let data: [String:Any] = ["settings":settings,"backdrop":backdrop,"accentTheme":accentTheme,"workspaces":workspaces,"displays":displays,"inbox":inboxWorkspace ?? "","online":shellOnline,"saving":settingsSaving,"error":settingsError,"triageHotkey":hotKeyOK,"stockHotkey":stockHotKeyOK,"helpHotkey":helpHotKeyOK]
+        let data: [String:Any] = ["settings":settings,"modSettings":modSettings,"enabledMods":Array(enabledMods).sorted(),"backdrop":backdrop,"accentTheme":accentTheme,"workspaces":workspaces,"displays":displays,"inbox":inboxWorkspace ?? "","online":shellOnline,"saving":settingsSaving,"error":settingsError,"triageHotkey":hotKeyOK,"stockHotkey":stockHotKeyOK,"helpHotkey":helpHotKeyOK]
         let signature=String(data:(try? JSONSerialization.data(withJSONObject:data,options:[.sortedKeys])) ?? Data(),encoding:.utf8) ?? ""
         if signature == settingsSignature { return };settingsSignature=signature
         let oldOffset=settingsScrollView?.contentView.bounds.origin.y ?? 0
         for observer in settingsScrollObservers { NotificationCenter.default.removeObserver(observer) };settingsScrollObservers=[]
         settingsSectionHeaders=[];settingsSectionButtons=[];settingsJump=nil
-        let content=NSView();window.contentView=content
+        let content=NSView();content.wantsLayer=true;content.layer?.backgroundColor=TriagePreferencesTheme.background.cgColor;window.contentView=content
         let sidebar=NSView();sidebar.translatesAutoresizingMaskIntoConstraints=false;sidebar.wantsLayer=true
         sidebar.layer?.backgroundColor=TriagePreferencesTheme.inset.cgColor;content.addSubview(sidebar)
         let navigation=NSStackView();navigation.orientation = .vertical;navigation.alignment = .leading;navigation.spacing=6;navigation.translatesAutoresizingMaskIntoConstraints=false;sidebar.addSubview(navigation)
-        let scroll=NSScrollView();scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true;scroll.drawsBackground=false;scroll.translatesAutoresizingMaskIntoConstraints=false;content.addSubview(scroll);settingsScrollView=scroll
+        let scroll=NSScrollView();scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true;scroll.drawsBackground=true;scroll.backgroundColor=TriagePreferencesTheme.background;scroll.translatesAutoresizingMaskIntoConstraints=false;content.addSubview(scroll);settingsScrollView=scroll
+        scroll.contentView.drawsBackground=true;scroll.contentView.backgroundColor=TriagePreferencesTheme.background;scroll.contentView.wantsLayer=true;scroll.contentView.layer?.backgroundColor=TriagePreferencesTheme.background.cgColor
         NSLayoutConstraint.activate([sidebar.leadingAnchor.constraint(equalTo:content.leadingAnchor),sidebar.topAnchor.constraint(equalTo:content.topAnchor),sidebar.bottomAnchor.constraint(equalTo:content.bottomAnchor),sidebar.widthAnchor.constraint(equalToConstant:180),navigation.leadingAnchor.constraint(equalTo:sidebar.leadingAnchor,constant:12),navigation.trailingAnchor.constraint(equalTo:sidebar.trailingAnchor,constant:-12),navigation.topAnchor.constraint(equalTo:sidebar.topAnchor,constant:20),scroll.leadingAnchor.constraint(equalTo:sidebar.trailingAnchor),scroll.trailingAnchor.constraint(equalTo:content.trailingAnchor),scroll.topAnchor.constraint(equalTo:content.topAnchor),scroll.bottomAnchor.constraint(equalTo:content.bottomAnchor)])
-        let document=SettingsDocumentView();document.translatesAutoresizingMaskIntoConstraints=false;scroll.documentView=document
+        let document=SettingsDocumentView();document.translatesAutoresizingMaskIntoConstraints=false;document.wantsLayer=true;document.layer?.backgroundColor=TriagePreferencesTheme.background.cgColor;scroll.documentView=document
         let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=12
         stack.translatesAutoresizingMaskIntoConstraints=false;document.addSubview(stack)
         NSLayoutConstraint.activate([document.widthAnchor.constraint(equalTo:scroll.contentView.widthAnchor),stack.leadingAnchor.constraint(equalTo:document.leadingAnchor,constant:24),stack.trailingAnchor.constraint(equalTo:document.trailingAnchor,constant:-24),stack.topAnchor.constraint(equalTo:document.topAnchor,constant:20),stack.bottomAnchor.constraint(equalTo:document.bottomAnchor,constant:-24)])
@@ -881,10 +899,10 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.setAccessibilityLabel(title);button.setAccessibilityHelp("Jump to the \(title) section")
             navigation.addArrangedSubview(button);button.widthAnchor.constraint(equalTo:navigation.widthAnchor).isActive=true;button.heightAnchor.constraint(greaterThanOrEqualToConstant:34).isActive=true;settingsSectionButtons.append(button)
         }
-        func popup(_ title:String,key:String,choices:[(String,Any)]) {
+        func popup(_ title:String,key:String,choices:[(String,Any)],modId:String?=nil) {
             let row=NSStackView();row.orientation = .horizontal;row.spacing=12;row.alignment = .centerY
             let name=label(title);name.widthAnchor.constraint(equalToConstant:230).isActive=true
-            let control=NSPopUpButton();control.identifier=NSUserInterfaceItemIdentifier(key);control.target=self;control.action=#selector(changeSetting(_:));control.isEnabled=enabled
+            let control=NSPopUpButton();control.identifier=NSUserInterfaceItemIdentifier(modId == nil ? key : "\(modId!):\(key)");control.target=self;control.action=#selector(changeSetting(_:));control.isEnabled=enabled
             control.setAccessibilityLabel(title);control.setContentHuggingPriority(.defaultLow,for:.horizontal)
             for (title,value) in choices {
                 control.addItem(withTitle:title);control.lastItem?.representedObject=value
@@ -892,14 +910,138 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if shortcutKeys.contains(key) { control.lastItem?.isEnabled = !shortcutKeys.filter { $0 != key }.contains { settings[$0] as? String == String(describing:value) } }
             }
             control.menu?.autoenablesItems=false
-            if let current=settings[key] { for (index,choice) in choices.enumerated() { if String(describing:choice.1) == String(describing:current) { control.selectItem(at:index) } } }
+            let values=modId == nil ? settings : modSettings[modId!] ?? [:]
+            if let current=values[key] { for (index,choice) in choices.enumerated() { if String(describing:choice.1) == String(describing:current) { control.selectItem(at:index) } } }
             row.addArrangedSubview(name);row.addArrangedSubview(control);stack.addArrangedSubview(row);row.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         }
-        func checkbox(_ title:String,key:String,defaultValue:Bool=true) {
+        func checkbox(_ title:String,key:String,defaultValue:Bool=true,modId:String?=nil) {
             let button=NSButton(checkboxWithTitle:title,target:self,action:#selector(changeSetting(_:)))
-            button.identifier=NSUserInterfaceItemIdentifier(key);button.state=(settings[key] as? Bool ?? defaultValue) ? .on : .off;button.isEnabled=enabled;stack.addArrangedSubview(button)
+            let values=modId == nil ? settings : modSettings[modId!] ?? [:]
+            button.identifier=NSUserInterfaceItemIdentifier(modId == nil ? key : "\(modId!):\(key)");button.state=(values[key] as? Bool ?? defaultValue) ? .on : .off;button.isEnabled=enabled;stack.addArrangedSubview(button)
         }
-        section("Appearance & behavior")
+        func slider(_ title:String,key:String,value:Int,min:Int,max:Int,suffix:String="",modId:String) {
+            let row=NSStackView();row.orientation = .horizontal;row.spacing=12;row.alignment = .centerY;row.addArrangedSubview(label(title))
+            let control=NSSlider(value:Double(value),minValue:Double(min),maxValue:Double(max),target:self,action:#selector(changeSetting(_:)))
+            control.identifier=NSUserInterfaceItemIdentifier("\(modId):\(key)");control.isContinuous=false;control.isEnabled=enabled;control.setAccessibilityLabel(title)
+            row.addArrangedSubview(control);control.widthAnchor.constraint(greaterThanOrEqualToConstant:160).isActive=true
+            row.addArrangedSubview(label("\(value)\(suffix)"));stack.addArrangedSubview(row);row.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        }
+        func textInput(_ title:String,key:String,value:String,placeholder:String="",modId:String) {
+            let row=NSStackView();row.orientation = .horizontal;row.spacing=12;row.alignment = .centerY
+            let name=label(title);name.widthAnchor.constraint(equalToConstant:230).isActive=true;row.addArrangedSubview(name)
+            let field=NSTextField(string:value);field.placeholderString=placeholder;field.identifier=NSUserInterfaceItemIdentifier("\(modId):\(key)");field.target=self;field.action=#selector(changeSetting(_:));field.isEnabled=enabled;field.setAccessibilityLabel(title)
+            row.addArrangedSubview(field);field.widthAnchor.constraint(greaterThanOrEqualToConstant:240).isActive=true;stack.addArrangedSubview(row);row.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        }
+        func multilineInput(_ title:String,key:String,value:String,buttonTitle:String="Apply",modId:String) {
+            let group=NSStackView();group.orientation = .vertical;group.alignment = .leading;group.spacing=7;group.addArrangedSubview(label(title))
+            let scroll=NSScrollView();scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true;scroll.borderType = .bezelBorder;scroll.drawsBackground=true;scroll.backgroundColor=TriagePreferencesTheme.inset
+            let editor=NSTextView();editor.string=value;editor.isRichText=false;editor.allowsUndo=true;editor.isEditable=enabled;editor.font = .monospacedSystemFont(ofSize:11,weight:.regular);editor.textColor = .labelColor;editor.backgroundColor=TriagePreferencesTheme.inset;editor.insertionPointColor = .labelColor;editor.textContainerInset=NSSize(width:7,height:7);scroll.documentView=editor
+            group.addArrangedSubview(scroll);scroll.widthAnchor.constraint(equalTo:group.widthAnchor).isActive=true;scroll.heightAnchor.constraint(equalToConstant:130).isActive=true
+            let apply=SettingsTextApplyButton(title:buttonTitle,target:self,action:#selector(changeSetting(_:)));apply.editor=editor;apply.identifier=NSUserInterfaceItemIdentifier("\(modId):\(key)");apply.isEnabled=enabled;apply.setAccessibilityLabel("\(buttonTitle) \(title)")
+            group.addArrangedSubview(apply);apply.setContentHuggingPriority(.required,for:.horizontal);stack.addArrangedSubview(group);group.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        }
+        if enabledMods.contains("slack-layout") {
+            section("Slack Layout")
+            note("Changes apply immediately to ordinary Slack. Layout transformations pause automatically while a Triage conversation or switcher is open.")
+            popup("Navigation rail",key:"railMode",choices:[("Full rail","full"),("Hidden rail","hidden"),("Move rail to top bar","topbar")],modId:"slack-layout")
+            popup("Hidden rail buttons",key:"hiddenRailPlacement",choices:[("Top bar","topbar"),("Sidebar header","sidebar")],modId:"slack-layout")
+            checkbox("Hide Home",key:"railHome",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide Direct messages",key:"railDMs",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide Activity",key:"railActivity",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide Files",key:"railFiles",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide Later",key:"railLater",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide Agents & tools",key:"railAgents",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide Create",key:"railCreate",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide sidebar focus control",key:"railFocus",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide profile control",key:"railProfile",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide minimal top-bar overflow",key:"railMore",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide workspace switcher",key:"hideWorkspaceSwitcher",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide back and forward controls",key:"hideBackForward",defaultValue:false,modId:"slack-layout")
+            section("Channel header")
+            checkbox("Hide favorite control",key:"headerStar",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide members",key:"headerMembers",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide huddle control",key:"headerHuddle",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide notification control",key:"headerNotifications",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide in-channel search",key:"headerSearch",defaultValue:false,modId:"slack-layout")
+            checkbox("Hide canvas and bookmarks",key:"headerCanvas",defaultValue:false,modId:"slack-layout")
+            checkbox("Use a single-line channel header",key:"singleLineHeader",defaultValue:false,modId:"slack-layout")
+            section("Conversation and messages")
+            popup("Thread pane width",key:"threadPaneWidth",choices:[("Slack default",0),("320 px",320),("400 px",400),("480 px",480),("560 px",560),("640 px",640),("720 px",720),("900 px",900)],modId:"slack-layout")
+            checkbox("Message toolbar follows pointer",key:"toolbarFollowsPointer",defaultValue:false,modId:"slack-layout")
+            note("Hidden actions remain reachable from the selected overflow placement unless Hide minimal top-bar overflow is enabled. If Slack’s current controls cannot be identified confidently, the native layout remains visible.")
+        }
+        if enabledMods.contains("slack-message-polish") {
+            section("Message Polish")
+            note("Every option applies immediately to native Slack messages. Triage keeps authority over its own embedded-pane tint preference.")
+            checkbox("Keep long code lines on one line",key:"codeNoWrap",modId:"slack-message-polish")
+            checkbox("Show Copy controls on code",key:"codeCopy",modId:"slack-message-polish")
+            checkbox("Use denser message text",key:"compactText",modId:"slack-message-polish")
+            checkbox("Remove extra space between messages",key:"compactSpacing",defaultValue:false,modId:"slack-message-polish")
+            checkbox("Use readable labels for supported links",key:"readableLinks",modId:"slack-message-polish")
+            note("Readable labels are derived locally from supported Google Workspace URLs. PME does not fetch link metadata.")
+            checkbox("Quiet message actions until hover",key:"calmHover",modId:"slack-message-polish")
+            checkbox("Tint messages by sender",key:"senderTints",modId:"slack-message-polish")
+            checkbox("Tint your own messages",key:"tintOwn",defaultValue:false,modId:"slack-message-polish")
+            let polish=modSettings["slack-message-polish"] ?? [:]
+            slider("Sender tint intensity",key:"tintIntensity",value:polish["tintIntensity"] as? Int ?? 35,min:5,max:100,suffix:"%",modId:"slack-message-polish")
+        }
+        if enabledMods.contains("slack-quote-reply") {
+            section("Reply Tools")
+            note("Both actions edit only the matching visible composer and never send automatically.")
+            checkbox("Show Quote in reply",key:"quoteAction",modId:"slack-quote-reply")
+            checkbox("Show Reply with preview",key:"previewAction",modId:"slack-quote-reply")
+            checkbox("Use Q for Reply with preview",key:"previewShortcut",modId:"slack-quote-reply")
+            checkbox("Compact message-preview cards",key:"compactCards",modId:"slack-quote-reply")
+            note("Q is captured only over a message or while its preview action is focused. A non-empty text editor always keeps the keystroke.")
+        }
+        if enabledMods.contains("slack-appearance") {
+            section("Slack Appearance")
+            note("Colors apply only to this managed Slack session and update immediately. PME never reads Slack credentials or writes account preferences.")
+            popup("Theme preset",key:"preset",choices:[("Midnight","midnight"),("Ocean","ocean"),("Forest","forest"),("Sandstone","sandstone"),("Lavender","lavender"),("Aubergine","aubergine"),("Graphite","graphite"),("Sunrise","sunrise"),("Custom colors","custom")],modId:"slack-appearance")
+            let appearance=modSettings["slack-appearance"] ?? [:]
+            textInput("System navigation",key:"systemNavigation",value:appearance["systemNavigation"] as? String ?? "#151a28",placeholder:"#151a28",modId:"slack-appearance")
+            textInput("Selected items",key:"selectedItems",value:appearance["selectedItems"] as? String ?? "#5965d8",placeholder:"#5965d8",modId:"slack-appearance")
+            textInput("Presence indication",key:"presenceIndication",value:appearance["presenceIndication"] as? String ?? "#53c98b",placeholder:"#53c98b",modId:"slack-appearance")
+            textInput("Notifications",key:"notifications",value:appearance["notifications"] as? String ?? "#e45d7b",placeholder:"#e45d7b",modId:"slack-appearance")
+            note("Choose Custom colors to use these four values. Enter a six-digit hex color and press Return to apply it.")
+            textInput("Import Slack theme",key:"themeString",value:"",placeholder:"#151A28,#5965D8,#53C98B,#E45D7B",modId:"slack-appearance")
+            note("Paste four or eight comma-separated Slack theme colors and press Return. Importing selects Custom colors.")
+        }
+        if enabledMods.contains("slack-custom-css") {
+            section("Slack Custom CSS")
+            note("Advanced and local to this managed Slack session. Imports, URLs, escaped syntax, legacy executable syntax, and direct PME selectors are rejected. If a style breaks Slack, disable this mod in PME.")
+            let custom=modSettings["slack-custom-css"] ?? [:]
+            multilineInput("Custom CSS",key:"css",value:custom["css"] as? String ?? "",modId:"slack-custom-css")
+        }
+        if enabledMods.contains("slack-personal-emoji") {
+            section("Personal Emoji")
+            note("Enter one image per line as one or more :shortcodes: followed by a public HTTPS image URL, for example :shipit: :deploy: https://example.com/shipit.png. Emoji-only messages use Slack-style jumbo sizing. The image host receives a normal no-referrer image request and your IP address; Slack message content is never sent to it.")
+            let emoji=modSettings["slack-personal-emoji"] ?? [:]
+            multilineInput("Personal emoji definitions",key:"definitions",value:emoji["definitions"] as? String ?? "",modId:"slack-personal-emoji")
+        }
+        if enabledMods.contains("slack-sidebar-productivity") {
+            section("Sidebar Productivity")
+            note("These controls apply immediately to Slack’s ordinary sidebar and remain independent of Slack Layout and the separate Triage inbox.")
+            checkbox("Enable Unified Sidebar",key:"unifiedEnabled",defaultValue:false,modId:"slack-sidebar-productivity")
+            note("Unified Sidebar groups and orders only rows Slack has already mounted. It never opens conversations, expands sections, fetches history, or fills cache gaps. Use the Classic / Unified control in Slack to switch views.")
+            checkbox("Show Hide controls for destinations and sections",key:"organizerEnabled",modId:"slack-sidebar-productivity")
+            checkbox("Hide Slackbot",key:"hideSlackbot",defaultValue:false,modId:"slack-sidebar-productivity")
+            note("Hide controls add a workspace-scoped Hidden items recovery list.")
+            let sidebar=modSettings["slack-sidebar-productivity"] ?? [:]
+            checkbox("Use compact sidebar strip",key:"compactSidebar",defaultValue:false,modId:"slack-sidebar-productivity")
+            checkbox("Auto-hide sidebar when narrow",key:"autoHideSidebar",defaultValue:false,modId:"slack-sidebar-productivity")
+            checkbox("Use conversation-only small-window mode",key:"smallWindowSidebar",defaultValue:false,modId:"slack-sidebar-productivity")
+            slider("Auto-hide threshold",key:"autoHideWidth",value:sidebar["autoHideWidth"] as? Int ?? 760,min:520,max:1400,suffix:" px",modId:"slack-sidebar-productivity")
+            slider("Conversation-only threshold",key:"conversationWidth",value:sidebar["conversationWidth"] as? Int ?? 760,min:520,max:1400,suffix:" px",modId:"slack-sidebar-productivity")
+            checkbox("Enable cached message previews",key:"peekEnabled",modId:"slack-sidebar-productivity")
+            checkbox("Show Open action",key:"openAction",modId:"slack-sidebar-productivity")
+            checkbox("Show Reply in new window action",key:"replyAction",modId:"slack-sidebar-productivity")
+            checkbox("Keep quick-reply window warm",key:"prewarmReply",defaultValue:false,modId:"slack-sidebar-productivity")
+            slider("Hover preview delay",key:"hoverDelay",value:sidebar["hoverDelay"] as? Int ?? 450,min:150,max:1500,suffix:" ms",modId:"slack-sidebar-productivity")
+            note("Previews use only already-cached messages; a cache miss is labeled without making a request. Open uses Slack’s normal full view. Reply opens that conversation and Slack’s native composer in a separate Slack window without navigating or covering the main view. Keeping it warm trades additional memory for a much faster first Reply and seeds only from the conversation already open; it does not pre-open hovered destinations and does not change the Triage pill view.")
+        }
+        if enabledMods.contains("slack-triage") {
+        section("Triage appearance")
         note("Accent color")
         let accentRow=NSStackView();accentRow.orientation = .horizontal;accentRow.spacing=10;accentRow.alignment = .centerY
         let selectedAccent=settings["accentColor"] as? String ?? "#bca9f0"
@@ -915,6 +1057,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let colorLabel=label(selectedAccent.uppercased());colorLabel.setAccessibilityLabel("Current accent color: \(selectedAccent)");accentRow.addArrangedSubview(colorLabel)
         stack.addArrangedSubview(accentRow)
         note("Applies to triage, the pill, and embedded Slack views. Dark colors are lightened for text and indicators to keep them readable.")
+        checkbox("Tint messages by sender",key:"senderTints",defaultValue:false)
+        popup("Sender tint visibility",key:"senderTintMode",choices:[("Always","always"),("On hover","hover")])
+        note("Adds subtle, stable colors to other people's messages in native conversations and threads opened beside the inbox. Always is the default. This setting is independent of Message Polish and does not tint inbox rows or the pill.")
         checkbox("Translucent inbox (experimental)",key:"inboxGlass",defaultValue:false)
         note("Keeps macOS background blur behind the inbox list, including when Slack is unfocused. Detail panes use a stronger background tint. The first activation enables Slack’s native transparency and needs a restart. Turning this off restores your previous preference. Respects Reduce Transparency.")
         let opacityRow=NSStackView();opacityRow.orientation = .horizontal;opacityRow.spacing=12;opacityRow.alignment = .centerY
@@ -936,7 +1081,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         boostRow.addArrangedSubview(boost);boost.widthAnchor.constraint(greaterThanOrEqualToConstant:100).isActive=true
         boostRow.addArrangedSubview(label("+\(boostValue) → \(min(100,(settings["inboxOpacity"] as? Int ?? 28)+boostValue))%"))
         stack.addArrangedSubview(boostRow);boostRow.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
-        note("Adds percentage points to the inbox opacity for conversations, threads, and other detail panes, capped at 100%. Composer controls and popups keep a solid background.")
+        note("Adds percentage points to the inbox opacity for conversations, threads, and other detail panes, capped at 100%. The area around and beneath the composer follows this value; the composer card and popups stay solid.")
         if backdrop["state"] as? String == "restart-required" {
             note("Restart Slack with your usual Pimp My Electron launcher to finish enabling translucency. The inbox stays opaque until then.")
         } else if backdrop["state"] as? String == "unavailable" {
@@ -990,10 +1135,11 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         for (keys,text) in inboxShortcutRows { shortcutRow(keys,text) }
         note("Single-key shortcuts stay inactive while typing. In the conversation filter, Down Arrow moves into results. Dialogs handle Escape before the inbox.")
-        let status=label(!shellOnline ? "Controller disconnected. Settings will be available after reconnecting." : settingsSaving ? "Saving…" : settingsError.isEmpty ? "Changes save automatically on this Mac." : settingsError)
+        }
+        let status=label(!shellOnline ? "Slack Companion disconnected. Settings will be available after reconnecting." : settingsSaving ? "Saving…" : settingsError.isEmpty ? "Changes save automatically on this Mac and apply immediately." : settingsError)
         status.setAccessibilityIdentifier("settings-status");stack.addArrangedSubview(status);status.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         window.contentView?.layoutSubtreeIfNeeded()
-        scroll.contentView.scroll(to:NSPoint(x:0,y:min(oldOffset,max(0,document.frame.height-scroll.contentSize.height))));scroll.reflectScrolledClipView(scroll.contentView)
+        scroll.contentView.scroll(to:NSPoint(x:0,y:min(oldOffset,max(0,document.frame.height-scroll.contentSize.height))));scroll.reflectScrolledClipView(scroll.contentView);document.setNeedsDisplay(document.bounds);scroll.contentView.setNeedsDisplay(scroll.contentView.bounds)
         scroll.contentView.postsBoundsChangedNotifications=true;document.postsFrameChangedNotifications=true
         for (name,object) in [(NSView.boundsDidChangeNotification,scroll.contentView as NSView),(NSView.frameDidChangeNotification,document as NSView)] {
             settingsScrollObservers.append(NotificationCenter.default.addObserver(forName:name,object:object,queue:.main) { [weak self] _ in self?.updateSettingsSection() })
@@ -1001,17 +1147,22 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateSettingsSection()
     }
     @objc func changeSetting(_ sender:NSControl) {
-        guard shellOnline,!settingsSaving,let key=sender.identifier?.rawValue else { return }
+        guard shellOnline,!settingsSaving,let identifier=sender.identifier?.rawValue else { return }
+        let configurable=["slack-layout","slack-message-polish","slack-quote-reply","slack-appearance","slack-custom-css","slack-personal-emoji","slack-sidebar-productivity"]
+        let modId=configurable.first(where:{identifier.hasPrefix($0+":")}) ?? "slack-triage"
+        let key=modId == "slack-triage" ? identifier : String(identifier.dropFirst(modId.count+1))
         var patch:[String:Any]=[:]
         if key.hasPrefix("workspace:"),let button=sender as? NSButton {
             let id=String(key.dropFirst("workspace:".count));var ids=settings["notificationWorkspaces"] as? [String] ?? []
             ids.removeAll(where:{$0 == id});if button.state == .on { ids.append(id) };patch["notificationWorkspaces"]=ids
         } else if let popup=sender as? NSPopUpButton,let value=popup.selectedItem?.representedObject { patch[key]=value }
         else if let slider=sender as? NSSlider { patch[key]=Int(slider.doubleValue.rounded()) }
+        else if let field=sender as? NSTextField { patch[key]=field.stringValue }
+        else if let apply=sender as? SettingsTextApplyButton,let editor=apply.editor { patch[key]=editor.string }
         else if let swatch=sender as? AccentSwatch { patch[key]=swatch.hex }
         else if let preview=sender as? InboxDensityPreview { patch[key]=preview.density }
         else if let button=sender as? NSButton { patch[key]=button.state == .on }
-        saveSetting(patch)
+        saveSetting(patch,modId:modId)
     }
     @objc func chooseCustomAccent() {
         let panel=NSColorPanel.shared;panel.showsAlpha=false;panel.isContinuous=false
@@ -1024,34 +1175,39 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         func byte(_ component:CGFloat)->Int { Int((min(1,max(0,component))*255).rounded()) }
         let hex=String(format:"#%02x%02x%02x",byte(color.redComponent),byte(color.greenComponent),byte(color.blueComponent))
         if settingsSaving { pendingAccent=hex;return }
-        saveSetting(["accentColor":hex])
+        saveSetting(["accentColor":hex],modId:"slack-triage")
     }
-    func saveSetting(_ patch:[String:Any]) {
+    func saveSetting(_ patch:[String:Any],modId:String="slack-triage") {
         guard !patch.isEmpty else { return };settingsSaving=true;settingsError="";renderSettings()
-        call(["op":"settings","patch":patch]) { [weak self] result in
+        call(["op":"settings","modId":modId,"patch":patch]) { [weak self] result in
             guard let self else { return };self.settingsSaving=false
             if let updated=result?["settings"] as? [String:Any] { self.settings=updated } else { self.settingsError="Could not save. Please try again." }
+            if let mods=result?["modSettings"] as? [String:Any] { for (id,value) in mods { if let values=value as? [String:Any] { self.modSettings[id]=values } } }
             if let status=result?["backdrop"] as? [String:Any] { self.backdrop=status }
             if let theme=result?["accentTheme"] as? [String:String] { self.accentTheme=theme }
             self.renderSettings();self.refresh()
-            if let next=self.pendingAccent { self.pendingAccent=nil;self.saveSetting(["accentColor":next]) }
+            if let next=self.pendingAccent { self.pendingAccent=nil;self.saveSetting(["accentColor":next],modId:"slack-triage") }
         }
     }
     func menu(connected: Bool) {
         if trackingMenu { return }
         let menu = NSMenu();menu.delegate=self
-        if !connected { let row = NSMenuItem(title:"Controller disconnected",action:nil,keyEquivalent:"");row.isEnabled=false;menu.addItem(row) }
-        for (title,op) in [("Open inbox", "queue"),("Toggle triage (\(shortcutLabel(shortcut)))", "toggle"),("Return to work", "rest"),("Normal Slack (\(shortcutLabel(stockShortcut)))", "stock-toggle")] {
-            let row = entry(title,data:["op":op]); row.isEnabled=connected; menu.addItem(row)
+        if !connected { let row = NSMenuItem(title:"Slack Companion disconnected",action:nil,keyEquivalent:"");row.isEnabled=false;menu.addItem(row) }
+        if enabledMods.contains("slack-triage") {
+            for (title,op) in [("Open inbox", "queue"),("Toggle triage (\(shortcutLabel(shortcut)))", "toggle"),("Return to work", "rest"),("Normal Slack (\(shortcutLabel(stockShortcut)))", "stock-toggle")] {
+                let row = entry(title,data:["op":op]); row.isEnabled=connected; menu.addItem(row)
+            }
+            let windowActions=NSMenu()
+            for (title,op) in [("Hide triage","hide"),("Minimize","minimize"),("Open normal Slack","stock")] { let row=entry(title,data:["op":op]);row.isEnabled=connected;windowActions.addItem(row) }
+            let more=NSMenuItem(title:"More window actions",action:nil,keyEquivalent:"");more.submenu=windowActions;menu.addItem(more)
+        } else {
+            let row=entry("Open Slack",data:["op":"stock"]);row.isEnabled=connected;menu.addItem(row)
         }
-        let windowActions=NSMenu()
-        for (title,op) in [("Hide triage","hide"),("Minimize","minimize"),("Open normal Slack","stock")] { let row=entry(title,data:["op":op]);row.isEnabled=connected;windowActions.addItem(row) }
-        let more=NSMenuItem(title:"More window actions",action:nil,keyEquivalent:"");more.submenu=windowActions;menu.addItem(more)
         menu.addItem(.separator())
-        let help=NSMenuItem(title:"Keyboard shortcuts (\(shortcutLabel(helpShortcut)))…",action:#selector(openShortcutHelp),keyEquivalent:"");help.target=self;menu.addItem(help)
-        let preferences=NSMenuItem(title:"Settings…",action:#selector(openSettings),keyEquivalent:",");preferences.target=self;menu.addItem(preferences)
-        if !workspaces.isEmpty { let sub=NSMenu();for ws in workspaces { if let id=ws["id"] as? String { let row=entry(ws["name"] as? String ?? id,data:["op":"switch","workspace":id]);row.isEnabled=ws["connected"] as? Bool == true;sub.addItem(row) } };let row=NSMenuItem(title:"Workspaces",action:nil,keyEquivalent:"");row.submenu=sub;menu.addItem(row) }
-        menu.addItem(.separator());let quit=NSMenuItem(title:"Quit menu controller",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"");menu.addItem(quit);item.menu=menu
+        if enabledMods.contains("slack-triage") { let help=NSMenuItem(title:"Keyboard shortcuts (\(shortcutLabel(helpShortcut)))…",action:#selector(openShortcutHelp),keyEquivalent:"");help.target=self;menu.addItem(help) }
+        let preferences=NSMenuItem(title:"Slack Settings…",action:#selector(openSettings),keyEquivalent:",");preferences.target=self;menu.addItem(preferences)
+        if enabledMods.contains("slack-triage") && !workspaces.isEmpty { let sub=NSMenu();for ws in workspaces { if let id=ws["id"] as? String { let row=entry(ws["name"] as? String ?? id,data:["op":"switch","workspace":id]);row.isEnabled=ws["connected"] as? Bool == true;sub.addItem(row) } };let row=NSMenuItem(title:"Workspaces",action:nil,keyEquivalent:"");row.submenu=sub;menu.addItem(row) }
+        menu.addItem(.separator());let quit=NSMenuItem(title:"Quit Slack Companion",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"");menu.addItem(quit);item.menu=menu
     }
     func menuWillOpen(_ menu: NSMenu) { trackingMenu=true }
     func menuDidClose(_ menu: NSMenu) { trackingMenu=false }

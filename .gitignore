@@ -3,6 +3,16 @@ node_modules/
 .DS_Store
 dist/
 
+# Private mod source code belongs here for local development. Keep the public
+# instructions, but never stage a collection or its credentials/resources.
+local-mod-sources/*
+!local-mod-sources/README.md
+
+# Local source-audit artifacts may describe private implementations. Keep them
+# available for development without including them in the public repository.
+docs/SLACK-POWERTOOLS-PARITY.md
+research/slack-powertools-gap-analysis.html
+
 # Keep account state, live experiment output and local credentials on this Mac.
 evidence/*
 !evidence/README.md

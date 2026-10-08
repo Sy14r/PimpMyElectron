@@ -19,9 +19,23 @@ official Slack or Spotify app separately. Spotify uses Chromium Embedded Framewo
 | App | Mod | What it adds |
 | --- | --- | --- |
 | Slack | [Slack Triage](docs/SLACK-TRIAGE.md) | Edge strip, unread pill previews, keyboard-driven inbox, and native conversations, threads, compose, search, and Activity alongside the inbox. |
-| Slack | [Quote in Reply](docs/SLACK-QUOTE-REPLY.md) | Quote a message into the current native composer without creating a thread. Works alone or with Triage. |
+| Slack | [Reply Tools](docs/SLACK-QUOTE-REPLY.md) | Quote rendered text or insert Slack's native message preview into the current composer. Works alone or with Triage. |
+| Slack | [Message Polish](docs/SLACK-MESSAGE-POLISH.md) | Configurable copy-friendly code, stable sender tints, denser messages, compact shared-message cards, and calmer hover actions. Works with Triage and Reply Tools. |
+| Slack | [Slack Layout](docs/SLACK-LAYOUT.md) | Granular rail, header, thread, toolbar, and top-bar controls. Works independently or with every bundled Slack mod. |
+| Slack | [Slack Appearance](docs/SLACK-APPEARANCE.md) | Original color presets, custom navigation/selection/presence/badge colors, and safe Slack theme-string import. Applies locally and immediately. |
+| Slack | [Slack Custom CSS](docs/SLACK-POWER-TOOLS.md#slack-custom-css) | An advanced, live local stylesheet with strict size and network-syntax guardrails plus out-of-renderer recovery. |
+| Slack | [Personal Emoji](docs/SLACK-POWER-TOOLS.md#personal-emoji) | Personal shortcode aliases rendered locally from explicitly configured public HTTPS images. |
+| Slack | [Sidebar Productivity](docs/SLACK-SIDEBAR-PRODUCTIVITY.md) | Policy-safe Unified Sidebar for already-mounted rows, composable responsive modes, portable rules, reviewed native section apply, recoverable hiding, cache-only previews, full Open navigation, and separate-window Reply. |
 | Spotify | [Menu Player](docs/SPOTIFY-MENU.md) | Menu-bar player with artwork treatments, playback controls, Mini Library, search, and queue. |
 | Spotify | [Camera Pause](docs/SPOTIFY-CAMERA-PAUSE.md) | Pause when selected apps use the camera, then resume after a configurable delay only if the mod paused playback. Works without Menu Player. |
+
+[Slack Companion](docs/SLACK-COMPANION.md) is the session integration shared by
+Slack Triage and Slack Layout. It provides menu-bar access, global shortcuts,
+native panels, and one live Slack Settings window. It is independently switchable
+in PME; disabling it leaves renderer mods and PME-hosted live settings available.
+When Companion is already active, it also unifies settings for enabled Message
+Polish, Reply Tools, Slack Appearance, Custom CSS, Personal Emoji, and Sidebar
+Productivity mods in that window.
 
 Create app-specific launch shortcuts beside the Launch button, then put them in
 Applications or the Dock. Shortcuts save their mod selection and use the installed

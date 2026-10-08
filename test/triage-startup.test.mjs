@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 const source=await fs.readFile(new URL('../src/renderer/triage.js',import.meta.url),'utf8');
+test('standard Slack has no floating Triage opener',()=>{assert.equal(source.includes('id="opener"'),false);assert.equal(source.includes("['opener','home','edge-tab']"),false);});
 const fragment=source.slice(source.indexOf('  let startupTask='),source.indexOf('  window.__PME_TRIAGE__='));
 function fixture(previous=null){
  const calls=[],storage=new Map(previous?[['__pme_startup_launch_v1',previous]]:[]);

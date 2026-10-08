@@ -7,7 +7,7 @@ function state(id='TONE') {return {selfTeamIds:{teamId:id},channels:inherited({D
   members:inherited({UPEER:{id:'UPEER',profile:{display_name:'Test person',email:'SECRET'},token:'SECRET'}}),
   messages:inherited({DONE:inherited({'100.000001':{ts:'100.000001',text:'root',user:'UPEER',reply_count:1,latest_reply:'100.000002'},'100.000002':{ts:'100.000002',thread_ts:'100.000001',text:'reply',user:'UPEER',files:[{private_url:'SECRET'}]}})}),
   threadSub:inherited({'DONE-100.000001':{id:'DONE-100.000001',subscribed:true,lastRead:'100.000001'}})};}
-function setup(initial=[state()]){
+function setup(initial=[state()],cachedResources=[]){
   let time=1000,next=0,network=0,dispatches=0;const timers=new Map(),intervals=new Map(),snapshots=[],stores=initial.map(s=>{
     const listeners=new Set();return {state:s,listeners,getState(){return this.state;},subscribe(cb){listeners.add(cb);return()=>listeners.delete(cb);},dispatch(){dispatches++;throw Error('must not dispatch');}};
   });
@@ -15,7 +15,7 @@ function setup(initial=[state()]){
   const body={children:[makeRoot()]},accounts={TONE:{id:'TONE',name:'One',token:'SECRET'},TTWO:{id:'TTWO',name:'Two',token:'SECRET'}};
   const window={__pmeClientState:s=>snapshots.push(JSON.parse(s))};window.top=window;
   const location={origin:'https://app.slack.com',pathname:'/client/TONE/DONE'};
-  const context={window,document:{body},location,localStorage:{getItem:()=>JSON.stringify({teams:accounts})},Date:{now:()=>time},
+  const context={window,document:{body},location,URL,performance:{getEntriesByName:value=>cachedResources.includes(value)?[{}]:[]},localStorage:{getItem:()=>JSON.stringify({teams:accounts})},Date:{now:()=>time},
     setTimeout:fn=>{timers.set(++next,fn);return next;},clearTimeout:id=>timers.delete(id),setInterval:fn=>{intervals.set(++next,fn);return next;},clearInterval:id=>intervals.delete(id),
     fetch(){network++;throw Error('No API calls');},XMLHttpRequest:class{constructor(){network++;throw Error('No API calls');}},WebSocket:class{constructor(){network++;throw Error('No new sockets');}}};
   vm.runInNewContext(source,context);
@@ -105,6 +105,27 @@ test('on-demand read-state resolution republishes unchanged cached evidence with
  env.stores[0].state.threadSub['DONE-100.000001']={id:'DONE-100.000001',lastRead:'100.000002',subscribed:true};
  assert.equal(env.api.readState({workspaceId:'TONE',channelId:'DONE',threadTs:'100.000001'}),false);
  assert.equal(env.network(),0);assert.equal(env.dispatches(),0);env.api.dispose();
+});
+test('sidebar peek returns one bounded cached message without publishing, dispatching, or requesting',()=>{
+ const env=setup();const preview=env.api.peek({workspaceId:'TONE',channelId:'DONE'});
+ assert.deepEqual({...preview},{workspaceId:'TONE',channelId:'DONE',channelName:undefined,author:'Test person',text:'reply',ts:'100.000002',attachment:true});assert.equal(env.snapshots.length,0);assert.equal(env.api.status().peeks,1);
+ for(const request of [{workspaceId:'TUNKNOWN',channelId:'DONE'},{workspaceId:'TONE',channelId:'BAD'}])assert.equal(env.api.peek(request),null);
+ assert.equal(env.network(),0);assert.equal(env.dispatches(),0);env.api.dispose();assert.equal(env.api.peek({workspaceId:'TONE',channelId:'DONE'}),null);
+});
+test('sidebar peek exposes an avatar only when that exact HTTPS resource is already loaded',()=>{
+ const url='https://cdn.example.test/avatar.png',s=state();s.members.UPEER.profile.image_48=url;
+ assert.equal(setup([s]).api.peek({workspaceId:'TONE',channelId:'DONE'}).avatar,undefined);
+ const env=setup([s],[url]),preview=env.api.peek({workspaceId:'TONE',channelId:'DONE'});assert.equal(preview.avatar,url);assert.equal(env.network(),0);env.api.dispose();
+});
+test('Unified Sidebar index exposes only bounded observed metadata without publishing, dispatching, or requesting',()=>{
+ const s=state();s.channels.DOTHER={id:'DOTHER',is_im:true,user:'UPEER',unreads:[],unread_highlights:[]};s.channelCursors.DOTHER='99.000001';s.channelLatests.DOTHER='99.000002';s.starredChannels={DONE:{isStarred:true}};
+ const env=setup([s]),index=env.api.sidebarIndex({workspaceId:'TONE'});
+ assert.deepEqual([...index.rows].map(row=>({...row})).sort((a,b)=>a.id.localeCompare(b.id)),[
+   {id:'DONE',name:'',latest:'100.000002',starred:true},
+   {id:'DOTHER',name:'',latest:'99.000002',starred:false}
+ ]);assert.equal(index.truncated,false);assert.equal(env.snapshots.length,0);
+ assert.equal(env.api.sidebarIndex({workspaceId:'TUNKNOWN'}),null);assert.equal(env.network(),0);assert.equal(env.dispatches(),0);
+ env.api.dispose();assert.equal(env.api.sidebarIndex({workspaceId:'TONE'}),null);
 });
 test('on-demand checks keep missing cursors unknown and reject wrong account, workspace, and disposed state',()=>{
  const s=state();s.threadSub={};const env=setup([s]);env.flush();

@@ -36,7 +36,7 @@ test('missing destinations, empty text, oversize drafts and editor errors do not
 });
 test('quote-only mod selection is independent of every triage module',async()=>{
  const manifest=JSON.parse(await fs.readFile(new URL('../mods/runtime.json',import.meta.url))),catalog=validateCatalog(JSON.parse(await fs.readFile(new URL('../client/catalog.json',import.meta.url))),manifest.modules),slack=catalog.apps.find(a=>a.id==='slack');
- const solo=moduleSelection(slack,['slack-quote-reply'],manifest.modules);assert.equal(solo.disabled.includes('quote-reply'),false);for(const id of ['triage-surface','state-observer','native-reply','history-reader','mark-read'])assert.equal(solo.disabled.includes(id),true);
+ const solo=moduleSelection(slack,['slack-quote-reply'],manifest.modules);assert.equal(solo.disabled.includes('quote-reply'),false);for(const id of ['triage-surface','state-observer','native-reply','history-reader','mark-read','slack-appearance'])assert.equal(solo.disabled.includes(id),true);
  const together=moduleSelection(slack,['slack-quote-reply','slack-triage'],manifest.modules);for(const id of ['quote-reply','triage-surface','state-observer','native-reply'])assert.equal(together.disabled.includes(id),false);
  assert.equal(slack.mods.find(m=>m.id==='slack-quote-reply').defaultEnabled,false);
 });
@@ -51,4 +51,11 @@ function scopeFixture({thread=false,channel='CONE',editorChannel='CONE',editorTe
 test('destination stays in the exact visible workspace, conversation and thread',()=>{
  for(const thread of [false,true]){const f=scopeFixture({thread});assert.equal(f.h.destination(f.message)?.editor,f.editor);assert.equal(f.h.destination(f.message)?.threadTs,thread?'123.456':null);}
  for(const opts of [{editorChannel:'COTHER'},{editorTeam:'TOTHER'},{count:2},{count:0},{hidden:true},{editable:false},{view:false},{channel:'invalid'}]){const f=scopeFixture(opts);assert.equal(f.h.destination(f.message),null);}
+});
+test('Reply Tools accepts only real Slack permalinks and exposes both independently configurable actions',async()=>{
+ const h=helpers({URL});
+ assert.equal(h.parsePermalink('https://example.slack.com/archives/C123/p1234567890123456'),'https://example.slack.com/archives/C123/p1234567890123456');
+ for(const value of ['https://app.slack.com/client/T/C','http://example.slack.com/archives/C123/p1234567890123456','https://example.com/archives/C123/p1234567890123456','javascript:alert(1)'])assert.equal(h.parsePermalink(value),null);
+ for(const fragment of ['data-pme-reply-preview','Reply with preview','previewShortcut','compactCards','data-pme-reply-compact-cards','forwarded_message_card','ClipboardEvent','DataTransfer','event.stopImmediatePropagation()','more_message_actions','decorateMenus()','copy\\s+(?:message\\s+)?link','data-pme-quote-menu','data-pme-preview-menu','configure(value={}'])assert.ok(source.includes(fragment),`missing reply preview contract: ${fragment}`);
+ const manifest=JSON.parse(await fs.readFile(new URL('../mods/runtime.json',import.meta.url))),catalog=validateCatalog(JSON.parse(await fs.readFile(new URL('../client/catalog.json',import.meta.url))),manifest.modules),mod=catalog.apps.find(app=>app.id==='slack').mods.find(item=>item.id==='slack-quote-reply');assert.equal(mod.name,'Reply Tools');for(const key of ['quoteAction','previewAction','previewShortcut','compactCards'])assert.ok(mod.settings.some(setting=>setting.key===key));
 });

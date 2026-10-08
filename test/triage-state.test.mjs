@@ -45,6 +45,15 @@ test('inbox density defaults to expanded, persists each choice and rejects unkno
  for(const inboxDensity of ['cozy','compact','expanded']){await state.configure({inboxDensity});const restored=await new TriageState(file).load();assert.equal(restored.settings.inboxDensity,inboxDensity);}
  await state.configure({inboxDensity:'compact'});await state.configure({inboxDensity:'invalid'});assert.equal(state.settings.inboxDensity,'compact');
 });
+test('sender tints default off with always visibility, persist explicitly and reject malformed values',async t=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'triage-sender-tints-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+ const file=path.join(dir,'state.json'),state=await new TriageState(file).load();assert.equal(state.settings.senderTints,false);assert.equal(state.settings.senderTintMode,'always');
+ await state.configure({senderTints:true});assert.equal((await new TriageState(file).load()).settings.senderTints,true);
+ for(const senderTints of ['true',1,null,{}]){await state.configure({senderTints});assert.equal(state.settings.senderTints,true);}
+ for(const senderTintMode of ['hover','always']){await state.configure({senderTintMode});assert.equal((await new TriageState(file).load()).settings.senderTintMode,senderTintMode);}
+ await state.configure({senderTintMode:'hover'});for(const senderTintMode of ['on','',true,null]){await state.configure({senderTintMode});assert.equal(state.settings.senderTintMode,'hover');}
+ await state.configure({senderTints:false});assert.equal((await new TriageState(file).load()).settings.senderTints,false);
+});
 
 test('thread aliases persist independently of attention state and are isolated by workspace and root',async t=>{
  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'triage-alias-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));

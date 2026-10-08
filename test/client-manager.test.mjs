@@ -18,15 +18,29 @@ test('mod catalog resolves dependencies once and blocks unknown IDs, cycles and 
 });
 test('first client selection enables the triage suite and disables API adapters; choices persist',async t=>{
  const f=await fixture(t),app=(await f.m.snapshot()).apps[0];assert.deepEqual(app.selectedMods,['slack-triage']);
- assert.deepEqual(moduleSelection(app,app.selectedMods,f.m.modules).disabled,['history-reader','mark-read','quote-reply']);
+ assert.equal(app.companionEnabled,true);
+ assert.deepEqual(moduleSelection(app,app.selectedMods,f.m.modules).disabled,['history-reader','mark-read','quote-reply','message-polish','slack-appearance','custom-css','personal-emoji','sidebar-productivity','slack-layout']);
  await f.m.select({appId:'slack',modIds:[]});assert.deepEqual(JSON.parse(await fs.readFile(path.join(f.dataDir,'client.json'),'utf8')).apps.slack.selected,[]);
  await assert.rejects(f.m.start('slack'),/Enable at least one/);
  await assert.rejects(f.m.select({appId:'slack',modIds:['slack-triage'],installationPath:'/unverified/Slack.app'}),/verified/);assert.deepEqual(f.m.config.apps.slack.selected,[]);
 });
+test('Slack Companion is an independent persisted integration and can change while Slack runs',async t=>{
+ const f=await fixture(t);let result=await f.m.dispatch({op:'companion',appId:'slack',enabled:false}),app=result.apps.find(item=>item.id==='slack');assert.equal(app.companionEnabled,false);
+ assert.equal(JSON.parse(await fs.readFile(path.join(f.dataDir,'client.json'),'utf8')).apps.slack.companion,false);assert.deepEqual(JSON.parse(await fs.readFile(path.join(f.m.runtimeDir('slack'),'companion.json'),'utf8')),{enabled:false});
+ f.active=true;f.calls.length=0;result=await f.m.dispatch({op:'companion',appId:'slack',enabled:true});app=result.apps.find(item=>item.id==='slack');assert.equal(app.companionEnabled,true);
+ assert.ok(f.calls.some(call=>call.request?.op==='companion'&&call.request.enabled===true));
+ await assert.rejects(f.m.dispatch({op:'companion',appId:'spotify',enabled:true}),/Invalid Slack Companion/);
+});
+test('legacy Layout and Sidebar Peek selections migrate without enabling unwanted previews',async t=>{
+ const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'pme-client-sidebar-migration-'));t.after(()=>fs.rm(dataDir,{recursive:true,force:true}));await fs.mkdir(dataDir,{recursive:true});await fs.writeFile(path.join(dataDir,'client.json'),JSON.stringify({version:1,apps:{slack:{path:null,selected:['slack-layout']}},extraPaths:[]}));
+ const manager=await new ClientManager({root,dataDir,scan:async()=>[],request:async()=>{throw Error('not running');}}).init();assert.deepEqual(manager.config.apps.slack.selected,['slack-layout','slack-sidebar-productivity']);const sidebar=(await manager.modSettings('slack')).values['slack-sidebar-productivity'];assert.equal(sidebar.organizerEnabled,true);assert.equal(sidebar.peekEnabled,false);assert.equal(manager.config.sidebarProductivityMigrated,true);
+ const again=await new ClientManager({root,dataDir,scan:async()=>[],request:async()=>{throw Error('not running');}}).init();again.config.apps.slack.selected=again.config.apps.slack.selected.filter(id=>id!=='slack-sidebar-productivity');await again.save();const final=await new ClientManager({root,dataDir,scan:async()=>[],request:async()=>{throw Error('not running');}}).init();assert.deepEqual(final.config.apps.slack.selected,['slack-layout']);
+});
 test('launch uses the bundled runtime with no developer flag, selected modules, and separate writable state',async t=>{
  const f=await fixture(t);await f.m.start('slack');const call=f.calls.find(c=>c.node);
  assert.equal(call.node,'/bundled/node');assert.deepEqual(call.args,[path.join(root,'scripts/dev.mjs')]);assert.equal(call.options.detached,true);assert.equal(call.options.env.PME_SLACK_APP,f.installation.app);assert.equal(call.options.env.PME_DATA_DIR,f.m.runtimeDir('slack'));
- const config=JSON.parse(await fs.readFile(path.join(f.m.runtimeDir('slack'),'mods.json'),'utf8'));assert.deepEqual(config.disabled,['history-reader','mark-read','quote-reply']);assert.equal((await fs.stat(path.join(f.m.runtimeDir('slack'),'mods.json'))).mode&0o777,0o600);
+ const config=JSON.parse(await fs.readFile(path.join(f.m.runtimeDir('slack'),'mods.json'),'utf8'));assert.deepEqual(config.disabled,['history-reader','mark-read','quote-reply','message-polish','slack-appearance','custom-css','personal-emoji','sidebar-productivity','slack-layout']);assert.equal((await fs.stat(path.join(f.m.runtimeDir('slack'),'mods.json'))).mode&0o777,0o600);
+ assert.deepEqual(JSON.parse(await fs.readFile(path.join(f.m.runtimeDir('slack'),'companion.json'),'utf8')),{enabled:true});
  await f.m.stop('slack');assert.equal((await f.m.runtime('slack')).running,false);
 });
 test('external Slack and unowned existing profiles are never stopped, adopted or overwritten',async t=>{
@@ -59,4 +73,23 @@ test('a standalone renderer mod opens normal Slack without calling triage contro
  const calls=[];f.m.request=async(file,request)=>{calls.push({file,request});return {shown:true};};
  await f.m.show('slack','queue');assert.deepEqual(calls,[{file:path.join(f.m.runtimeDir('slack'),'control.sock'),request:{op:'show'}}]);
  await assert.rejects(f.m.show('slack','preferences'),/no settings window/);assert.equal(calls.length,1);
+});
+test('Slack Companion opens namespaced live settings for a layout-only session',async t=>{
+ const f=await fixture(t);f.m.runtime=async()=>({running:true,mode:'everyday',triageEnabled:false,companionEnabled:true});const calls=[];f.m.request=async(file,request)=>{calls.push({file,request});return {settingsRequested:true};};
+ await f.m.show('slack','preferences','slack-layout');assert.deepEqual(calls,[{file:path.join(f.m.runtimeDir('slack'),'shell.sock'),request:{op:'preferences',section:'slack-layout'}}]);
+});
+test('validated mod settings persist while stopped and use the runtime channel while running',async t=>{
+ const f=await fixture(t);let result=await f.m.configureMod({appId:'slack',modId:'slack-layout',patch:{railHome:true}});let app=result.apps.find(item=>item.id==='slack');assert.equal(app.modSettings['slack-layout'].railHome,true);await f.m.configureMod({appId:'slack',modId:'slack-sidebar-productivity',patch:{sidebarMode:'auto-hide',sidebarThreshold:880}});app=(await f.m.snapshot()).apps.find(item=>item.id==='slack');assert.equal(app.modSettings['slack-sidebar-productivity'].sidebarMode,'auto-hide');
+ await f.m.configureMod({appId:'slack',modId:'slack-sidebar-productivity',patch:{autoHideWidth:20}});app=(await f.m.snapshot()).apps.find(item=>item.id==='slack');assert.equal(app.modSettings['slack-sidebar-productivity'].autoHideWidth,880);assert.equal(app.modSettings['slack-sidebar-productivity'].conversationWidth,880);
+ f.active=true;const liveMods=[];f.m.request=async(file,request)=>{if(request.op==='status')return {running:true,controlMode:'everyday',installation:{app:f.installation.app,version:f.installation.version},pages:[]};assert.equal(file,path.join(f.m.runtimeDir('slack'),'control.sock'));assert.equal(request.op,'mod-settings');liveMods.push(request.modId);return {settings:{}};};
+ await f.m.configureMod({appId:'slack',modId:'slack-layout',patch:{minimalTopBar:true}});await f.m.configureMod({appId:'slack',modId:'slack-message-polish',patch:{tintIntensity:50}});
+ assert.deepEqual(liveMods,['slack-layout','slack-message-polish']);
+});
+test('Slack settings export, preview, import and exact undo exclude non-settings state',async t=>{
+ const f=await fixture(t);await f.m.configureMod({appId:'slack',modId:'slack-layout',patch:{minimalTopBar:true}});const exported=await f.m.dispatch({op:'settings-export'}),document=JSON.parse(exported.text);
+ assert.deepEqual(Object.keys(document),['format','version','appId','enabledMods','settings']);assert.equal(document.format,'pme-slack-mod-settings');assert.deepEqual(document.enabledMods,['slack-triage']);assert.equal(document.settings['slack-layout'].minimalTopBar,true);assert.equal(exported.text.includes(f.dataDir),false);
+ document.enabledMods=['slack-layout','slack-message-polish'];document.settings['slack-layout'].railMode='full';document.settings['slack-layout'].minimalTopBar=false;document.settings['slack-message-polish'].compactSpacing=true;const text=JSON.stringify(document),preview=await f.m.dispatch({op:'settings-preview',text});assert.equal(preview.total,6);assert.ok(preview.changes.some(change=>change.key==='compactSpacing'));assert.ok(preview.changes.some(change=>change.key==='enabled'));
+ let result=await f.m.dispatch({op:'settings-import',text}),app=result.apps.find(item=>item.id==='slack');assert.deepEqual(app.selectedMods,['slack-layout','slack-message-polish']);assert.equal(app.modSettings['slack-layout'].minimalTopBar,false);assert.equal(app.modSettings['slack-message-polish'].compactSpacing,true);assert.equal(app.settingsUndoAvailable,true);
+ result=await f.m.dispatch({op:'settings-undo'});app=result.apps.find(item=>item.id==='slack');assert.deepEqual(app.selectedMods,['slack-triage']);assert.equal(app.modSettings['slack-layout'].minimalTopBar,true);assert.equal(app.modSettings['slack-message-polish'].compactSpacing,false);assert.equal(app.settingsUndoAvailable,false);
+ document.profile='/private/profile';await assert.rejects(f.m.dispatch({op:'settings-preview',text:JSON.stringify(document)}),/unsupported top-level/);delete document.profile;document.settings.unknown={};await assert.rejects(f.m.dispatch({op:'settings-preview',text:JSON.stringify(document)}),/unknown mod/);
 });

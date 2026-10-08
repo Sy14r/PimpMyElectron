@@ -16,7 +16,7 @@ export class ModSources {
  }
  async refresh(){for(const s of this.sources){try{const c=await readSource(s.path);if(c.catalog.id!==s.id)throw Error('Source identity changed');this.candidates.set(s.id,c);delete s.error;}catch(error){this.candidates.delete(s.id);s.error=error.code==='ENOENT'?'Source folder is unavailable. Installed versions remain available.':error.message;}}}
  async installed(s){if(!s.installed)return null;const c=await readSource(this.location(s));if(c.digest!==s.installed||c.catalog.id!==s.id)throw Error('Installed mod metadata changed; reinstall from the source');return c;}
- async snapshot(){return this.sources.map(s=>{const c=this.candidates.get(s.id);return {...s,available:c?.digest||null,updateAvailable:!!c&&c.digest!==s.installed,mods:c?.mods.map(({manifest:m})=>({name:m.name,version:m.version,app:m.app,access:m.access,helpers:m.helpers.map(h=>({id:h.id,teamId:h.teamId,arch:h.arch}))}))||[]};});}
+ async snapshot(){return this.sources.map(s=>{const c=this.candidates.get(s.id);return {...s,available:c?.digest||null,updateAvailable:!!c&&c.digest!==s.installed,mods:c?.mods.map(({manifest:m})=>({name:m.name,version:m.version,app:m.app,access:m.access,helpers:m.helpers.map(h=>({id:h.id,teamId:h.teamId,arch:h.arch,serviceOperations:h.service?.operations||[]}))}))||[]};});}
  async install(id,expected){
   const s=this.source(id),c=await readSource(s.path);if(c.catalog.id!==s.id||c.digest!==expected)throw Error('The source changed after review. Refresh and review it again.');
   const parent=path.join(this.base,'packages',s.id);await fs.mkdir(parent,{recursive:true,mode:0o700});const stage=path.join(parent,'.stage-'+randomUUID());await fs.mkdir(stage,{mode:0o700});

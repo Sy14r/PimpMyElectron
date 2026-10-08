@@ -137,6 +137,10 @@
     /* One tint at the pane boundary; clear structural layers beneath it so
        nested message lists do not compound opacity into a solid surface. */
     html[data-pme-inbox-glass] [data-pme-native-reply-pane]{background:rgba(25,31,44,var(--pme-detail-opacity,.63))!important;}
+    /* Clear every structural ancestor around Slack's composer. The composer
+       card stays solid, while the gutter and footer beneath it reveal the
+       pane's configured detail-opacity tint. */
+    html[data-pme-inbox-glass] [data-pme-native-reply-pane] :has([data-pme-native-composer]){background:transparent!important;}
     html[data-pme-inbox-glass] [data-pme-native-reply-pane] :is(
       .p-channel_header,.p-view_header,.p-threads_flexpane__header,[data-pme-native-header],[data-qa="channel_header"],.p-composer_page__header,[role="toolbar"][aria-label="Primary view actions"],[role="tablist"],
       .p-message_pane,.p-message_pane__foreword,.p-message_pane__body,.c-message_list,.c-virtual_list__scroll_container,.c-scrollbar__hider,[class*="channel_tab_bar__"],

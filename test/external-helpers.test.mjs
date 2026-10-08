@@ -16,3 +16,10 @@ test('a failed helper start cleans up siblings and the supervisor exits on owner
  const child=fork(new URL('../src/external-helper-host.mjs',import.meta.url),[],{stdio:['ignore','ignore','ignore','ipc']});t.after(()=>{if(child.exitCode===null)child.kill();});
  const ready=new Promise(resolve=>child.on('message',m=>{if(m.type==='ready')resolve();}));child.send({helpers:[]});await ready;const exit=new Promise(resolve=>child.once('exit',resolve));child.disconnect();assert.equal(await exit,0);
 });
+test('declared helper services use bounded JSON lines and reject undeclared or oversized requests',async t=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'pme-helper-service-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+ const code=`const rl=require('readline').createInterface({input:process.stdin});rl.on('line',line=>{const r=JSON.parse(line);process.stdout.write(JSON.stringify({id:r.id,ok:true,result:{operation:r.operation,payload:r.payload,service:process.env.PME_HELPER_SERVICE}})+'\\n');});`;
+ const runner=helperProcesses({verify:async()=>process.execPath});t.after(()=>runner.stop());await runner.start({helpers:[{id:'service',modId:'external:company/demo',root:dir,args:['-e',code],service:{operations:['themes.list']}}],runtimeDir:dir,appPath:'/Applications/Slack.app',targetPID:123});
+ assert.deepEqual(await runner.request('external:company/demo','themes.list',{query:'dark'}),{operation:'themes.list',payload:{query:'dark'},service:'json-lines-v1'});
+ assert.throws(()=>runner.request('external:company/demo','themes.write',{}),/unavailable/);assert.throws(()=>runner.request('external:company/demo','themes.list',{value:'x'.repeat(70000)}),/too large/);
+});

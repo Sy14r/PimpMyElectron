@@ -223,9 +223,32 @@ test('a normal thread send clears inbox and pill indicators only after success a
 test('renderer-only Slack mods attach without triage bindings, network observation, or shell',async t=>{
  const cdp=new FakeCDP(),entry={targetId:'one',sessionId:'s1',url:'https://app.slack.com/client/TONE/CONE'},sessions=new Map([['one',entry]]);
  const runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'quote-runtime-'));t.after(()=>fs.rm(runtimeDir,{recursive:true,force:true}));
- await fs.writeFile(path.join(runtimeDir,'mods.json'),JSON.stringify({disabled:['state-observer','history-reader','mark-read','native-reply','triage-surface']}));
+ await fs.writeFile(path.join(runtimeDir,'mods.json'),JSON.stringify({disabled:['sender-tints','state-observer','history-reader','mark-read','native-reply','triage-surface','message-polish','slack-appearance','custom-css','personal-emoji','sidebar-productivity','slack-layout']}));
  const runtime=await createRuntime({cdp,contextGuard:cdp.contextGuard,sessions,root,runtimeDir});t.after(()=>runtime.dispose());await runtime.attach(entry);
  assert.equal(runtime.status().mode,'renderer-only');assert.equal(runtime.status().mods.pages[0].modules['quote-reply'],'active');
+ await runtime.configure('slack-quote-reply',{previewShortcut:false});assert.ok(cdp.evaluations.some(item=>item.expression.includes('__PME_QUOTE_REPLY__')&&item.expression.includes('"previewShortcut":false')));
  assert.equal(cdp.commands.some(c=>c.method.startsWith('Network.')||c.method==='Runtime.addBinding'),false);
  assert.equal(await fs.stat(path.join(runtimeDir,'shell.sock')).catch(()=>null),null);
+});
+test('layout-only runtime hosts Slack Companion settings and applies them live without triage observation',async t=>{
+ const cdp=new FakeCDP(),entry={targetId:'one',sessionId:'s1',url:'https://app.slack.com/client/TONE/CONE'},sessions=new Map([['one',entry]]),runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'layout-runtime-'));t.after(()=>fs.rm(runtimeDir,{recursive:true,force:true}));
+ await fs.writeFile(path.join(runtimeDir,'mods.json'),JSON.stringify({disabled:['sender-tints','state-observer','history-reader','mark-read','native-reply','triage-surface','quote-reply','message-polish','slack-appearance','custom-css','personal-emoji','sidebar-productivity']}));
+ const runtime=await createRuntime({cdp,contextGuard:cdp.contextGuard,sessions,root,runtimeDir});await runtime.attach(entry);assert.equal(runtime.status().mode,'renderer-only');assert.equal(runtime.status().companion,true);assert.ok(await fs.stat(path.join(runtimeDir,'shell.sock')));
+ await new Promise((resolve,reject)=>{const socket=net.createConnection(path.join(runtimeDir,'shell.sock')),chunks=[];socket.setEncoding('utf8');socket.on('connect',()=>socket.write(JSON.stringify({op:'settings',modId:'slack-layout',patch:{railHome:true,sidebarMode:'auto-hide'}})+'\n'));socket.on('data',chunk=>chunks.push(chunk));socket.on('end',()=>{try{const response=JSON.parse(chunks.join(''));assert.equal(response.ok,true);assert.equal(response.result.modSettings['slack-layout'].railHome,true);resolve();}catch(error){reject(error);}});socket.on('error',reject);});
+ assert.ok(cdp.evaluations.some(item=>item.expression.includes('__PME_SLACK_LAYOUT__')&&item.expression.includes('"railHome":true')));assert.equal(cdp.commands.some(item=>item.method.startsWith('Network.')||item.method==='Runtime.addBinding'),false);
+ await runtime.dispose();assert.equal(await fs.stat(path.join(runtimeDir,'shell.sock')).catch(()=>null),null);
+});
+test('appearance-only runtime applies settings live without starting Slack Companion or observation',async t=>{
+ const cdp=new FakeCDP(),entry={targetId:'one',sessionId:'s1',url:'https://app.slack.com/client/TONE/CONE'},sessions=new Map([['one',entry]]),runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'appearance-runtime-'));t.after(()=>fs.rm(runtimeDir,{recursive:true,force:true}));
+ await fs.writeFile(path.join(runtimeDir,'mods.json'),JSON.stringify({disabled:['sender-tints','state-observer','history-reader','mark-read','native-reply','triage-surface','quote-reply','message-polish','custom-css','personal-emoji','sidebar-productivity','slack-layout']}));
+ const runtime=await createRuntime({cdp,contextGuard:cdp.contextGuard,sessions,root,runtimeDir});t.after(()=>runtime.dispose());await runtime.attach(entry);
+ assert.equal(runtime.status().mode,'renderer-only');assert.equal(runtime.status().companion,false);assert.equal(runtime.status().mods.pages[0].modules['slack-appearance'],'active');assert.equal(await fs.stat(path.join(runtimeDir,'shell.sock')).catch(()=>null),null);
+ await runtime.configure('slack-appearance',{preset:'custom',systemNavigation:'#010203',selectedItems:'#112233',presenceIndication:'#445566',notifications:'#778899'});
+ assert.ok(cdp.evaluations.some(item=>item.expression.includes('__PME_SLACK_APPEARANCE__')&&item.expression.includes('"systemNavigation":"#010203"')));assert.equal(cdp.commands.some(item=>item.method.startsWith('Network.')||item.method==='Runtime.addBinding'),false);
+});
+test('Sidebar Productivity alone stays renderer-only and adds no host binding, network observation, or companion',async t=>{
+ const cdp=new FakeCDP(),entry={targetId:'one',sessionId:'s1',url:'https://app.slack.com/client/TONE/CONE'},sessions=new Map([['one',entry]]),runtimeDir=await fs.mkdtemp(path.join(os.tmpdir(),'sidebar-productivity-runtime-'));t.after(()=>fs.rm(runtimeDir,{recursive:true,force:true}));
+ await fs.writeFile(path.join(runtimeDir,'mods.json'),JSON.stringify({disabled:['sender-tints','history-reader','mark-read','native-reply','triage-surface','quote-reply','message-polish','slack-appearance','custom-css','personal-emoji','slack-layout']}));
+ const runtime=await createRuntime({cdp,contextGuard:cdp.contextGuard,sessions,root,runtimeDir});t.after(()=>runtime.dispose());await runtime.attach(entry);const status=runtime.status();assert.equal(status.mode,'renderer-only');assert.equal(status.companion,false);assert.equal(status.mods.pages[0].modules['state-observer'],'active');assert.equal(status.mods.pages[0].modules['sidebar-productivity'],'active');assert.equal(await fs.stat(path.join(runtimeDir,'shell.sock')).catch(()=>null),null);
+ await runtime.configure('slack-sidebar-productivity',{hoverDelay:700,replyAction:false});assert.ok(cdp.evaluations.some(item=>item.expression.includes('__PME_SIDEBAR_PRODUCTIVITY__')&&item.expression.includes('"hoverDelay":700')&&item.expression.includes('"replyAction":false')));assert.equal(cdp.commands.some(item=>item.method.startsWith('Network.')||item.method==='Runtime.addBinding'),false);
 });

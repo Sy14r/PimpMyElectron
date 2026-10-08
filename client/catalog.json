@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.3.3",
+  "version": "0.3.6",
   "apps": [
     {
       "id": "slack",
@@ -12,12 +12,15 @@
         {
           "id": "slack-triage",
           "name": "Slack Triage",
-          "version": "0.22.1",
+          "version": "0.22.8",
           "author": "PimpMyElectron",
-          "summary": "A quieter way to stay on top of your messages.",
-          "description": "An edge-docked inbox, hover previews, and quick replies. Keep your conversations close without keeping all of Slack open.",
+          "preview": "triage",
+          "summary": "Triage unread Slack work from an edge inbox with native open and reply actions.",
+          "description": "An edge-docked, keyboard-driven inbox with cached hover previews, quick replies, and native Slack conversations, threads, compose, search, and Activity views.",
           "modules": [
+            "sender-tints",
             "state-observer",
+            "native-navigation",
             "native-reply",
             "triage-surface"
           ],
@@ -29,7 +32,7 @@
             "Keyboard triage and personal thread names",
             "Density, accent, and translucency controls"
           ],
-          "access": "Uses Slack\u2019s cached state and native interface. Background API polling is disabled.",
+          "access": "Observes Slack\u2019s cached state without background API polling. Opening conversations, replying, searching, and changing read state use Slack\u2019s normal native interface and requests; missing cached observations are never treated as empty or read.",
           "defaultEnabled": true,
           "platforms": [
             "mac"
@@ -37,25 +40,261 @@
         },
         {
           "id": "slack-quote-reply",
-          "name": "Quote in Reply",
-          "version": "0.1.0",
+          "name": "Reply Tools",
+          "version": "0.3.0",
           "author": "PimpMyElectron",
-          "summary": "Quote a message without starting a new thread.",
-          "description": "Adds Quote in reply to Slack\u2019s message action bar. Inserts a blockquote into the current channel, DM, or existing thread composer, preserving your draft. Works independently or alongside Slack Triage.",
+          "preview": "reply",
+          "summary": "Quote text or reply with Slack\u2019s message preview.",
+          "description": "Adds Quote in reply and Reply with preview to Slack\u2019s message action bar. Both preserve your draft and work in channels, DMs, and existing threads, independently or alongside Slack Triage.",
           "modules": [
             "quote-reply"
           ],
           "requires": [],
           "features": [
-            "Quote rendered message text into the native composer",
+            "Quote rendered text or insert a native message preview",
+            "Press Q over a message to reply with its preview",
+            "Optional compact native message-preview cards",
             "Preserves existing drafts and native undo",
             "Works in ordinary Slack and triage conversations",
             "Never sends messages automatically"
           ],
-          "access": "Reads the clicked message\u2019s rendered text and edits the local native composer. No API calls, background message collection, or additional permissions.",
+          "access": "Reads the clicked message\u2019s rendered text or permalink and edits the local native composer. No API calls, background message collection, or additional permissions.",
           "defaultEnabled": false,
           "platforms": [
             "mac"
+          ],
+          "settings": [
+            {"key":"quoteAction","type":"boolean","label":"Show Quote in reply"},
+            {"key":"previewAction","type":"boolean","label":"Show Reply with preview"},
+            {"key":"previewShortcut","type":"boolean","label":"Use Q for Reply with preview","description":"Active only while a message is hovered or its preview action has keyboard focus; typing in a non-empty editor always wins."},
+            {"key":"compactCards","type":"boolean","label":"Compact message-preview cards","description":"Limits forwarded/native preview cards to three text lines and smaller media."}
+          ]
+        },
+        {
+          "id": "slack-message-polish",
+          "name": "Message Polish",
+          "version": "0.2.0",
+          "author": "PimpMyElectron",
+          "preview": "message-polish",
+          "summary": "Make Slack messages calmer, denser, and easier to scan.",
+          "description": "Adds copy controls for code, preserves long code lines, gives each sender a subtle stable tint, offers compact message spacing, labels supported truncated links from their URL alone, and quiets Slack’s message toolbar.",
+          "modules": [
+            "sender-tints",
+            "message-polish"
+          ],
+          "requires": [],
+          "features": [
+            "Copy buttons and non-wrapping code blocks",
+            "Subtle stable colors for each sender",
+            "Independent dense text and compact message-spacing controls",
+            "Readable labels for supported Google Workspace links without metadata requests",
+            "A calmer message-action toolbar",
+            "Compatible with Triage and Quote in Reply"
+          ],
+          "access": "Reads rendered message structure and supported link URLs; message text is read only when you choose Copy. Readable labels are derived locally from each URL without fetching metadata. The mod changes local presentation, writes copied code to the clipboard, makes no API requests, and stores no message content.",
+          "defaultEnabled": false,
+          "platforms": [
+            "mac"
+          ],
+          "settings": [
+            {"key":"codeNoWrap","type":"boolean","label":"Keep long code lines on one line"},
+            {"key":"codeCopy","type":"boolean","label":"Show Copy controls on code"},
+            {"key":"compactText","type":"boolean","label":"Use denser message text"},
+            {"key":"compactSpacing","type":"boolean","label":"Remove extra space between messages","description":"Removes Slack’s message gutter padding and uses an 18 px message line height."},
+            {"key":"readableLinks","type":"boolean","label":"Use readable labels for supported links","description":"Parses supported Google Docs, Sheets, and Slides URLs locally; no metadata request is made."},
+            {"key":"calmHover","type":"boolean","label":"Quiet message actions until hover"},
+            {"key":"senderTints","type":"boolean","label":"Tint messages by sender"},
+            {"key":"tintOwn","type":"boolean","label":"Tint your own messages"},
+            {"key":"tintIntensity","type":"number","label":"Sender tint intensity","description":"5 is very subtle; 100 is the strongest supported tint.","min":5,"max":100,"step":5}
+          ]
+        },
+        {
+          "id": "slack-appearance",
+          "name": "Slack Appearance",
+          "version": "0.4.0",
+          "author": "PimpMyElectron",
+          "preview": "appearance",
+          "summary": "Give Slack a calmer color palette of your own.",
+          "description": "Apply an original bundled palette or custom Slack theme colors to the local desktop session. Import four- or eight-color Slack theme strings and switch themes without restarting.",
+          "modules": [
+            "slack-appearance"
+          ],
+          "requires": [],
+          "features": [
+            "Eight locally bundled appearance presets",
+            "Custom navigation, selection, presence, and badge colors",
+            "Coordinated channel, thread-header, tab, and composer surfaces",
+            "Four- and eight-color Slack theme-string import",
+            "Immediate updates in a running Slack session",
+            "Restores Slack's native appearance when disabled"
+          ],
+          "access": "Changes local CSS colors in the managed Slack session. It does not read credentials, write account preferences, contact a theme gallery, or sync colors to other devices.",
+          "defaultEnabled": false,
+          "platforms": [
+            "mac"
+          ],
+          "settings": [
+            {"key":"preset","type":"select","label":"Theme preset","options":[{"value":"midnight","label":"Midnight"},{"value":"ocean","label":"Ocean"},{"value":"forest","label":"Forest"},{"value":"sandstone","label":"Sandstone"},{"value":"lavender","label":"Lavender"},{"value":"aubergine","label":"Aubergine"},{"value":"graphite","label":"Graphite"},{"value":"sunrise","label":"Sunrise"},{"value":"custom","label":"Custom colors"}]},
+            {"key":"systemNavigation","type":"color","label":"System navigation"},
+            {"key":"selectedItems","type":"color","label":"Selected items"},
+            {"key":"presenceIndication","type":"color","label":"Presence indication"},
+            {"key":"notifications","type":"color","label":"Notifications"},
+            {"key":"themeString","type":"text","label":"Import Slack theme string","description":"Paste four or eight comma-separated six-digit hex colors. Importing switches the preset to Custom colors.","maxLength":300}
+          ]
+        },
+        {
+          "id": "slack-custom-css",
+          "name": "Slack Custom CSS",
+          "version": "0.1.0",
+          "author": "PimpMyElectron",
+          "preview": "custom-css",
+          "summary": "Add carefully guarded local CSS to Slack.",
+          "description": "An advanced escape hatch for small personal Slack style adjustments. Network-capable, escaped, oversized, legacy executable, and PME-targeting CSS is rejected before it is saved or injected.",
+          "modules": [
+            "custom-css"
+          ],
+          "requires": [],
+          "features": [
+            "Live local CSS updates without restarting Slack",
+            "Blocks imports, URLs, image sets, and legacy executable syntax",
+            "Protects PME-owned controls from direct targeting",
+            "Bounded to 8,000 characters",
+            "One-click recovery by disabling the mod in PME"
+          ],
+          "access": "Injects only the CSS you enter into the managed Slack renderer. It cannot load remote resources through CSS, and it never reads credentials or writes Slack account preferences. Custom styles can still break Slack's presentation until disabled.",
+          "defaultEnabled": false,
+          "platforms": [
+            "mac"
+          ],
+          "settings": [
+            {"key":"css","type":"textarea","label":"Custom CSS","description":"Advanced: applies to the managed Slack renderer. Imports, URLs, escapes, legacy executable syntax, and PME selectors are rejected.","maxLength":8000}
+          ]
+        },
+        {
+          "id": "slack-personal-emoji",
+          "name": "Personal Emoji",
+          "version": "0.3.0",
+          "author": "PimpMyElectron",
+          "preview": "personal-emoji",
+          "summary": "Render your own local shortcode aliases.",
+          "description": "Map up to 50 personal shortcode names to public HTTPS images, including multiple local aliases per image. Emoji-only messages receive Slack-style jumbo sizing. Rendering remains local and never changes the message Slack stores.",
+          "modules": [
+            "personal-emoji"
+          ],
+          "requires": [],
+          "features": [
+            "Personal aliases without workspace upload privileges",
+            "Up to 10 additional shortcode aliases per image",
+            "Slack-style jumbo sizing for one to three emoji-only messages",
+            "Public HTTPS image URLs only",
+            "No-referrer lazy image loading",
+            "Provider hook for reviewed private registry mods",
+            "Never changes or sends message content",
+            "Restores shortcode text when disabled"
+          ],
+          "access": "Reads rendered message text to replace configured shortcodes locally. The configured public image host receives normal image requests and your IP address; PME sends no Slack credentials or message text to it.",
+          "defaultEnabled": false,
+          "platforms": [
+            "mac"
+          ],
+          "settings": [
+            {"key":"definitions","type":"textarea","label":"Personal emoji definitions","description":"One image per line. Put aliases before the URL, for example: :shipit: :deploy: https://example.com/shipit.png. Public HTTPS hosts only; up to 10 aliases per image and 50 names total.","maxLength":8000}
+          ]
+        },
+        {
+          "id": "slack-sidebar-productivity",
+          "name": "Sidebar Productivity",
+          "version": "0.7.0",
+          "author": "PimpMyElectron",
+          "preview": "sidebar-productivity",
+          "summary": "Focus, group, preview, open, and reply in a separate Slack window.",
+          "description": "Add a policy-safe Unified Sidebar for rows Slack has already mounted, responsive modes, recoverable destination hiding, cache-only message previews, full Open navigation, and Reply in a separate Slack conversation window. Each capability is independently switchable.",
+          "modules": [
+            "state-observer",
+            "native-navigation",
+            "sidebar-productivity"
+          ],
+          "requires": [],
+          "features": [
+            "Optional Unified Sidebar with custom groups and deterministic activity ordering",
+            "Reviewed application of local groups to native Slack channel sections",
+            "Independent destination hiding, cached preview, Open, and warm-reused separate-window Reply controls",
+            "Optional hidden reply prewarming for near-instant first use at an additional memory cost",
+            "Compact, auto-hide, and conversation-only sidebar modes",
+            "Workspace-scoped hidden destinations with recovery",
+            "Keyboard-focus and hover support",
+            "Privacy-safe rendering diagnostics for layout bug reports",
+            "No API calls or background message polling"
+          ],
+          "access": "Reads Slack's rendered sidebar and a bounded projection of IDs and latest timestamps from already-observed renderer state. Unified Sidebar reorders only rows Slack has already mounted; it never opens conversations, expands sections, fetches history, or fills cache gaps. An explicit reviewed Apply action can use Slack's own Create section and Move channel menus for configured channels, stopping on the first unconfirmed step. Open uses Slack's rendered navigation. Reply asks Slack to open the matching same-origin conversation in its own native window; it does not navigate or cover the main Slack window, and PME never types or sends content. Optional reply prewarming starts one hidden Slack renderer seeded only from the conversation already open; it uses additional memory but does not pre-open hovered destinations. Copied diagnostics contain mode flags, element counts, and coarse geometry, not destination names, IDs, group definitions, or message data.",
+          "defaultEnabled": false,
+          "platforms": [
+            "mac"
+          ],
+          "settings": [
+            {"key":"unifiedEnabled","type":"boolean","label":"Enable Unified Sidebar","description":"Groups and orders only the native rows Slack has already mounted. Switch between Unified Inbox and Classic view inside Slack."},
+            {"key":"organizerEnabled","type":"boolean","label":"Show Hide controls for destinations and sections","description":"Adds per-destination Hide controls and a workspace-scoped recovery list."},
+            {"key":"hideSlackbot","type":"boolean","label":"Hide Slackbot"},
+            {"key":"peekEnabled","type":"boolean","label":"Enable cached message previews","description":"Uses only messages Slack has already loaded. A cache miss is labeled honestly and never triggers a request."},
+            {"key":"openAction","type":"boolean","label":"Show Open action","description":"Remains available when cached previews are off or a destination has no cached message."},
+            {"key":"replyAction","type":"boolean","label":"Show Reply in new window action","description":"Opens Slack's matching conversation and native composer in a separate Slack window without changing the main view."},
+            {"key":"prewarmReply","type":"boolean","label":"Keep quick-reply window warm","description":"Starts one hidden Slack reply renderer from the conversation already open so later Reply actions can appear much faster. Uses additional memory while enabled and does not pre-open hovered destinations."},
+            {"key":"hoverDelay","type":"number","label":"Preview delay","description":"Delay in milliseconds before a hover preview appears. Keyboard focus previews immediately.","min":150,"max":1500,"step":50},
+            {"key":"compactSidebar","type":"boolean","label":"Use compact sidebar strip","description":"Collapses the channel sidebar to a narrow strip until hover or keyboard focus."},
+            {"key":"autoHideSidebar","type":"boolean","label":"Auto-hide sidebar when narrow","description":"Hides only the channel sidebar below the auto-hide threshold."},
+            {"key":"smallWindowSidebar","type":"boolean","label":"Use conversation-only small-window mode","description":"Hides the channel sidebar and navigation rail below the conversation-only threshold."},
+            {"key":"autoHideWidth","type":"number","label":"Auto-hide threshold","description":"Window width in pixels used by Auto-hide mode.","min":520,"max":1400,"step":20},
+            {"key":"conversationWidth","type":"number","label":"Conversation-only threshold","description":"Window width in pixels used by Conversation-only mode.","min":520,"max":1400,"step":20}
+          ]
+        },
+        {
+          "id": "slack-layout",
+          "name": "Slack Layout",
+          "version": "0.2.0",
+          "author": "PimpMyElectron",
+          "preview": "layout",
+          "summary": "Make Slack chrome adapt to the way you work.",
+          "description": "Choose which navigation and channel-header controls remain visible, tune thread width and message actions, and simplify the top bar. Pair it with Sidebar Productivity for destination organization and responsive sidebar modes.",
+          "modules": [
+            "slack-layout"
+          ],
+          "requires": [],
+          "features": [
+            "Per-item navigation and channel-header controls",
+            "Single-line headers and configurable thread width",
+            "Pointer-following message toolbar",
+            "Full, hidden, or top-bar rail modes with recoverable overflow placement",
+            "Automatically suspends layout changes inside Triage"
+          ],
+          "access": "Reads Slack's rendered navigation structure and changes local presentation. It makes no API requests and does not read message content.",
+          "defaultEnabled": false,
+          "platforms": [
+            "mac"
+          ],
+          "settings": [
+            {"key":"railMode","type":"select","label":"Navigation rail","options":[{"value":"full","label":"Full rail"},{"value":"hidden","label":"Hidden rail"},{"value":"topbar","label":"Move rail to top bar"}]},
+            {"key":"hiddenRailPlacement","type":"select","label":"Hidden rail buttons","description":"Places the overflow for hidden rail actions in the top bar or beside the sidebar header.","options":[{"value":"topbar","label":"Top bar"},{"value":"sidebar","label":"Sidebar header"}]},
+            {"key":"railHome","type":"boolean","label":"Hide Home"},
+            {"key":"railDMs","type":"boolean","label":"Hide Direct messages"},
+            {"key":"railActivity","type":"boolean","label":"Hide Activity"},
+            {"key":"railFiles","type":"boolean","label":"Hide Files"},
+            {"key":"railLater","type":"boolean","label":"Hide Later"},
+            {"key":"railAgents","type":"boolean","label":"Hide Agents & tools"},
+            {"key":"railCreate","type":"boolean","label":"Hide Create"},
+            {"key":"railFocus","type":"boolean","label":"Hide sidebar focus control"},
+            {"key":"railProfile","type":"boolean","label":"Hide profile control"},
+            {"key":"railMore","type":"boolean","label":"Hide minimal top-bar overflow"},
+            {"key":"hideWorkspaceSwitcher","type":"boolean","label":"Hide workspace switcher"},
+            {"key":"hideBackForward","type":"boolean","label":"Hide back and forward controls"},
+            {"key":"headerStar","type":"boolean","label":"Hide channel favorite control"},
+            {"key":"headerMembers","type":"boolean","label":"Hide channel members"},
+            {"key":"headerHuddle","type":"boolean","label":"Hide huddle control"},
+            {"key":"headerNotifications","type":"boolean","label":"Hide notification control"},
+            {"key":"headerSearch","type":"boolean","label":"Hide in-channel search"},
+            {"key":"headerCanvas","type":"boolean","label":"Hide canvas and bookmarks"},
+            {"key":"singleLineHeader","type":"boolean","label":"Use a single-line channel header"},
+            {"key":"threadPaneWidth","type":"number","label":"Thread pane width","description":"0 keeps Slack's default; otherwise choose 320–900 pixels.","min":0,"max":900,"step":20},
+            {"key":"toolbarFollowsPointer","type":"boolean","label":"Message toolbar follows pointer"}
           ]
         }
       ]
@@ -72,6 +311,7 @@
           "name": "Menu Player",
           "version": "0.2.2",
           "author": "PimpMyElectron",
+          "preview": "spotify-player",
           "summary": "Your player and mini library in the menu bar.",
           "description": "Hover for playback controls, then expand to browse liked songs, playlists, albums, search, and queue without leaving your work.",
           "modules": [],
@@ -95,12 +335,15 @@
           "name": "Camera Pause",
           "version": "0.1.0",
           "author": "PimpMyElectron",
+          "preview": "camera-pause",
           "summary": "Music pauses when your camera comes on.",
           "description": "Choose the apps whose camera use should pause Spotify. Resume only music this mod paused, once none of those apps is using the camera.",
           "modules": [],
           "requires": [],
           "features": [
             "Choose conferencing apps or browsers to watch",
+            "Configurable resume delay after camera activity ends",
+            "Live status for the app currently using the camera",
             "Resume only playback paused by this mod",
             "Works on its own or alongside Menu Player"
           ],

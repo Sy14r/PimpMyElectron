@@ -12,6 +12,7 @@ const controlPolicy = createControlPolicy(process.argv.slice(2));
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
+const replyBootstrap=fs.readFileSync(path.join(root,'src/renderer/reply-window-bootstrap.js'),'utf8');
 const dir = process.env.PME_DATA_DIR || path.join(root, '.lab/dev');
 if(!path.isAbsolute(dir))throw Error('PME_DATA_DIR must be absolute');
 const socketPath = path.join(dir, 'control.sock');
@@ -77,30 +78,42 @@ async function loadFeature() {
   }
 }
 function startHelper() {
-  // Native triage controls are not part of independent renderer-only mods.
+  // The Slack Companion hosts Triage controls and live settings for bundled
+  // native-capable mods. Pure renderer mods remain helper-free.
+  if(helper)return;
+  try {
+    const preference=JSON.parse(fs.readFileSync(path.join(dir,'companion.json'),'utf8'));
+    if(preference.enabled===false)return;
+  } catch(error) {
+    if(error.code!=='ENOENT'){logStatus('Invalid Slack Companion preference; keeping it off.');return;}
+  }
   try {
     const config=JSON.parse(fs.readFileSync(path.join(dir,'mods.json'),'utf8'));
-    if(config.disabled?.includes('triage-surface'))return;
+    if(config.disabled?.includes('triage-surface')&&config.disabled?.includes('slack-layout'))return;
   } catch(error) {
-    if(error.code!=='ENOENT'){logStatus('Invalid module selection; menu controller not started.');return;}
+    if(error.code!=='ENOENT'){logStatus('Invalid module selection; Slack Companion not started.');return;}
   }
   const binary = process.env.PME_HELPER_PATH || path.join(root, '.lab/bin/SlackTriage');
-  if(process.env.PME_HELPER_PATH&&!fs.existsSync(binary)){logStatus('Packaged menu controller is missing.');return;}
+  if(process.env.PME_HELPER_PATH&&!fs.existsSync(binary)){logStatus('Packaged Slack Companion is missing.');return;}
   const source = path.join(root, 'native/TriageController.swift');
   if (!process.env.PME_HELPER_PATH && (!fs.existsSync(binary) || fs.statSync(source).mtimeMs > fs.statSync(binary).mtimeMs)) {
     const build = spawnSync(process.execPath, ['scripts/build-shell.mjs'], { cwd: root, stdio: 'inherit' });
-    if (build.status !== 0) { logStatus('Menu controller build failed. The in-Slack controls remain available.'); return; }
+    if (build.status !== 0) { logStatus('Slack Companion build failed. The in-Slack controls remain available.'); return; }
   }
   if (stopping) return;
   helper = spawn(binary, [path.join(dir, 'shell.sock')], { stdio: ['ignore', log, log] });
-  helper.on('error', () => logStatus('Menu controller unavailable. Use the in-Slack controls.'));
+  helper.on('error', () => logStatus('Slack Companion unavailable. Use the in-Slack controls.'));
   helper.on('exit', () => { helper = undefined; });
 }
+async function stopHelper() {
+  if(!helper)return {helperRunning:false};
+  const previous=helper;
+  await new Promise(resolve=>{let settled=false;const finish=()=>{if(settled)return;settled=true;clearTimeout(timer);resolve();};const timer=setTimeout(()=>{previous.kill('SIGKILL');finish();},3000);timer.unref();previous.once('exit',finish);previous.kill('SIGTERM');});
+  if(helper===previous)helper=undefined;
+  return {helperRunning:false};
+}
 async function restartHelper() {
-  if (helper) {
-    const previous=helper;
-    await new Promise(resolve=>{previous.once('exit',resolve);previous.kill('SIGTERM');});
-  }
+  await stopHelper();
   startHelper();return {helperRunning:!!helper};
 }
 async function prepareEntry(entry) {
@@ -114,28 +127,39 @@ async function prepareEntry(entry) {
 async function discover() {
   if (stopping) return;
   const { targetInfos } = await cdp.send('Target.getTargets');
+  const targetById=new Map(targetInfos.map(target=>[target.targetId,target]));
   const active = new Set(targetInfos.map(t => t.targetId));
   for (const [id, entry] of sessions) if (!active.has(id)) {
     await feature?.detach?.(entry).catch(() => {}); sessions.delete(id);
   }
   for (const target of targetInfos) {
     if (target.type !== 'page') continue;
-    let url;
-    try { url = new URL(target.url); } catch { continue; }
-    if (url.origin !== 'https://app.slack.com') continue;
+    let url=null;try { url = new URL(target.url); } catch {}
+    const slackPage=url?.origin==='https://app.slack.com',opener=targetById.get(target.openerId),replyBlank=target.url==='about:blank'&&opener&&(()=>{try{return new URL(opener.url).origin==='https://app.slack.com';}catch{return false;}})();
+    if(!slackPage&&!replyBlank)continue;
     const existing = sessions.get(target.targetId);
     if (existing) { existing.url = target.url; await prepareEntry(existing); await feature?.attach?.(existing).catch(() => {}); continue; }
     try {
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId: target.targetId, flatten: true });
     const entry = { targetId: target.targetId, sessionId, url: target.url };
-    sessions.set(target.targetId, entry);
     await prepareEntry(entry);
+    if(replyBlank){
+      const name=await cdp.evaluate('String(window.name||"")',sessionId);
+      if(!/(?:^|,)frameId=pme-reply-[TE][A-Z0-9]+-[CDG][A-Z0-9]+-[^,]+/.test(name)){await cdp.send('Target.detachFromTarget',{sessionId}).catch(()=>{});contextGuard.detach(sessionId);continue;}
+      await cdp.send('Page.addScriptToEvaluateOnNewDocument',{source:replyBootstrap},sessionId);
+      await cdp.evaluate(replyBootstrap,sessionId);
+      entry.replyBootstrap=true;sessions.set(target.targetId,entry);logStatus('Prepared a dedicated Slack reply window before navigation.');continue;
+    }
+    sessions.set(target.targetId, entry);
     await feature?.attach?.(entry);
     logStatus('Attached to a Slack page; message contents are not logged.');
     } catch { logStatus('A Slack page is reconnecting; other pages remain available.'); }
   }
 }
+let busy=false;
+function requestDiscovery(){if(busy||stopping)return;busy=true;void serial(discover).catch(()=>{if(!stopping)logStatus('Waiting for Slack page connection…');}).finally(()=>{busy=false;});}
 cdp.on('event', message => {
+  if(['Target.targetCreated','Target.targetInfoChanged'].includes(message.method)){requestDiscovery();return;}
   if (message.method !== 'Target.detachedFromTarget') return;
   void serial(async () => {
     for (const [id, entry] of sessions) if (entry.sessionId === message.params.sessionId) {
@@ -161,6 +185,9 @@ const server = net.createServer(connection => {
       if (request.op === 'status') {
         result = { running: !stopping, controlMode: controlPolicy.mode, pid: child.pid, installation:{app:installation.app,version:installation.version,distribution:installation.distribution}, pages: [...sessions.values()].map(e => ({ targetId: e.targetId,
           signedIn: /^https:\/\/app\.slack\.com\/client\/[TE][A-Z0-9]+/.test(e.url) })), featureError, helperRunning: !!helper, feature: feature?.status?.() || null };
+      } else if(request.op==='reply-layout'){
+        const pages=[];for(const entry of sessions.values())try{const diagnostics=await cdp.evaluate('window.__PME_NATIVE_NAVIGATION__?.layoutDiagnostics?.()||null',entry.sessionId);if(diagnostics)pages.push(diagnostics);}catch{}
+        result={pages};
       } else if(request.op==='test-network-offline'){
         result=await testOffline(request.durationMs);
       } else if(request.op==='test-network-restore'){
@@ -170,6 +197,15 @@ const server = net.createServer(connection => {
         const opened=spawnSync('/usr/bin/open',['-a',installation.app],{encoding:'utf8'});
         if(opened.status!==0)throw Error('Could not bring Slack forward');
         result={shown:true};
+      } else if (request.op === 'mod-settings') {
+        if(stopping||!feature?.configure)throw Error('Mod settings are unavailable');
+        if(!['slack-triage','slack-layout'].includes(request.modId))throw Error('Unknown configurable mod');
+        if(!request.patch||typeof request.patch!=='object'||Array.isArray(request.patch)||Object.keys(request.patch).length>40||JSON.stringify(request.patch).length>12000)throw Error('Invalid mod settings');
+        result={modId:request.modId,settings:await feature.configure(request.modId,request.patch)};
+      } else if (request.op === 'companion') {
+        if(stopping||typeof request.enabled!=='boolean')throw Error('Invalid Slack Companion setting');
+        fs.writeFileSync(path.join(dir,'companion.json'),JSON.stringify({enabled:request.enabled},null,2)+'\n',{mode:0o600});
+        result=await serial(async()=>request.enabled?restartHelper():stopHelper());
       } else if (request.op === 'reload') {
         result = await serial(async () => {
           if (stopping) throw Error('Session is stopping');
@@ -211,11 +247,8 @@ async function stop() {
   const killTimer = setTimeout(() => child.kill('SIGKILL'), 4000); killTimer.unref();
   if (fs.existsSync(socketPath)) fs.unlinkSync(socketPath);
 }
-let busy = false;
 const timer = setInterval(async () => {
-  if (busy || stopping) return; busy = true;
-  try { await serial(discover); } catch { if (!stopping) logStatus('Waiting for Slack page connection…'); }
-  finally { busy = false; }
+  requestDiscovery();
 }, 1000);
 child.on('error', error => { logStatus(error.message); void stop(); });
 child.on('exit', () => { stopping = true;clearTimeout(networkTest?.timer);networkTest=null; helper?.kill('SIGTERM'); contextGuard.dispose(); cdp.close(); clearInterval(timer); server.close();
@@ -228,4 +261,6 @@ process.on('SIGINT', () => void stop()); process.on('SIGTERM', () => void stop()
 fs.writeFileSync(path.join(dir, 'session.json'), JSON.stringify({ launchId: `${Date.now()}-${child.pid}`, runtimePid: process.pid, slackPid: child.pid, profile, socketPath }, null, 2), { mode: 0o600 });
 await serial(loadFeature);
 if (!stopping) startHelper();
-server.listen(socketPath, () => { fs.chmodSync(socketPath, 0o600); logStatus(controlPolicy.mode === 'development' ? 'DEVELOPMENT MODE: arbitrary evaluation and screenshots enabled. Use test workspaces.' : 'Triage started with everyday controls. Developer evaluation and screenshots are disabled.'); });
+await cdp.send('Target.setDiscoverTargets',{discover:true}).catch(()=>{});
+requestDiscovery();
+server.listen(socketPath, () => { fs.chmodSync(socketPath, 0o600); logStatus(controlPolicy.mode === 'development' ? 'DEVELOPMENT MODE: arbitrary evaluation and screenshots enabled. Use test workspaces.' : 'Slack runtime started with everyday controls. Developer evaluation and screenshots are disabled.'); });

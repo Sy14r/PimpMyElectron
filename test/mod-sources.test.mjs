@@ -1,6 +1,7 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import vm from 'node:vm';
+import {EventEmitter} from 'node:events';
 import {createModLoader} from '../src/mod-loader.mjs';
-import {ModSources} from '../client/core/mod-sources.mjs';import {digest,validatePackage,readSource,verifyHelper,externalID} from '../src/mod-packages.mjs';import {loadExternalMods} from '../src/external-mods.mjs';import {ClientManager} from '../client/core/manager.mjs';import {resolveSelection} from '../client/core/catalog.mjs';
+import {ModSources} from '../client/core/mod-sources.mjs';import {digest,validatePackage,readSource,verifyHelper,externalID,rendererSource} from '../src/mod-packages.mjs';import {loadExternalMods} from '../src/external-mods.mjs';import {ClientManager} from '../client/core/manager.mjs';import {resolveSelection} from '../client/core/catalog.mjs';
 async function fixture(t){
  const base=await fs.mkdtemp(path.join(os.tmpdir(),'pme-sources-'));t.after(()=>fs.rm(base,{recursive:true,force:true}));const source=path.join(base,'company'),dir=path.join(source,'mods/demo'),data=path.join(base,'data');await fs.mkdir(dir,{recursive:true});
  const code="window.ran=(window.ran||0)+1;api.onCleanup(()=>window.cleaned=true);";
@@ -54,6 +55,28 @@ test('helpers must have a pinned Developer ID team and pass Gatekeeper; no shell
  assert.equal(calls[0][0],'/usr/bin/codesign');assert.ok(calls[0][1][calls[0][1].indexOf('--test-requirement')+1].startsWith('=anchor apple'));assert.ok(calls[0][1].join(' ').includes('certificate leaf[subject.OU] = "ABCDEFGHIJ"'));assert.equal(calls[1][0],'/usr/sbin/spctl');
  await assert.rejects(verifyHelper(f.dir,h,{platform:'darwin',arch:'arm64',run:async()=>{throw Error('bad signature');}}),/Gatekeeper/);
  await assert.rejects(verifyHelper(f.dir,h,{platform:'darwin',arch:'x64',run:async()=>assert.fail()}),/does not support/);
+});
+
+test('helper service declarations are explicit, unique and require a renderer',async t=>{
+ const f=await fixture(t),helper={id:'catalog-service',platform:'mac',arch:'arm64',teamId:'ABCDEFGHIJ',executable:'main.js',args:[],service:{operations:['themes.list','theme.get']}};
+ const valid={...f.manifest,files:{'main.js':{...f.manifest.files['main.js'],executable:true}},helpers:[helper]};assert.doesNotThrow(()=>validatePackage(valid));
+ assert.throws(()=>validatePackage({...valid,renderer:undefined}),/service declaration/);
+ assert.throws(()=>validatePackage({...valid,helpers:[helper,{...helper,id:'second'}]}),/duplicate helper service operation/);
+ assert.throws(()=>validatePackage({...valid,helpers:[{...helper,service:{operations:['Bad operation']}}]}),/service operation/);
+});
+
+test('renderer package service API admits only declared bounded calls and resolves through its private response method',async()=>{
+ const body=`window.servicePromise=api.service.request('themes.list',{query:'dark'});window.unsupported=api.service.request('themes.write',{}).catch(error=>error.message);`,manifest={id:'demo',version:'1.0.0',renderer:{script:'main.js'},files:{'main.js':{}}},files={'main.js':Buffer.from(body)},binding='__pmeTestService',responseMethod='respond_secret';let request;
+ const sandbox={document:{body:{},head:{append(){}},createElement:()=>({})},location:{origin:'https://app.slack.com',pathname:'/client/TEXAMPLE/D123'},setTimeout,clearTimeout,window:null};sandbox.window=sandbox;sandbox[binding]=payload=>{request=JSON.parse(payload);};vm.createContext(sandbox);vm.runInContext(rendererSource(manifest,'__PME_EXTERNAL_TEST__',files,{binding,responseMethod,operations:['themes.list']}),sandbox);
+ assert.equal(request.operation,'themes.list');assert.deepEqual(request.payload,{query:'dark'});sandbox.__PME_EXTERNAL_TEST__[responseMethod](JSON.stringify({id:request.id,ok:true,result:{themes:['Midnight']}}));assert.equal(JSON.stringify(await sandbox.servicePromise),JSON.stringify({themes:['Midnight']}));assert.equal(await sandbox.unsupported,'Unsupported private service operation');sandbox.__PME_EXTERNAL_TEST__.dispose();
+});
+
+test('mod loader binds each external service to the trusted Slack context and routes only its declared operation',async t=>{
+ const f=await fixture(t);f.store.helperVerifier=async()=>{};f.manifest.files['main.js'].executable=true;f.manifest.helpers=[{id:'catalog-service',platform:'mac',arch:'arm64',teamId:'ABCDEFGHIJ',executable:'main.js',args:[],service:{operations:['themes.list']}}];await f.save();await f.store.refresh();await f.store.install('company',(await f.store.snapshot())[0].available);const mods=await f.store.mods(),runtimeDir=path.join(f.base,'runtime');await fs.mkdir(runtimeDir);await fs.writeFile(path.join(runtimeDir,'external-mods.json'),JSON.stringify(await f.store.launchPlan({mods},[mods[0].id])));const bundled=JSON.parse(await fs.readFile('mods/runtime.json','utf8'));await fs.writeFile(path.join(runtimeDir,'mods.json'),JSON.stringify({disabled:bundled.modules.map(module=>module.id)}));
+ const calls=[],requests=[],cdp=new EventEmitter();cdp.send=async(method,params,sessionId)=>{calls.push({method,params,sessionId});return method==='Page.addScriptToEvaluateOnNewDocument'?{identifier:'script'}:{};};cdp.evaluate=async(expression,sessionId)=>{calls.push({expression,sessionId});if(expression.includes('slackPage:'))return {slackPage:true,dom:true,windowBridge:false,sessionConfig:false,documentToken:1,assets:[]};if(expression.startsWith('!!window'))return true;return null;};const context={id:7,uniqueId:'trusted-7'},contextGuard={current:()=>context,allows:message=>message.params.executionContextId===context.id};let disposed=false;
+ const loader=await createModLoader({cdp,contextGuard,root:path.resolve('.'),runtimeDir,slackVersion:'test',startHelpers:async({helpers})=>{assert.deepEqual(helpers[0].service.operations,['themes.list']);return {status:()=>[],request:async(modId,operation,payload)=>{requests.push({modId,operation,payload});return {themes:['Midnight']};},dispose:async()=>{disposed=true;}};}}),entry={sessionId:'page',url:'https://app.slack.com/client/TEXAMPLE/D123'};await loader.reconcile(entry);const binding=calls.find(call=>call.method==='Runtime.addBinding')?.params.name;assert.ok(binding);
+ cdp.emit('event',{method:'Runtime.bindingCalled',sessionId:'page',params:{name:binding,executionContextId:7,payload:JSON.stringify({id:'request-1',operation:'themes.list',payload:{query:'dark'}})}});await new Promise(resolve=>setImmediate(resolve));await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(requests,[{modId:mods[0].id,operation:'themes.list',payload:{query:'dark'}}]);assert.ok(calls.some(call=>call.expression?.includes('Midnight')));
+ cdp.emit('event',{method:'Runtime.bindingCalled',sessionId:'page',params:{name:binding,executionContextId:8,payload:JSON.stringify({id:'request-2',operation:'themes.list',payload:{}})}});await new Promise(resolve=>setImmediate(resolve));assert.equal(requests.length,1);await loader.dispose(new Map([['page',entry]]));assert.equal(disposed,true);
 });
 
 test('bundled and external renderer lifecycles coexist without enabling the triage suite',async t=>{

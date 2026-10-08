@@ -6,14 +6,33 @@
   ],
   "modules": [
     {
+      "id": "sender-tints",
+      "version": "0.3.0",
+      "source": "src/renderer/sender-tints.js",
+      "global": "__PME_SENDER_TINTS__",
+      "requires": [
+        "slackPage"
+      ]
+    },
+    {
       "id": "state-observer",
-      "version": "0.15.1",
+      "version": "0.15.3",
       "source": "src/renderer/state-observer.js",
       "global": "__PME_OBSERVER__",
       "requires": [
         "slackPage",
         "dom",
         "sessionConfig"
+      ]
+    },
+    {
+      "id": "native-navigation",
+      "version": "0.9.1",
+      "source": "src/renderer/native-navigation.js",
+      "global": "__PME_NATIVE_NAVIGATION__",
+      "requires": [
+        "slackPage",
+        "dom"
       ]
     },
     {
@@ -38,7 +57,7 @@
     },
     {
       "id": "native-reply",
-      "version": "0.18.3",
+      "version": "0.18.4",
       "source": "src/renderer/native-reply.js",
       "global": "__PME_REPLY__",
       "requires": [
@@ -49,7 +68,7 @@
     },
     {
       "id": "triage-surface",
-      "version": "0.22.1",
+      "version": "0.22.8",
       "source": "src/renderer/triage.js",
       "global": "__PME_TRIAGE__",
       "requires": [
@@ -59,9 +78,70 @@
     },
     {
       "id": "quote-reply",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": "src/renderer/quote-reply.js",
       "global": "__PME_QUOTE_REPLY__",
+      "requires": [
+        "slackPage",
+        "dom"
+      ]
+    },
+    {
+      "id": "message-polish",
+      "version": "0.2.0",
+      "source": "src/renderer/message-polish.js",
+      "global": "__PME_MESSAGE_POLISH__",
+      "requires": [
+        "slackPage",
+        "dom"
+      ]
+    },
+    {
+      "id": "slack-appearance",
+      "version": "0.4.0",
+      "source": "src/renderer/slack-appearance.js",
+      "global": "__PME_SLACK_APPEARANCE__",
+      "requires": [
+        "slackPage",
+        "dom"
+      ]
+    },
+    {
+      "id": "custom-css",
+      "version": "0.1.0",
+      "source": "src/renderer/custom-css.js",
+      "global": "__PME_CUSTOM_CSS__",
+      "requires": [
+        "slackPage",
+        "dom"
+      ]
+    },
+    {
+      "id": "personal-emoji",
+      "version": "0.3.0",
+      "source": "src/renderer/personal-emoji.js",
+      "global": "__PME_PERSONAL_EMOJI__",
+      "requires": [
+        "slackPage",
+        "dom"
+      ]
+    },
+    {
+      "id": "sidebar-productivity",
+      "version": "0.7.0",
+      "source": "src/renderer/sidebar-productivity.js",
+      "global": "__PME_SIDEBAR_PRODUCTIVITY__",
+      "requires": [
+        "slackPage",
+        "dom",
+        "sessionConfig"
+      ]
+    },
+    {
+      "id": "slack-layout",
+      "version": "0.2.0",
+      "source": "src/renderer/slack-layout.js",
+      "global": "__PME_SLACK_LAYOUT__",
       "requires": [
         "slackPage",
         "dom"

@@ -2,7 +2,7 @@
 (function installStateObserver(){
   if(window.top!==window||location.origin!=='https://app.slack.com'||window.__PME_OBSERVER__)return;
   let disposed=false,scanTimer=null;const watches=new Map();
-  const health={workspaces:0,snapshots:0,errors:0,truncated:false,lastSnapshot:0};
+  const health={workspaces:0,snapshots:0,peeks:0,errors:0,truncated:false,lastSnapshot:0};
   const teamId=v=>typeof v==='string'&&/^[TE][A-Z0-9]+$/.test(v);
   const channelId=v=>typeof v==='string'&&/^[CDG][A-Z0-9]+$/.test(v);
   const userId=v=>typeof v==='string'&&/^[UW][A-Z0-9]+$/.test(v);
@@ -108,6 +108,32 @@
       return latest?compare(latest,thread.last_read)>0:null;
     }catch{health.errors++;return null;}
   }
+  function peek(request){
+    // Sidebar Productivity previews are deliberately cache-only. They project the same bounded,
+    // sanitized state as Triage without publishing, navigating, or fetching.
+    if(disposed||!teamId(request?.workspaceId)||!channelId(request?.channelId))return null;
+    const watch=watches.get(request.workspaceId);if(!watch)return null;
+    try{
+      const state=watch.store.getState(),snapshot=project(state,accounts());if(!snapshot)return null;
+      const channel=snapshot.channels.find(item=>item.id===request.channelId);if(!channel)return null;
+      const latest=snapshot.messages.filter(item=>item.channel===request.channelId).sort((a,b)=>compare(b.ts,a.ts))[0];if(!latest)return null;
+      const author=latest.user?snapshot.users.find(user=>user.id===latest.user)?.name:latest.username;
+      let avatar;
+      if(latest.user&&typeof performance!=='undefined'&&typeof performance.getEntriesByName==='function'){
+        const member=data(state.members,latest.user),candidate=str(member?.profile?.image_48||member?.profile?.image_32,1000);
+        try{const url=new URL(candidate);if(url.protocol==='https:'&&performance.getEntriesByName(url.href).length)avatar=url.href;}catch{}
+      }
+      const result={workspaceId:request.workspaceId,channelId:request.channelId,channelName:channel.name,author,text:str(latest.text,600),ts:latest.ts,attachment:!!latest.files?.length||!!latest.attachments?.length};if(avatar)result.avatar=avatar;
+      health.peeks++;return result;
+    }catch{health.errors++;return null;}
+  }
+  function sidebarIndex(request){
+    // Unified Sidebar consumes only the bounded state Slack has already put in
+    // memory. It never dispatches, navigates, expands sections, or requests data.
+    if(disposed||!teamId(request?.workspaceId))return null;
+    const watch=watches.get(request.workspaceId);if(!watch)return null;
+    try{const snapshot=project(watch.store.getState(),accounts());if(!snapshot)return null;return {truncated:snapshot.truncated===true,rows:snapshot.channels.slice(0,600).map(channel=>({id:channel.id,name:channel.name||'',latest:channel.latest||null,starred:channel.starred===true}))};}catch{health.errors++;return null;}
+  }
   function matchesMemberConversation(request){
     // Check one already-cached DM after a native member selection. No search,
     // discovery, dispatch, projection of messages, or network request is needed.
@@ -157,6 +183,6 @@
     for(const [workspaceId,watch] of watches){clearTimeout(watch.timer);const published=publish(watch,true);if(workspaceId===id&&published)current=true;}
     return current;
   }
-  window.__PME_OBSERVER__={version:'0.15.1',readState,matchesMemberConversation,capture,status:()=>({...health}),dispose(){disposed=true;clearInterval(scanTimer);for(const w of watches.values()){w.unsubscribe();clearTimeout(w.timer);}watches.clear();delete window.__PME_OBSERVER__;}};
+  window.__PME_OBSERVER__={version:'0.15.3',readState,peek,sidebarIndex,matchesMemberConversation,capture,status:()=>({...health}),dispose(){disposed=true;clearInterval(scanTimer);for(const w of watches.values()){w.unsubscribe();clearTimeout(w.timer);}watches.clear();delete window.__PME_OBSERVER__;}};
   discover();scanTimer=setInterval(discover,10000);
 })();

@@ -218,7 +218,7 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage) {
         guard message.frameInfo.isMainFrame,message.frameInfo.request.url?.standardizedFileURL==uiURL.appendingPathComponent("index.html").standardizedFileURL,
               let raw=message.body as? [String:Any],let id=raw["id"] as? Int,let op=raw["op"] as? String else{return}
-        guard ["source-add","source-refresh","source-install","source-rollback","source-remove","license-open","source-open","feedback-copy","feedback-open","feedback-submit","release-history","status","scan","select","launch","stop","show","add-app","import","data-folder","shortcut-create","shortcut-update","shortcut-rename","shortcut-remove","shortcut-reveal","shortcut-forget","update-check"].contains(op) else {fail(id,"Unsupported client action");return}
+        guard ["source-add","source-refresh","source-install","source-rollback","source-remove","license-open","source-open","feedback-copy","feedback-open","feedback-submit","release-history","status","scan","select","mod-settings","settings-export","settings-preview","settings-import","settings-undo","companion","launch","stop","show","add-app","import","data-folder","shortcut-create","shortcut-update","shortcut-rename","shortcut-remove","shortcut-reveal","shortcut-forget","update-check"].contains(op) else {fail(id,"Unsupported client action");return}
         if op=="license-open" || op=="source-open" {
             // These destinations are fixed; web content cannot supply a path or URL.
             let destination = op=="license-open" ? Bundle.main.resourceURL?.appendingPathComponent("LICENSE.txt") : URL(string:"https://github.com/Sy14r/PimpMyElectron")
@@ -249,6 +249,24 @@ final class Client: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         if op=="data-folder" {NSWorkspace.shared.open(dataURL);reply(["id":id,"ok":true]);return}
         var request:[String:Any]=["id":id,"op":op]
         for key in ["appId","modIds","installationPath","view","profileId","sourceId","digest"] {if let value=raw[key] {request[key]=value}}
+        let slackSettingSections:Set<String>=["slack-triage","slack-layout","slack-message-polish","slack-quote-reply","slack-appearance","slack-custom-css","slack-personal-emoji","slack-sidebar-productivity"]
+        if let section=raw["section"] as? String {
+            guard op=="show",slackSettingSections.contains(section) else {fail(id,"Invalid settings section");return}
+            request["section"]=section
+        }
+        if op=="mod-settings" {
+            guard raw["appId"] as? String == "slack",let modID=raw["modId"] as? String,slackSettingSections.contains(modID),let patch=raw["patch"] as? [String:Any],patch.count<=40,
+                  JSONSerialization.isValidJSONObject(patch),let encoded=try? JSONSerialization.data(withJSONObject:patch),encoded.count<=50000 else {fail(id,"Invalid mod settings");return}
+            request["modId"]=modID;request["patch"]=patch
+        }
+        if op=="settings-preview" || op=="settings-import" {
+            guard let text=raw["text"] as? String,text.utf8.count<=30000 else {fail(id,"Invalid settings import");return}
+            request["text"]=text
+        }
+        if op=="companion" {
+            guard raw["appId"] as? String == "slack",let enabled=raw["enabled"] as? Bool else {fail(id,"Invalid Slack Companion setting");return}
+            request["enabled"]=enabled
+        }
         if op=="shortcut-create" || op=="shortcut-rename" {
             let panel=NSSavePanel();panel.allowedContentTypes=[.applicationBundle];panel.canCreateDirectories=true
             panel.nameFieldStringValue=raw["appId"] as? String == "spotify" ? "Spotify — PME.app" : "Slack — PME.app";panel.prompt=op=="shortcut-create" ? "Create shortcut" : "Rename"

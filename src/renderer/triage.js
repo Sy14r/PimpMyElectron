@@ -4,7 +4,7 @@
   if (!team() || window.__PME_TRIAGE__) return;
   if (!document.body) { document.addEventListener('DOMContentLoaded', installTriage, { once: true }); return; }
   const abort = new AbortController();
-  let settings={edge:'right',rest:'strip',display:'main',inboxDensity:'expanded',idleSeconds:60},lastInteraction=Date.now(),displayInfo=[],displaySignature='',hoverTimer,hoverIntent=null;
+  let settings={edge:'right',rest:'strip',display:'main',inboxDensity:'expanded',senderTints:false,senderTintMode:'always',idleSeconds:60},lastInteraction=Date.now(),displayInfo=[],displaySignature='',hoverTimer,hoverIntent=null;
   let compactBounds=null,cursorCheckPending=false,stagedDetail=false,pillIdleTimer,pillPointerInside=false;
   let pillPreview=null,nativeStripRequest=null,nativeStripHidden=false,stripSyncPending=false,stripSequence=0;
   let lastHostUpdate=0,hostDisconnected=false;
@@ -19,7 +19,11 @@
     html[data-pme-inbox-glass],html[data-pme-inbox-glass] body{background:transparent!important;}
     /* Clip the parked Slack page out of the inbox, including descendants
        that explicitly set visibility:visible. Keep native detail panes intact. */
-    html[data-pme-inbox-glass] body>.p-client_container{visibility:hidden!important;clip-path:inset(0 0 0 420px)!important;}`;
+    html[data-pme-inbox-glass] body>.p-client_container{visibility:hidden!important;clip-path:inset(0 0 0 420px)!important;}
+    body[data-pme-triage-sender-tints] [data-pme-native-reply-pane] [data-qa="message_container"][data-pme-triage-sender-tint]{position:relative!important;isolation:isolate;}
+    body[data-pme-triage-sender-tints][data-pme-triage-sender-tint-mode="always"] [data-pme-native-reply-pane] [data-qa="message_container"][data-pme-triage-sender-tint]::after,
+    body[data-pme-triage-sender-tints][data-pme-triage-sender-tint-mode="hover"] [data-pme-native-reply-pane] [data-qa="message_container"][data-pme-triage-sender-tint]:hover::after{content:'';position:absolute;inset:0;z-index:2;pointer-events:none;background:var(--pme-triage-sender-tint)!important;box-shadow:inset 3px 0 color-mix(in srgb,var(--pme-triage-sender-tint) 70%,transparent)!important;}
+    body[data-pme-triage-sender-tints][data-pme-triage-sender-tint-mode="always"] [data-pme-native-reply-pane] [data-qa="message_container"][data-pme-triage-sender-tint]:hover::after{background-color:var(--pme-triage-sender-tint)!important;background-image:linear-gradient(#ffffff05,#ffffff05)!important;}`;
   document.head.append(glassStyle);
   let glassActive=false,glassOriginal=null,glassMaterial=null,glassHelper=false,glassShadow=null,glassBounds=null,glassConcealed=false,glassBacking=null,glassTail=Promise.resolve();
   function glassVisible(value){
@@ -73,13 +77,39 @@
       document.documentElement.style.setProperty(name,value);accentProperties.add(name);
     }
   }
+  let senderTintScheduled=false;
+  function clearNativeSenderTints(){
+    document.body.removeAttribute('data-pme-triage-sender-tints');document.body.removeAttribute('data-pme-triage-sender-tint-mode');
+    for(const message of document.querySelectorAll('[data-pme-triage-sender-tint]')){
+      message.removeAttribute('data-pme-triage-sender-tint');message.style.removeProperty('--pme-triage-sender-tint');
+    }
+  }
+  function decorateNativeSenderTints(){
+    senderTintScheduled=false;
+    const tint=window.__PME_SENDER_TINTS__;
+    if(settings.senderTints!==true||!tint){clearNativeSenderTints();return;}
+    document.body.setAttribute('data-pme-triage-sender-tints','');
+    document.body.setAttribute('data-pme-triage-sender-tint-mode',settings.senderTintMode==='hover'?'hover':'always');
+    const messages=document.querySelectorAll('[data-pme-native-reply-pane] [data-qa="message_container"]');
+    for(const stale of document.querySelectorAll('[data-pme-triage-sender-tint]'))if(!stale.closest('[data-pme-native-reply-pane]')){
+      stale.removeAttribute('data-pme-triage-sender-tint');stale.style.removeProperty('--pme-triage-sender-tint');
+    }
+    for(const message of messages){
+      const key=tint.senderKey(message);
+      if(!key||tint.isCurrentUser(key)){message.removeAttribute('data-pme-triage-sender-tint');message.style.removeProperty('--pme-triage-sender-tint');continue;}
+      const index=String(tint.index(key)),color=tint.color(key);
+      if(message.getAttribute('data-pme-triage-sender-tint')!==index)message.setAttribute('data-pme-triage-sender-tint',index);
+      if(message.style.getPropertyValue('--pme-triage-sender-tint')!==color)message.style.setProperty('--pme-triage-sender-tint',color);
+    }
+  }
+  function scheduleNativeSenderTints(){if(senderTintScheduled)return;senderTintScheduled=true;queueMicrotask(decorateNativeSenderTints);}
   shadow.innerHTML = `
     <style>
       :host{font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#edf0f7;color-scheme:dark}
       *{box-sizing:border-box}button,input{font:inherit}button{cursor:pointer}button,input{color:inherit}
       button{border:0;background:transparent;border-radius:8px}button:not(.row):hover,:host(:not([data-inbox-input="keyboard"])) :where(.row:hover){background:#ffffff0e}
       button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--pme-accent-text,#b7a8ec);outline-offset:2px}button:disabled{opacity:.4;cursor:default}
-      [hidden]{display:none!important}#opener{position:fixed;right:18px;bottom:18px;pointer-events:auto;padding:10px 15px;background:var(--pme-accent-surface,#262337);border:1px solid var(--pme-accent-muted,#827097);border-radius:24px;box-shadow:0 4px 20px #0006;display:flex;gap:9px;align-items:center;font-weight:600}
+      [hidden]{display:none!important}
       .signal{width:7px;height:7px;border-radius:50%;background:#99d3b9}.shell{pointer-events:auto;position:fixed;inset:0;background:#141925;display:flex;box-shadow:0 0 60px #0007}
       :host([data-inbox-glass]) .shell{background:transparent;box-shadow:none}
       :host([data-inbox-glass]) .shell>.queue{background:rgba(20,25,37,var(--pme-inbox-opacity,.28));background-image:linear-gradient(rgba(var(--pme-accent-rgb,188,169,240),.045),transparent 65%);border-right-color:#ffffff20}
@@ -147,7 +177,6 @@
       #quick-card footer{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;margin-top:auto;color:#94a2b8}#quick-inbox{color:#94a2b8;font-size:11px;text-decoration:underline;white-space:nowrap;padding:4px}
     </style>
     <button id="edge-tab" hidden aria-label="Reveal triage" title="Reveal triage"><span id="edge-dots" aria-hidden="true"></span><span id="edge-overflow" hidden aria-hidden="true"></span></button>
-    <button id="opener" aria-label="Open triage"><span class="signal"></span>Triage</button>
     <section class="shell" hidden aria-label="Slack triage">
       <nav class="rail" aria-label="Triage views"><button class="brand" id="home" aria-label="Show queue">T</button><button id="reply-latest" hidden aria-label="Jump to latest messages" title="Jump to latest messages">↓</button><div id="pill-items" aria-label="Unread conversations and threads"></div><button id="pill-empty" type="button" hidden aria-label="Open triage inbox" title="All caught up · Open triage inbox"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4h16l2 10v6H2v-6L4 4Z"/><path d="M2 14h6l2 3h4l2-3h6"/></svg></button><div class="spacer"></div><button id="restore" aria-label="Return to normal Slack" title="Normal Slack"><svg class="control-icon slack-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><g transform="rotate(0 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(90 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(180 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(270 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g></svg></button><button id="collapse" aria-label="Collapse to rail" title="Collapse">›</button></nav>
       <section class="queue"><div class="queue-heading"><h1><button id="workspace-picker" type="button" aria-label="Choose workspace" aria-haspopup="dialog" aria-expanded="false" aria-controls="workspace-dialog">Workspace</button></h1><button class="inbox-icon" id="inbox-activity" type="button" title="Activity" aria-label="Open Slack Activity"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></button><button class="inbox-icon" id="inbox-switcher" type="button" title="Search Slack · ⌘K" aria-label="Search Slack" aria-keyshortcuts="Meta+K"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button><button class="inbox-icon" id="compose" type="button" title="Compose new message" aria-label="Compose new message" aria-keyshortcuts="n"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-7"/><path d="m16 3 5 5M10 14l1-5 7-7a2.1 2.1 0 0 1 3 3l-7 7-4 2Z"/></svg></button><button class="inbox-icon" id="inbox-stock" title="Normal Slack" aria-label="Return to normal Slack"><svg class="control-icon slack-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><g transform="rotate(0 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(90 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(180 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g><g transform="rotate(270 12 12)"><rect x="13" y="1" width="4.5" height="10" rx="2.25"/><rect x="7" y="1" width="4.5" height="4.5" rx="2.25"/></g></svg></button><button class="inbox-icon" id="inbox-collapse" title="Close inbox to pill" aria-label="Close inbox to pill"><svg class="control-icon close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m7 7 10 10M17 7 7 17"/></svg></button></div><div class="list-toolbar"><input id="search" type="search" placeholder="Filter conversations…" aria-label="Filter observed conversations" autocomplete="off"><button id="density-picker" class="inbox-icon" type="button" aria-label="Inbox density" title="Inbox density" aria-haspopup="dialog" aria-expanded="false" aria-controls="density-menu"><svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><path d="M4 8h10M4 15h10" opacity=".5"/></svg></button></div>
@@ -372,7 +401,7 @@
   }
   async function handoff(){const item=items().find(i=>i.key===selection);if(!item||!/^[CDG][A-Z0-9]+$/.test(item.channelId))return;
     const row=item.workspaceId===team()?[...document.querySelectorAll('[data-qa="channel-sidebar-channel"]')].find(r=>r.getAttribute('data-qa-channel-sidebar-channel-id')===item.channelId):null;
-    await transition('stock');if(row)row.click();else location.assign(`https://app.slack.com/client/${item.workspaceId}/${item.channelId}`);
+    await transition('stock');const opened=await window.__PME_NATIVE_NAVIGATION__?.open?.(item);if(!opened?.ok){if(row?.isConnected)row.click();else location.assign(`https://app.slack.com/client/${item.workspaceId}/${item.channelId}`);}
   }
   let pendingMark=null;
   function markRead(){
@@ -595,7 +624,7 @@
   window.addEventListener('pme-native-fallback',event=>{
     if(mode==='reply'&&event.detail?.key===selection&&event.detail.key===window.__PME_REPLY__?.status().target?.key)void transition('stock');
   },{signal:abort.signal});
-  window.addEventListener('pme-native-reply-state',renderReply,{signal:abort.signal});
+  window.addEventListener('pme-native-reply-state',()=>{renderReply();scheduleNativeSenderTints();},{signal:abort.signal});
   window.addEventListener('pme-native-reply-installed',()=>{const r=window.__PME_REPLY__?.status();if(r?.target&&(r.active||mode==='reply'))void startReply(r.target);},{signal:abort.signal});
   function openReader(key){clearInboxFilter(false);++openSequence;openingKey=null;selection=key;void transition('reading');requestHistory();}
   function openItem(key,{reader=false}={}){
@@ -688,7 +717,7 @@
   }
   function render() {
     if (disposed) return;
-    renderReply();renderPill();
+    renderReply();renderPill();scheduleNativeSenderTints();
     const density=settings.inboxDensity||'expanded';host.setAttribute('data-density',density);
     $('density-picker').title=`Inbox density · ${density[0].toUpperCase()+density.slice(1)}`;$('density-picker').disabled=!connected();
     for(const button of densityMenu.querySelectorAll('button')){const selected=button.dataset.density===density;button.setAttribute('aria-pressed',String(selected));button.querySelector('.density-check').textContent=selected?'✓':'';}
@@ -813,7 +842,7 @@
     host.toggleAttribute('data-quick',!!quickReply&&mode==='reply');
     document.body.toggleAttribute('data-pme-quick',!!quickReply&&mode==='reply');
     document.body.toggleAttribute('data-pme-quick-read',!!quickReply?.readOnly&&mode==='reply');
-    $('opener').hidden = mode !== 'stock';$('edge-tab').hidden=mode!=='strip';
+    $('edge-tab').hidden=mode!=='strip';
     shadow.querySelector('.shell').hidden = ['stock','hidden','strip'].includes(mode);
     shadow.querySelector('.shell').classList.toggle('cluster',mode === 'cluster');
     shadow.querySelector('.shell').classList.toggle('reading',mode === 'reading');
@@ -1013,7 +1042,7 @@
     else if(button.id==='older')requestHistory('older');
     else if(button.dataset.filter){filter=button.dataset.filter;render();}
     else if(button.id==='pill-empty'){resumeReply=false;void transition('queue');}
-    else if(['opener','home','edge-tab'].includes(button.id)){if(resumeReply&&window.__PME_REPLY__?.status().target)void startReply(window.__PME_REPLY__.status().target);else void transition('queue');}
+    else if(['home','edge-tab'].includes(button.id)){if(resumeReply&&window.__PME_REPLY__?.status().target)void startReply(window.__PME_REPLY__.status().target);else void transition('queue');}
     else if(button.id==='restore')void transition('stock');
     else if(button.id==='collapse')void transition(mode==='cluster'?'queue':restMode());
     else if(button.id==='back')void transition('queue');
@@ -1409,6 +1438,7 @@
   }
   const observer=new MutationObserver(mutations=>{
     if(mutations.every(m=>m.target===host||host.contains(m.target)))return;
+    if(settings.senderTints===true&&mutations.some(m=>m.type==='childList'||m.attributeName==='data-msg-ts'))scheduleNativeSenderTints();
     if(domTimer)return;domTimer=setTimeout(()=>{domTimer=null;observe();},500);
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class','data-msg-ts','data-team-active']});
@@ -1447,10 +1477,10 @@
       return {ok:true,home:home?.ok===true,seeded};
     })().then(result=>startupResult=result);return startupTask;
   }
-  window.__PME_TRIAGE__={startup,setInboxGlass,threadAlias,version:'0.22.1',update:value=>{const activity=detectPillActivity(value,{reset:!connected()});lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,inboxGlass:undefined,inboxOpacity:undefined,detailOpacityBoost:undefined}),previewWasHeld=snapshot.previewHeld;snapshot=value;acceptAliasResult();if(value.previewHeld||previewWasHeld!==value.previewHeld)touch();syncNativeStrip();acceptLocalResult();settings={...settings,...value.settings};applyAccent(value.accentTheme);edge=settings.edge;applyGlassOpacity();render();if(before!==JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,inboxGlass:undefined,inboxOpacity:undefined,detailOpacityBoost:undefined})&&!['stock','hidden'].includes(mode))void transition(mode);if(activity)revealPillActivity();},transition,command,quick,readFromPill,activity:startActivity,open:openItem,
-    status:()=>({startup:startupResult,mode,edge,inboxGlass:glassActive,backdropHelper:glassHelper,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),...domHealth}),
+  window.__PME_TRIAGE__={startup,setInboxGlass,threadAlias,version:'0.22.7',update:value=>{const activity=detectPillActivity(value,{reset:!connected()});lastHostUpdate=Date.now();hostDisconnected=false;const before=JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,senderTints:undefined,senderTintMode:undefined,inboxGlass:undefined,inboxOpacity:undefined,detailOpacityBoost:undefined}),previewWasHeld=snapshot.previewHeld;snapshot=value;acceptAliasResult();if(value.previewHeld||previewWasHeld!==value.previewHeld)touch();syncNativeStrip();acceptLocalResult();settings={...settings,...value.settings};applyAccent(value.accentTheme);edge=settings.edge;applyGlassOpacity();render();if(before!==JSON.stringify({...settings,inboxDensity:undefined,accentColor:undefined,senderTints:undefined,senderTintMode:undefined,inboxGlass:undefined,inboxOpacity:undefined,detailOpacityBoost:undefined})&&!['stock','hidden'].includes(mode))void transition(mode);if(activity)revealPillActivity();},transition,command,quick,readFromPill,activity:startActivity,open:openItem,
+    status:()=>({startup:startupResult,mode,edge,inboxGlass:glassActive,backdropHelper:glassHelper,reply:window.__PME_REPLY__?.status().state,connected:connected(),network:snapshot.network||'unknown',workspace:viewTeam(),items:items().length,messages:items().reduce((n,i)=>n+i.messages.length,0),senderTints:settings.senderTints===true,senderTintMode:settings.senderTintMode==='hover'?'hover':'always',tintedMessages:document.querySelectorAll('[data-pme-native-reply-pane] [data-pme-triage-sender-tint]').length,senderTintCache:window.__PME_SENDER_TINTS__?.stats?.()||null,...domHealth}),
     dispose:async()=>{if(disposed)return;await rememberStockBounds();setPillPreview(null);disposed=true;abort.abort();observer.disconnect();clearTimeout(domTimer);clearInterval(idle);clearInterval(shellTimer);clearInterval(cursorTimer);clearTimeout(hoverTimer);clearTimeout(pillIdleTimer);
-      window.__PME_REPLY__?.cancelSwitcher?.({restore:false});window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});await setInboxGlass(false).catch(()=>{});glassStyle.remove();document.body.style.removeProperty('--pme-detail-opacity');clearDetailMotion();document.body.removeAttribute('data-pme-quick');document.body.removeAttribute('data-pme-quick-read');document.body.removeAttribute('data-pme-background-read');++pillReadRun;await geometry('stock').catch(()=>{});applyAccent(null);host.remove();delete window.__PME_TRIAGE__;
+      window.__PME_REPLY__?.cancelSwitcher?.({restore:false});window.__PME_REPLY__?.suspend();await nativeQueue.catch(()=>{});await setInboxGlass(false).catch(()=>{});clearNativeSenderTints();glassStyle.remove();document.body.style.removeProperty('--pme-detail-opacity');clearDetailMotion();document.body.removeAttribute('data-pme-quick');document.body.removeAttribute('data-pme-quick-read');document.body.removeAttribute('data-pme-background-read');++pillReadRun;await geometry('stock').catch(()=>{});applyAccent(null);host.remove();delete window.__PME_TRIAGE__;
     }};
   observe();render();
 })();

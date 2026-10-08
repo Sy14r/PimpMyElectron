@@ -45,6 +45,10 @@ read and may cause Slack to fetch data normally.
 
 ## Keyboard controls
 
+Standard Slack no longer carries a floating Triage button. Use the global toggle
+shortcut or the Slack Companion menu-bar control to enter and leave Triage; the
+edge strip remains available while Triage is resting in strip mode.
+
 Open **Keyboard shortcuts…** from the Slack Triage menu-bar icon, or press
 **⌘⇧,**, for a separate scrollable cheat sheet. Press the shortcut again while the
 sheet is focused, or Escape, to close it and return focus. The sheet reflects your
@@ -80,17 +84,34 @@ Navigation keys do not type into or override focused editors.
 
 ## Preferences and personal names
 
-Settings is available from the inbox's more menu, the pill gear, and the menu-bar
-controller. It includes Expanded/Cozy/Compact density previews, accent color,
+Slack Settings is available from the inbox's more menu, the pill gear, PME, and
+the shared Slack Companion menu-bar integration. It includes
+Expanded/Cozy/Compact density previews, accent color,
 docking/display choices, closing behavior, pill idle delay, notification workspace
 scope, global shortcuts, and a keyboard reference. Idle collapse affects only the
 pill, not an open inbox or detail pane. The list scrollbar appears while scrolling
 and fades afterward.
 
+Triage preferences use PME's shared, namespaced mod-settings store. Existing
+preferences migrate automatically from older `triage-state.json` files. Personal
+thread aliases and Done/Later records remain in Triage's separate workflow state;
+they are not general appearance settings.
+
+**Tint messages by sender** applies subtle, stable colors to other people's
+messages in native conversations and threads opened beside the inbox. It is off
+by default; its separate visibility control defaults to **Always** and can instead
+limit tints to **On hover**. It uses the same sender mapping and palette as Message
+Polish and does not tint inbox rows or the pill. Triage owns this embedded-pane
+preference even when Message Polish is also enabled. Sender IDs and their colors
+are cached locally in bounded lookup tables; unresolved rendered rows remain
+untinted rather than inheriting another row's sender.
+
 Experimental translucency uses native background blur. Inbox background opacity
 and a relative detail-pane opacity increase affect backgrounds, not text. It
-respects Reduce Transparency; initial native transparency setup may require a
-restart. Standard Slack restores its normal opaque backing. See the
+also applies to the gutter and footer behind the native composer; the composer
+card and popups remain solid for legibility. It respects Reduce Transparency;
+initial native transparency setup may require a restart. Standard Slack restores
+its normal opaque backing. See the
 [implementation history](../research/inbox-translucency.md) for the tradeoffs.
 
 A thread's title/pencil allows a personal alias. It appears in the inbox, preview,

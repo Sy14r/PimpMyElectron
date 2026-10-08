@@ -12,6 +12,7 @@ const { createHistoryLoader } = await import(`./history-loader.mjs?revision=${Da
 const { createReadMarker } = await import(`./read-marker.mjs?revision=${Date.now()}`);
 const { createShellServer } = await import(`./shell-server.mjs?revision=${Date.now()}`);
 const { createModLoader } = await import(`./mod-loader.mjs?revision=${Date.now()}`);
+const { ModSettings } = await import(`./mod-settings.mjs?revision=${Date.now()}`);
 const {createWindowBackdrop}=await import(`./window-backdrop.mjs?revision=${Date.now()}`);
 const { TriageState } = await import(`./triage-state.mjs?revision=${Date.now()}`);
 
@@ -19,20 +20,35 @@ const teamFromURL = value => { try { const url = new URL(value); if (url.origin 
   return url.pathname.match(/^\/client\/([TE][A-Z0-9]+)(?:\/|$)/)?.[1] || null; } catch { return null; } };
 export async function createRuntime({ cdp, contextGuard, sessions, root, runtimeDir=path.join(root,'.lab/dev'), slackPID=0, slackVersion }) {
   if (!contextGuard) throw Error('A trusted CDP context guard is required');
-  const mods=await createModLoader({cdp,root,runtimeDir,slackVersion,slackPID});
+  const settingsStore=new ModSettings(path.join(runtimeDir,'mod-settings.json'));
+  const local=await new TriageState(path.join(runtimeDir,'triage-state.json'),{settingsStore}).load();
+  const configurableMods=['slack-layout','slack-message-polish','slack-quote-reply','slack-appearance','slack-custom-css','slack-personal-emoji','slack-sidebar-productivity'];
+  const moduleForMod={'slack-layout':'slack-layout','slack-message-polish':'message-polish','slack-quote-reply':'quote-reply','slack-appearance':'slack-appearance','slack-custom-css':'custom-css','slack-personal-emoji':'personal-emoji','slack-sidebar-productivity':'sidebar-productivity'};
+  const modForModule=Object.fromEntries(Object.entries(moduleForMod).map(([mod,module])=>[module,mod]));
+  const allModSettings=()=>Object.fromEntries(configurableMods.map(id=>[id,settingsStore.get(id)]));
+  const enabledSettingMods=()=>configurableMods.filter(id=>mods.enabled(moduleForMod[id]));
+  const mods=await createModLoader({cdp,contextGuard,root,runtimeDir,slackVersion,slackPID,moduleSettings:id=>settingsStore.get(modForModule[id]||id)});
+  const configureMod=async(modId,patch)=>{const value=modId==='slack-triage'?(await local.configure(patch),local.settings):await settingsStore.configure(modId,patch);await mods.configure(moduleForMod[modId]||modId,value);return value;};
   // Renderer-only mods do not need triage's message observer, bindings, window
   // controller or network instrumentation. Discovery reconciles their lifecycle.
-  if(['state-observer','history-reader','mark-read','native-reply','triage-surface'].every(id=>!mods.enabled(id))){
+  if(['history-reader','mark-read','native-reply','triage-surface'].every(id=>!mods.enabled(id))){
+    let settingsEpoch=0,settingsSection=null,disposed=false;
+    const layoutEnabled=mods.enabled('slack-layout');
+    const shell=layoutEnabled?await createShellServer({file:path.join(runtimeDir,'shell.sock'),
+      state:()=>({slackPID,mode:'stock',attention:0,settingsEpoch,settingsSection,settings:local.settings,modSettings:allModSettings(),enabledMods:enabledSettingMods()}),
+      configure:async(patch,modId)=>{const id=modId||'slack-layout';if(!configurableMods.includes(id))throw Error('Unsupported mod settings');await configureMod(id,patch);return {settings:local.settings,modSettings:allModSettings()};},
+      command:async(op,_workspace,section)=>{if(op==='preferences'){settingsSection=configurableMods.includes(section)?section:null;settingsEpoch++;return {settingsRequested:true};}const entry=[...sessions.values()].find(e=>teamFromURL(e.url)&&contextGuard.current(e));if(!entry||!['stock','stock-toggle'].includes(op))throw Error('Unsupported companion action');return cdp.evaluate(`(async()=>{const w=desktop.window,id=await w.getWindowId(),call=(method)=>w.callBrowserWindowMethod(id,method);if(await call('isMinimized'))await call('restore');await call('show');await call('focus');return {mode:'stock'};})()`,entry.sessionId);}
+    }):null;
     return {
       attach:async entry=>{if(contextGuard.current(entry))await mods.reconcile(entry);},
       detach:async entry=>mods.detach(entry),
-      status:()=>({mode:'renderer-only',mods:mods.status(),liveUI:false,customApi:{requests:0},shell:{connected:false}}),
-      dispose:()=>mods.dispose(sessions)
+      configure:configureMod,
+      status:()=>({mode:'renderer-only',mods:mods.status(),liveUI:false,companion:layoutEnabled,customApi:{requests:0},shell:{connected:shell?.connected()===true}}),
+      async dispose(){if(disposed)return;disposed=true;await shell?.close();await mods.dispose(sessions);}
     };
   }
   const store = new ActivityStore({maxMessagesPerItem:200,maxWorkspaces:12});
-  const local=await new TriageState(path.join(runtimeDir,'triage-state.json')).load();
-  let actionError=null,returnEpoch=0,settingsEpoch=0,nativeHotkey=false,nativeStockHotkey=false,edgeHelperAt=0,edgeHelperReady=null;
+  let actionError=null,returnEpoch=0,settingsEpoch=0,settingsSection=null,nativeHotkey=false,nativeStockHotkey=false,edgeHelperAt=0,edgeHelperReady=null;
   let backdropHelperAt=0,backdropHelperReady=null;
   const knownWorkspaces=new Map(),selectedWorkspaces=new Map();
   const previewSession=createPreviewSession(),sendConfirmation=createSendConfirmation(),quickTargets=new Map(),previewReads=new Map();
@@ -118,7 +134,7 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
       enabled:!!entry&&!!contextGuard.current(entry)&&mods.enabled('triage-surface')&&local.settings.inboxGlass===true&&backdrop.status().ready&&
         Date.now()-ui?.previewAt<5000&&['queue','reading','reply'].includes(ui?.mode)&&!ui?.quickReply&&!ui?.reduceTransparency});
   }
-  async function shellCommand(op,workspaceId){if(op==='preferences'){settingsEpoch++;return {settingsRequested:true};}const entry=pickEntry(workspaceId)||pickEntry();if(!entry)throw Error('No connected workspace');
+  async function shellCommand(op,workspaceId,section){if(op==='preferences'){settingsSection=['slack-triage',...configurableMods].includes(section)?section:null;settingsEpoch++;return {settingsRequested:true};}const entry=pickEntry(workspaceId)||pickEntry();if(!entry)throw Error('No connected workspace');
     if(op==='switch'&&knownWorkspaces.has(workspaceId)){selectedWorkspaces.set(entry.sessionId,workspaceId);await local.configure({workspace:workspaceId});}
     if(['stock','stock-toggle'].includes(op)&&!await evaluate(entry,'!!window.__PME_TRIAGE__')){return evaluate(entry,`(async()=>{const w=desktop.window,id=await w.getWindowId(),call=(method)=>w.callBrowserWindowMethod(id,method);if(${JSON.stringify(op==='stock-toggle')}&&await call('isVisible')&&!await call('isMinimized')){await call('hide');return {mode:'stock',returnFocus:true};}if(await call('isMinimized'))await call('restore');await call('show');await call('focus');return {mode:'stock'};})()`);}
     return evaluate(entry,`window.__PME_TRIAGE__?.command(${JSON.stringify(op==='switch'?'queue':op)})`);
@@ -126,11 +142,11 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   const shell=await createShellServer({file:path.join(runtimeDir,'shell.sock'),
     backdropState:shellBackdrop,backdropDisconnected:()=>{backdropHelperReady=null;if(!disposed)for(const entry of sessions.values())void syncBackdrop(entry).catch(()=>{});},
     previewAction,
-    state:request=>{if(request.backdropVersion===1){backdropHelperAt=Date.now();const ready=typeof request.backdropReady==='string'?request.backdropReady:null;if(ready!==backdropHelperReady){backdropHelperReady=ready;for(const entry of sessions.values())void syncBackdrop(entry).catch(()=>{});}}if(typeof request.previewHover==='string'&&shellPreview()?.key===request.previewHover)previewSession.hold(request.previewHover);if(request.edgeStripVersion===1){edgeHelperAt=Date.now();edgeHelperReady=typeof request.stripReady==='string'?request.stripReady:null;}if(typeof request.hotKeyOK==='boolean')nativeHotkey=request.hotKeyOK;if(typeof request.stockHotKeyOK==='boolean')nativeStockHotkey=request.stockHotKeyOK;return {slackPID:slackPID||sessionInfo.slackPid||0,returnEpoch,settingsEpoch,settings:local.settings,backdrop:{...backdrop.status(),helperReady:!!backdropHelperReady&&shell.backdropConnected()},accentTheme:accentTheme(local.settings.accentColor),
+    state:request=>{if(request.backdropVersion===1){backdropHelperAt=Date.now();const ready=typeof request.backdropReady==='string'?request.backdropReady:null;if(ready!==backdropHelperReady){backdropHelperReady=ready;for(const entry of sessions.values())void syncBackdrop(entry).catch(()=>{});}}if(typeof request.previewHover==='string'&&shellPreview()?.key===request.previewHover)previewSession.hold(request.previewHover);if(request.edgeStripVersion===1){edgeHelperAt=Date.now();edgeHelperReady=typeof request.stripReady==='string'?request.stripReady:null;}if(typeof request.hotKeyOK==='boolean')nativeHotkey=request.hotKeyOK;if(typeof request.stockHotKeyOK==='boolean')nativeStockHotkey=request.stockHotKeyOK;return {slackPID:slackPID||sessionInfo.slackPid||0,returnEpoch,settingsEpoch,settingsSection,settings:local.settings,modSettings:allModSettings(),enabledMods:['slack-triage',...enabledSettingMods()],backdrop:{...backdrop.status(),helperReady:!!backdropHelperReady&&shell.backdropConnected()},accentTheme:accentTheme(local.settings.accentColor),
       mode:pickEntry()?uiStates.get(pickEntry().sessionId)?.mode||'stock':'stock',attention:unreadItemCount(notificationWorkspaces()),inboxWorkspace:pickEntry()?scopeFor(pickEntry()):null,preview:shellPreview(),edgeStrip:shellEdgeStrip(),
       displays:[...uiStates.values()].find(s=>s.displays?.length)?.displays||[],
       workspaces:[...knownWorkspaces.values()].map(w=>({...w,connected:true}))};},
-    configure:async patch=>{await local.configure(patch);const entry=pickEntry();if(entry&&contextGuard.current(entry))await backdrop.prepare(entry,mods.enabled('triage-surface')&&local.settings.inboxGlass===true);await Promise.all([...sessions.values()].map(syncBackdrop));return {settings:local.settings,backdrop:{...backdrop.status(),helperReady:!!backdropHelperReady&&shell.backdropConnected()},accentTheme:accentTheme(local.settings.accentColor)};},command:shellCommand});
+    configure:async(patch,modId)=>{const id=modId||'slack-triage';if(!['slack-triage',...configurableMods].includes(id))throw Error('Unsupported mod settings');await configureMod(id,patch);if(id==='slack-triage'){const entry=pickEntry();if(entry&&contextGuard.current(entry))await backdrop.prepare(entry,mods.enabled('triage-surface')&&local.settings.inboxGlass===true);await Promise.all([...sessions.values()].map(syncBackdrop));}return {settings:local.settings,modSettings:allModSettings(),backdrop:{...backdrop.status(),helperReady:!!backdropHelperReady&&shell.backdropConnected()},accentTheme:accentTheme(local.settings.accentColor)};},command:shellCommand});
   const refreshes=createActivityRefresher({load:async request=>{
     const entry=pickEntry(request.workspaceId)||pickEntry();
     if(!entry||!mods.enabled('history-reader'))return {ok:false,error:'adapter_disabled'};
@@ -324,7 +340,7 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
       if(mods.enabled('history-reader'))refreshes.tick(new Set([...sessions.values()].map(e=>teamFromURL(e.url)).filter(Boolean).concat([...knownWorkspaces.keys()])));
       for (const [key, req] of requests) if (Date.now() - req.at > 30000) requests.delete(key);
       const snapshot = store.snapshot();
-      snapshot.settings=local.settings;snapshot.accentTheme=accentTheme(local.settings.accentColor);snapshot.nativeHotkey=shell.connected()&&nativeHotkey;snapshot.nativeStockHotkey=shell.connected()&&nativeStockHotkey;snapshot.localError=local.error||actionError;
+      snapshot.settings=local.settings;snapshot.accentTheme=accentTheme(local.settings.accentColor);snapshot.nativeHotkey=shell.connected()&&nativeHotkey;snapshot.nativeStockHotkey=shell.connected()&&nativeStockHotkey;snapshot.localError=local.error||local.settingsError||actionError;
       snapshot.canUndo=!!local.undo&&Date.now()-local.undo.at<30000;
       snapshot.undoKey=snapshot.canUndo?local.undo.key:null;
       snapshot.apiPolicy='manual-only';snapshot.customReadsAvailable=mods.enabled('history-reader');snapshot.markReadAvailable=mods.enabled('mark-read');snapshot.network=refreshes.status().online?'available':'offline';
@@ -356,9 +372,10 @@ export async function createRuntime({ cdp, contextGuard, sessions, root, runtime
   }, 1500);
   return {
     attach,
+    configure:configureMod,
     async detach(entry) {startupStates.delete(entry.sessionId);sendConfirmation.clear(entry.sessionId);quickTargets.delete(entry.sessionId);attached.delete(entry.sessionId);boundContexts.delete(entry.sessionId);uiStates.delete(entry.sessionId);actionResults.delete(entry.sessionId);selectedWorkspaces.delete(entry.sessionId);backdrop.detach(entry);mods.detach(entry);syncConnectivity(); },
     status: () => ({ startup:[...startupStates.values()], backdrop:{...backdrop.status(),helperReady:!!backdropHelperReady&&shell.backdropConnected()},quickSend:sendConfirmation.status(),callbackSecurity:{rejected:rejectedCallbacks,ready:[...sessions.values()].filter(e=>contextGuard.current(e)).length}, ...store.status(), ...stats, customApi:{...customApi,methods:{...customApi.methods}}, methods: Object.fromEntries(observedMethods), shapes: Object.fromEntries(shapes), socketTypes: Object.fromEntries(socketTypes),
-      shell:{connected:shell.connected(),hotkeyRegistered:nativeHotkey,stockHotkeyRegistered:nativeStockHotkey},network:refreshes.status().online?'available':'offline',apiPolicy:'manual-only',refreshQueue:{active:refreshes.status().active,queued:refreshes.status().queued},activity:refreshes.status().workspaces.map(a=>({status:a.status,at:a.at,attemptAt:a.attemptAt,nextAt:a.nextAt,hasMore:a.hasMore,countsAvailable:a.countsAvailable,threadsAvailable:a.threadsAvailable})),history:history.status(),mode: 'triage-with-native-reply', mods:mods.status(),liveUI:mods.enabled('triage-surface'), partial: true }),
+      shell:{connected:shell.connected(),hotkeyRegistered:nativeHotkey,stockHotkeyRegistered:nativeStockHotkey},network:refreshes.status().online?'available':'offline',apiPolicy:'manual-only',refreshQueue:{active:refreshes.status().active,queued:refreshes.status().queued},activity:refreshes.status().workspaces.map(a=>({status:a.status,at:a.at,attemptAt:a.attemptAt,nextAt:a.nextAt,hasMore:a.hasMore,countsAvailable:a.countsAvailable,threadsAvailable:a.threadsAvailable})),history:history.status(),mode: 'triage-with-native-reply', mods:mods.status(),liveUI:mods.enabled('triage-surface'),companion:true, partial: true }),
     async dispose() {
       if(disposed)return;
       disposed = true; clearInterval(timer); cdp.off('event', event);

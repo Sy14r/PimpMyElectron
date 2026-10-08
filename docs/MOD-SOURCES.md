@@ -45,6 +45,19 @@ with Slack Triage. Stop and relaunch after changing the selection.
 
 ## Author a collection
 
+For private development inside a PME checkout, use the Git-ignored
+`local-mod-sources/` workspace. The generic scaffolder creates a valid inert
+renderer package without adding its contents to the application bundle or Git:
+
+```sh
+npm run mod:create-local -- your-company internal-links "Internal links"
+```
+
+The directory is a source-code exclusion, not a security boundary. Do not put
+credentials in renderer scripts or manifests. The client build uses an explicit
+public resource allowlist and does not copy `local-mod-sources/`; users still add,
+review, and install each collection through **Mod sources**.
+
 ```text
 Company Mods/
   catalog.json
@@ -136,6 +149,61 @@ libraries loaded into PME. A declaration looks like:
 }
 ```
 
+### Optional renderer-to-helper service
+
+A package with both a renderer and helper can expose a narrow request service by
+declaring every allowed operation on that helper:
+
+```json
+{
+  "id": "company-service",
+  "platform": "mac",
+  "arch": "arm64",
+  "executable": "Helpers/CompanyService",
+  "teamId": "ABCDEFGHIJ",
+  "args": [],
+  "service": {
+    "operations": ["themes.list", "theme.get"]
+  }
+}
+```
+
+Service operation names are displayed during source review. They are unique
+within a package, limited to 32, and must be declared before installation. PME
+binds requests to the enabled source-qualified package and Slack's trusted main
+document. Another package cannot route requests to that helper, and undeclared
+operations are rejected at the renderer, runtime, supervisor, and helper router.
+
+The renderer receives `api.service` only when a service is declared:
+
+```js
+const catalog = await api.service.request('themes.list', {query: 'dark'});
+```
+
+`api.service.operations` contains the reviewed operation names. Requests must be
+JSON and are limited to 64 KB, eight concurrent calls per helper, and a bounded
+timeout. Responses are limited to 4 MB. Disabling or reloading the mod rejects
+pending calls and removes its private binding.
+
+The helper receives newline-delimited JSON on stdin and must write protocol
+responses—and nothing else—to stdout. Send logs to stderr:
+
+```json
+{"id":"r1","operation":"themes.list","payload":{"query":"dark"}}
+{"id":"r1","ok":true,"result":{"themes":[]}}
+```
+
+For failure, return `{"id":"r1","ok":false,"error":"Short safe message"}`.
+PME sets `PME_HELPER_SERVICE=json-lines-v1`. Invalid JSON, malformed frames, or
+oversized responses fail and stop that service helper rather than being passed
+to Slack. The channel uses inherited process pipes; it does not open a debugger,
+TCP listener, Unix socket, or arbitrary evaluation endpoint.
+
+This bridge is transport, not authentication. A private helper remains
+responsible for an explicit service login, endpoint allowlists, response-schema
+validation, cache bounds, and accurate access disclosure. PME does not forward
+Slack profile cookies, tokens, controller pipes, or injection environment.
+
 Replace `teamId` with the publisher's real Apple Developer ID team. `arch` accepts
 `arm64`, `x64`, or `universal`. `bundle` is optional for a standalone native executable.
 All code/resources, including signatures, must be in the checksummed file list.
@@ -151,8 +219,8 @@ this is not a Launch Services application launch. AppKit UI can run this way, bu
 Automation/camera/accessibility consent and attribution need testing for each helper.
 A helper requiring Launch Services, a daemon/service installer, or elevated privileges
 needs an additional launch contract and is not supported in v1. No automatic helper
-restart or renderer-to-helper IPC bridge is provided; authors may implement their
-own authenticated local IPC without opening a debugger port.
+restart is provided. Packages that do not declare the bounded service contract keep
+the original lifecycle-only helper behavior with no renderer IPC.
 
 Environment supplied to helpers:
 
@@ -173,6 +241,7 @@ Helper privacy statements must cover any independent collection/network behavior
 
 Automated tests cover source import, offline cached launches, incomplete updates,
 review freshness, rollback, dependency isolation, tampering, renderer cleanup,
-helper publisher verification, helper process shutdown and parent disconnection.
+helper publisher verification, declared service routing, payload bounds, trusted
+renderer contexts, helper process shutdown, and parent disconnection.
 Real permission prompts remain helper-specific. A real company helper should be
 validated on another Mac before distributing it to colleagues.

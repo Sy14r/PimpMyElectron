@@ -1,42 +1,23 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {compareTs} from './activity-store.mjs';
-import {DEFAULT_ACCENT,validAccent} from './accent-theme.mjs';
+import {ModSettings,TRIAGE_DEFAULTS} from './mod-settings.mjs';
 export const validKey=k=>typeof k==='string'&&/^[TE][A-Z0-9]+:[CDG][A-Z0-9]+:(?:\d+\.\d+)?$/.test(k);
 export const validThreadKey=k=>validKey(k)&&/:[0-9]+\.[0-9]+$/.test(k);
 const validAlias=value=>typeof value==='string'&&value.length<=120&&!/[\u0000-\u001f\u007f]/.test(value);
-const defaults={edge:'right',rest:'strip',display:'main',inboxDensity:'expanded',accentColor:DEFAULT_ACCENT,inboxGlass:false,inboxOpacity:28,detailOpacityBoost:35,idleSeconds:60,shortcut:'cmd-shift-y',stockShortcut:'cmd-shift-u',helpShortcut:'cmd-shift-comma',expandOnActivity:true,reopenNew:true,workspace:null,notificationMode:'all',notificationWorkspaces:[]};
 export class TriageState {
-  records=new Map();aliases=new Map();settings={...defaults};undo=null;error=null;tail=Promise.resolve();
-  constructor(file,{now=Date.now}={}){this.file=file;this.now=now;}
+  records=new Map();aliases=new Map();settings={...TRIAGE_DEFAULTS};undo=null;error=null;settingsError=null;tail=Promise.resolve();
+  constructor(file,{now=Date.now,settingsStore=null}={}){this.file=file;this.now=now;this.settingsStore=settingsStore||new ModSettings(path.join(path.dirname(file),'mod-settings.json'));}
   async load(){
+    let legacySettings=null;
     try{const raw=JSON.parse(await fs.readFile(this.file,'utf8'));if(raw.version!==1)throw Error('Unsupported state version');
       for(const [key,r] of Object.entries(raw.records||{}).slice(-5000))if(validKey(key)&&r&&['active','done','later'].includes(r.state))
         this.records.set(key,{state:r.state,pinned:r.pinned===true,until:Number.isFinite(r.until)?r.until:null,baseline:typeof r.baseline==='string'&&/^\d+\.\d+$/.test(r.baseline)?r.baseline:null,at:Number.isFinite(r.at)?r.at:0});
       for(const [key,value] of Object.entries(raw.aliases||{}).slice(-5000))if(validThreadKey(key)&&validAlias(value)&&value.trim())this.aliases.set(key,value.trim());
-      this.settings=this.validateSettings(raw.settings||{});
-    }catch(e){if(e.code!=='ENOENT')this.error='Local state could not be read; the existing file has been preserved.';}return this;
+      legacySettings=raw.settings||null;
+    }catch(e){if(e.code!=='ENOENT')this.error='Local state could not be read; the existing file has been preserved.';}
+    await this.settingsStore.load({legacyTriage:legacySettings});this.settings=this.settingsStore.get('slack-triage');this.settingsError=this.settingsStore.error;return this;
   }
-  validateSettings(patch){const next={...defaults,...this.settings,
-    ...(['left','right'].includes(patch.edge)?{edge:patch.edge}:{}),
-    ...(['expanded','cozy','compact'].includes(patch.inboxDensity)?{inboxDensity:patch.inboxDensity}:{}),
-    ...(validAccent(patch.accentColor)?{accentColor:patch.accentColor.toLowerCase()}:{}),
-    ...(typeof patch.inboxGlass==='boolean'?{inboxGlass:patch.inboxGlass}:{}),
-    ...(Number.isInteger(patch.detailOpacityBoost)&&patch.detailOpacityBoost>=0&&patch.detailOpacityBoost<=100?{detailOpacityBoost:patch.detailOpacityBoost}:{}),
-    ...(Number.isInteger(patch.inboxOpacity)&&patch.inboxOpacity>=0&&patch.inboxOpacity<=100?{inboxOpacity:patch.inboxOpacity}:{}),
-    ...(['strip','cluster','hidden'].includes(patch.rest)?{rest:patch.rest}:{}),
-    ...(typeof patch.display==='string'&&/^(main|\d+)$/.test(patch.display)?{display:patch.display}:{}),
-    ...([0,5,15,30,60,300].includes(patch.idleSeconds)?{idleSeconds:patch.idleSeconds}:{}),
-    ...(['cmd-shift-y','cmd-shift-u','cmd-shift-comma','ctrl-option-space','option-space'].includes(patch.shortcut)?{shortcut:patch.shortcut}:{}),
-    ...(['cmd-shift-y','cmd-shift-u','cmd-shift-comma','ctrl-option-space','option-space'].includes(patch.stockShortcut)?{stockShortcut:patch.stockShortcut}:{}),
-    ...(['cmd-shift-y','cmd-shift-u','cmd-shift-comma','ctrl-option-space','option-space'].includes(patch.helpShortcut)?{helpShortcut:patch.helpShortcut}:{}),
-    ...(typeof patch.expandOnActivity==='boolean'?{expandOnActivity:patch.expandOnActivity}:{}),
-    ...(['all','selected','inbox'].includes(patch.notificationMode)?{notificationMode:patch.notificationMode}:{}),
-    ...(Array.isArray(patch.notificationWorkspaces)&&patch.notificationWorkspaces.length<=12&&patch.notificationWorkspaces.every(id=>typeof id==='string'&&/^[TE][A-Z0-9]+$/.test(id))?{notificationWorkspaces:[...new Set(patch.notificationWorkspaces)]}:{}),
-    ...((patch.workspace==='*'||typeof patch.workspace==='string'&&/^[TE][A-Z0-9]+$/.test(patch.workspace))?{workspace:patch.workspace}:{}),
-    ...(typeof patch.reopenNew==='boolean'?{reopenNew:patch.reopenNew}:{})};
-    if(new Set([next.shortcut,next.stockShortcut,next.helpShortcut]).size!==3){for(const key of ['shortcut','stockShortcut','helpShortcut'])next[key]=this.settings[key];}
-    return next;}
 
   project(item){
     const r=this.records.get(item.key);let state=r?.state||'active';
@@ -48,7 +29,7 @@ export class TriageState {
   async save(){
     if(this.error)throw Error(this.error);
     await fs.mkdir(path.dirname(this.file),{recursive:true,mode:0o700});
-    const temp=this.file+'.tmp';await fs.writeFile(temp,JSON.stringify({version:1,settings:this.settings,records:Object.fromEntries(this.records),aliases:Object.fromEntries(this.aliases)},null,2)+'\n',{mode:0o600});
+    const temp=this.file+'.tmp';await fs.writeFile(temp,JSON.stringify({version:1,records:Object.fromEntries(this.records),aliases:Object.fromEntries(this.aliases)},null,2)+'\n',{mode:0o600});
     await fs.rename(temp,this.file);
   }
   transact(operation){const promise=this.tail.catch(()=>{}).then(async()=>{
@@ -62,7 +43,7 @@ export class TriageState {
       while(this.aliases.size>5000)this.aliases.delete(this.aliases.keys().next().value);
     });
   }
-  configure(patch){return this.transact(()=>{this.settings=this.validateSettings(patch);});}
+  configure(patch){const promise=this.tail.catch(()=>{}).then(async()=>{this.settings=await this.settingsStore.configure('slack-triage',patch);return true;});this.tail=promise;return promise;}
   act(item,action,{minutes=60}={}){if(!item||!validKey(item.key)||!['done','later','pin','reopen','undo'].includes(action)||action==='later'&&![15,60,240,1440].includes(minutes))return Promise.resolve(false);
     return this.transact(()=>{
       if(action==='undo'){if(this.undo&&this.now()-this.undo.at<30000){const u=this.undo;u.previous?this.records.set(u.key,u.previous):this.records.delete(u.key);this.undo=null;}return;}
